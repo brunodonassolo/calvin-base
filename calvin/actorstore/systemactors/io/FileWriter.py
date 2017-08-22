@@ -23,7 +23,7 @@ _log = get_logger(__name__)
 
 
 def new_filename(base, counter, suffix):
-    return "%s%05d.%s" % (base, counter, suffix)
+    return "%s%d.%s" % (base, counter, suffix)
 file_data = ['this is line 1', 'this is line 2']
 
 
