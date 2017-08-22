@@ -1,0 +1,23 @@
+WinnerString : std.Constant(data="Bingo! The sum is 7!")
+Sink : flow.Terminator()
+FormatOutput : flow.Select()
+Generate7 : std.Constant(data=7)
+Decision : std.Compare(op="=")
+SumPlayers : math.Compute(op="+")
+trigger10 : std.Trigger(data=1, tick=1)
+trigger7 : std.Trigger(data=1, tick=1)
+player2 : math.Random(lower=1, upper=6)
+player1 : math.Random(lower=1, upper=6)
+Print : io.Log(loglevel="INFO")
+
+trigger7.data > player1.trigger
+trigger10.data > player2.trigger
+player1.integer > SumPlayers.a
+player2.integer > SumPlayers.b
+SumPlayers.result > Decision.b
+Generate7.token > Decision.a
+WinnerString.token > FormatOutput.data
+Decision.result > FormatOutput.select
+FormatOutput.case_false > Sink.void
+FormatOutput.case_true > Print.data
+

@@ -1,0 +1,18 @@
+{
+    "requirements":
+    {
+        "WinnerString":[{"op":"node_attr_match","kwargs":{"index":["node_name",{"group":"cloud"}]},"type":"+"}],
+        "Sink":[{"op":"node_attr_match","kwargs":{"index":["node_name",{"group":"cloud"}]},"type":"+"}],
+        "Print":[{"op":"node_attr_match","kwargs":{"index":["node_name",{"group":"cloud"}]},"type":"+"}],
+        "FormatOutput":[{"op":"node_attr_match","kwargs":{"index":["node_name",{"group":"cloud"}]},"type":"+"}],
+
+        "Decision":[{"op":"node_attr_match","kwargs":{"index":["node_name",{"group":"fog"}]},"type":"+"}],
+        "Generate7":[{"op":"node_attr_match","kwargs":{"index":["node_name",{"group":"fog"}]},"type":"+"}],
+        "SumPlayers":[{"op":"node_attr_match","kwargs":{"index":["node_name",{"group":"fog"}]},"type":"+"}],
+
+        "player1":[{"op":"node_attr_match","kwargs":{"index":["node_name",{"group":"endpoint"}]},"type":"+"}],
+        "player2":[{"op":"node_attr_match","kwargs":{"index":["node_name",{"group":"endpoint"}]},"type":"+"}],
+        "trigger7":[{"op":"node_attr_match","kwargs":{"index":["node_name",{"group":"endpoint"}]},"type":"+"}],
+        "trigger10":[{"op":"node_attr_match","kwargs":{"index":["node_name",{"group":"endpoint"}]},"type":"+"}]
+    }
+}

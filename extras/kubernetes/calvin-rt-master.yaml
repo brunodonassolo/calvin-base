@@ -11,7 +11,7 @@ spec:
     containers:
     - name: calvin-user-master
       # replace calvin image with yours at dockerhub or private repo
-      image: calvinimage
+      image: localhost:4000/calvin:master
       imagePullPolicy: Always
       env:
       - name: CALVIN_GLOBAL_STORAGE_TYPE

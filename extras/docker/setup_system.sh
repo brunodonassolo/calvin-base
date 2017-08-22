@@ -2,7 +2,7 @@
 
 IMAGE="erctcalvin/calvin:develop"
 EXTERNAL_IP=""
-PORT="5000" 
+PORT="5003" 
 CONTROLPORT="5001"
 RUNTIMES=3
 USE_DOCKERS=yes

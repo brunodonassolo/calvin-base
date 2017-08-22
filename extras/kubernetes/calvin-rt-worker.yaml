@@ -28,7 +28,7 @@ spec:
         - name: CALVIN_ATTRIBUTES_WORKER
           value: '"{\"indexed_public\":{\"node_name\":{\"organization\":\"com.ericsson\",\"purpose\":\"distributed-test\",\"group\":\"rest\"}}}"'
         # replace calvin image with yours at dockerhub or private repo
-        image: calvinimage
+        image: erctcalvin/calvin:master
         imagePullPolicy: Always
         livenessProbe:
           failureThreshold: 3

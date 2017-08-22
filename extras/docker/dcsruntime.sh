@@ -8,6 +8,7 @@ REGISTRY_PROXY=""
 NAME_OPT=""
 CONTROLPORT_OPT="5001"
 PORT_OPT="5000"
+ATTR=""
 
 usage() {
 	echo "Usage: $(basename $0) \n\
@@ -20,11 +21,12 @@ usage() {
     -r <ip>:<port>       : Use runtime calvinip://<ip>:<port> as registry
     -v                   : Verbose output
     -d                   : dry run, do not start Calvin
+    -a                   : attributes to runtime
      <args to csruntime>\n"
      exit 1
 }
 
-while getopts "dlr:c:p:he:i:n:-:v" opt; do
+while getopts "dlr:c:p:he:i:n:a:-:v" opt; do
 	case $opt in
         d)
             DRYRUN=yes
@@ -44,6 +46,9 @@ while getopts "dlr:c:p:he:i:n:-:v" opt; do
             ;;
         i)
             IMAGE=$OPTARG
+            ;;
+        a)
+            ATTR=$OPTARG
             ;;
 	e)
 		EXTERNAL_IP=$OPTARG
@@ -109,7 +114,8 @@ fi
 
 if test x"$DRYRUN" != x"yes"; then
     CMD="csruntime --host $INTERNAL_IP --external $EXTERNAL_CALVINIP --external-control $EXTERNAL_CONTROL \
-        --name $NAME --logfile /calvin-base/calvin.log $ARGS"
+        --name $NAME --attr '$ATTR' --logfile /calvin-base/calvin.log $ARGS"
+    echo $CMD
     docker exec -d $DOCKER_ID sh -c "$CMD"
 else
     docker kill $DOCKER_ID
