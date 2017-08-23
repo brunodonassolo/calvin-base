@@ -1,5 +1,5 @@
 
-NAMESPACE=erctcalvin
+NAMESPACE=donassolo
 
 TEMPDIR:=$(shell mktemp -d)
 

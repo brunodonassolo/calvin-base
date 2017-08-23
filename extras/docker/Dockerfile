@@ -4,7 +4,7 @@ ARG branch=master
 RUN apk --update add python py-pip openssl ca-certificates \
       && apk --update add --virtual build-dependencies build-base git gcc python-dev libffi-dev openssl-dev \
       && pip install --upgrade pip \
-      && git clone -b $branch https://github.com/EricssonResearch/calvin-base calvin-base \
+      && git clone -b $branch https://github.com/brunodonassolo/calvin-base.git calvin-base \
       && cd /calvin-base \
       && pip install --upgrade -r requirements.txt -r test-requirements.txt -e . \
       && apk del build-dependencies && rm -rf /var/cache/apk/*
