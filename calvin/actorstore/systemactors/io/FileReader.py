@@ -39,10 +39,16 @@ class FileReader(Actor):
 
     @manage([])
     def init(self):
+        self.setup()
+
+    def setup(self):
         self.did_read = False
         self.file_not_found = False
         self.file = None
         self.use(requirement='calvinsys.io.filehandler', shorthand='file')
+
+    def did_migrate(self):
+        self.setup()
 
     @stateguard(lambda self: not self.file)
     @condition(['filename'], [])

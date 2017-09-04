@@ -14,17 +14,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import calvin.runtime.south.plugins.ui.uicalvinsys as ui
 from calvin.runtime.south.calvinsys import base_calvinsys_object
 
 
 class StandardOut(base_calvinsys_object.BaseCalvinsysObject):
     """
-    StandardOut 
+    StandardOut - Virtual console device.
     """
 
     init_schema = {
         "type": "object",
         "properties": {
+            "ui_def": {
+                "description": "Visual appearance",
+                "type": "object",
+            },
             "prefix": {
                 "description": "String to prefix all data",
                 "type": "string"
@@ -43,21 +48,22 @@ class StandardOut(base_calvinsys_object.BaseCalvinsysObject):
         "type": ["boolean", "integer", "number", "string", "array", "object", "null"]
     }
 
-    def init(self, prefix=None, **kwargs):
+    def init(self, ui_def=None, prefix=None, **kwargs):
         self._prefix = prefix
+        ui.register_actuator(self.actor, ui_def)
 
     def can_write(self):
         return True
 
     def write(self, data=None):
         msg = ""
-        if data is not None and self._prefix is not None:
+        if data and self._prefix:
             msg = "{}: {}".format(self._prefix, data)
-        elif data is not None:
+        elif data:
             msg = "{}".format(data)
-        elif self._prefix is not None:
+        elif self._prefix:
             msg = "{}".format(self._prefix)
-        print(msg)
+        ui.update_ui(self.actor, msg)
 
     def close(self):
         pass
