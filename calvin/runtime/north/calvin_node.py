@@ -229,6 +229,8 @@ class Node(object):
         # Start storage after network, proto etc since storage proxy expects them
         self.storage.start(cb=CalvinCB(self._storage_started_cb))
         self.storage.add_node(self)
+        # Start links if needed
+        self.storage.get_links(self.id, cb=CalvinCB(self._verify_links_initialization))
 
         # Start control API
         proxy_control_uri = _conf.get(None, 'control_proxy')
@@ -348,6 +350,16 @@ class Node(object):
                 _log.info("TERMINATE MIGRATE ACTOR")
                 self.am.update_requirements(actor.id, [], extend=True, move=True,
                             authorization_check=False, callback=CalvinCB(migrated, actor_id=actor.id))
+
+    def _verify_links_initialization(self, key, value):
+        if not value:
+            self.storage.create_links(self.id)
+            async.DelayedCall(10, self.storage.get_links, self.id, self._verify_links_initialization)
+            print "Links not initialized yet, trying in 10s..."
+        else:
+            print "Links already initialized, everything ok"
+            print value
+
 
     def _storage_started_cb(self, *args, **kwargs):
         self.authentication.find_authentication_server()
