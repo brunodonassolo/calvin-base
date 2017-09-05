@@ -638,6 +638,20 @@ class Storage(object):
                 #Remove node from list of authorization servers
                 self.remove_index(['authorization_server'], self.node.id, root_prefix_level=1, cb=cb)
 
+        self.del_monitoring(node.id)
+
+    def set_monitoring(self, node_id, value):
+        """
+        Sets new values to the monitoring part of a node
+        """
+        self.set(prefix="nodeMonitor-", key=node_id, value=value, cb = None)
+
+    def del_monitoring(self, node_id):
+        """
+        Remove monitoring data structure
+        """
+        self.delete(prefix="nodeMonitor-", key=node_id, cb=None)
+
     def _delete_node_index(self, node, cb=None):
         indexes = node.attributes.get_indexed_public()
         _log.analyze(self.node.id, "+", {'indexes': indexes})

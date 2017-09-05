@@ -52,7 +52,8 @@ setup(name='calvin',
           'ndg-httpsclient==0.4.2',
           'pyasn1>=0.1.9',
           'pystache==0.5.4',
-          'jsonschema==2.6.0'
+          'jsonschema==2.6.0',
+          'psutil==5.2.0'
       ],
       description="Calvin is a distributed runtime and development framework for an actor based dataflow"
                   "programming methodology",

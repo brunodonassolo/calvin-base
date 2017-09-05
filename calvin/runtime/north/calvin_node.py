@@ -49,6 +49,7 @@ from calvin.utilities import calvinuuid
 from calvin.utilities import certificate
 from calvin.utilities.calvinlogger import get_logger, set_file
 from calvin.utilities import calvinconfig
+from calvin.runtime.north.monitoring.monitor import ResourceMonitor
 
 _log = get_logger(__name__)
 _conf = calvinconfig.get()
@@ -132,6 +133,8 @@ class Node(object):
         self.proto = CalvinProto(self, self.network)
         self.pm = PortManager(self, self.proto)
         self.app_manager = appmanager.AppManager(self)
+
+        self.resource_monitor = ResourceMonitor(self.id, self.storage)
 
         # The initialization that requires the main loop operating is deferred to start function
         async.DelayedCall(0, self.start)

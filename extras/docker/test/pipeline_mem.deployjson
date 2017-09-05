@@ -1,0 +1,5 @@
+{"requirements":{"src":[{"op":"node_resource_min","kwargs":{"resource": {"memory_total": 100000000} },"type":"+"}],
+                 "snk":[{"op":"node_resource_min","kwargs":{"resource": {"memory_total": 150000000, "memory_avail": 150000000} },"type":"+"}],
+                 "id1":[{"op":"node_resource_min","kwargs":{"resource": {"memory_total": 100000000, "memory_avail": 100000000} },"type":"+"}],
+                 "id2":[{"op":"node_resource_min","kwargs":{"resource": {"memory_total": 100000000, "memory_avail": 100000000} },"type":"+"}]
+                 }}
