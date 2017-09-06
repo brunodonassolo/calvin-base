@@ -1,5 +1,5 @@
 import inspect
-from copy import deepcopy
+from copy import copy, deepcopy
 from calvin.requests import calvinresponse
 
 
@@ -88,7 +88,7 @@ class Node(object):
         return True
 
     def clone(self):
-        x = deepcopy(self)
+        x = copy(self)
         x.parent = None
         return x
 
@@ -289,11 +289,6 @@ class OutPort(Port):
     def __init__(self, **kwargs):
         super(OutPort, self).__init__(**kwargs)
 
-class InternalPort(Port):
-    """docstring for InternalPortNode"""
-    def __init__(self, **kwargs):
-        super(InternalPort, self).__init__(actor='', **kwargs)
-
 class InternalInPort(InPort):
     """docstring for InternalPortNode"""
     def __init__(self, **kwargs):
@@ -311,6 +306,11 @@ class Block(Node):
         self.namespace = kwargs.get('namespace', '')
         self.args = kwargs.get('args', {})
         self.add_children(kwargs.get('program', []))
+
+    def clone(self):
+        x = deepcopy(self)
+        x.parent = None
+        return x
 
 class Component(Node):
     """docstring for ComponentNode"""

@@ -459,14 +459,11 @@ class Expander(object):
         compdef = node.metadata['definition']
         v = RestoreParents()
         v.visit(compdef)
-        # Clone assignment to clone the arguments
-        # FIXME: Is cloning necessary here, since we construct an arg dict anyway?
-        ca = node.clone()
-        args = ca.children
         # Clone block from component definition
         new = compdef.clone()
         new.namespace = node.ident
         # Add arguments from assignment to block
+        args = node.children
         new.args = {x.ident.ident: x.arg for x in args}
         node.parent.replace_child(node, new)
         # Recurse
@@ -507,7 +504,8 @@ class Flatten(object):
         self.consumed = set()
 
         # Promote ports and assignments, and create links across component borders
-        non_blocks = [x for x in node.children if type(x) is not ast.Block]
+        # N.B. By this point all sub-blocks have been removed, thus non_blocks == node.children
+        non_blocks = node.children[:]
         map(self.visit, non_blocks)
 
         # Clean up nodes no longer needed
@@ -562,7 +560,7 @@ class Flatten(object):
         # (L0 [P0], L1 [P1]) + (L2 [P2], L3 [P3]) => (L0 [P0, P2], L3 [P1, P3])
         l2 = node
         block = node.parent.parent
-        l1_list = query(block.parent, kind=ast.InPort, attributes={'actor':block.namespace, 'port':l2.port})
+        l1_list = query(block.parent, kind=ast.InPort, maxdepth=2, attributes={'actor':block.namespace, 'port':l2.port})
         for l1 in l1_list:
             new_link = self._relink(l1, l2)
             block.add_child(new_link)
@@ -588,7 +586,7 @@ class Flatten(object):
         # (L0 [P0], L1 [P1]) + (L2 [P2], L3 [P3]) => (L0 [P0, P2], L3 [P1, P3])
         l1 = node
         block = node.parent.parent
-        l2_list = query(block.parent, kind=ast.OutPort, attributes={'actor':block.namespace, 'port':l1.port})
+        l2_list = query(block.parent, kind=ast.OutPort, maxdepth=2, attributes={'actor':block.namespace, 'port':l1.port})
         for l2 in l2_list:
             new_link = self._relink(l1, l2)
             block.add_child(new_link)
@@ -910,7 +908,7 @@ class ReplaceConstants(object):
         self.issue_tracker = issue_tracker
 
     def process(self, root):
-        constants = query(root, ast.Constant)
+        constants = query(root, ast.Constant, maxdepth=2)
         defined = {c.ident.ident: c.arg for c in constants if type(c.arg) is ast.Value}
         unresolved = [c for c in constants if type(c.arg) is ast.Id]
         seen = [c.ident.ident for c in unresolved]
@@ -950,7 +948,7 @@ class ReplaceConstants(object):
             return
         if node.arg.ident in self.definitions:
             value = self.definitions[node.arg.ident]
-            node.replace_child(node.arg, value.clone())
+            node.replace_child(node.arg, value)
 
 
 class ConsistencyCheck(object):
@@ -988,12 +986,12 @@ class ConsistencyCheck(object):
                 self.issue_tracker.add_error(reason, node)
 
         for port in node.outports:
-            matches = query(node, kind=ast.InternalInPort, attributes={'port':port})
+            matches = query(node, kind=ast.InternalInPort, maxdepth=3, attributes={'port':port})
             if not matches:
                 reason = "Component {} is missing connection to outport '{}'".format(node.name, port)
                 self.issue_tracker.add_error(reason, node)
         for port in node.inports:
-            matches = query(node, kind=ast.InternalOutPort, attributes={'port':port})
+            matches = query(node, kind=ast.InternalOutPort, maxdepth=3, attributes={'port':port})
             if not matches:
                 reason = "Component {} is missing connection to inport '{}'".format(node.name, port)
                 self.issue_tracker.add_error(reason, node)
@@ -1031,15 +1029,15 @@ class ConsistencyCheck(object):
         _check_arguments(node, self.issue_tracker)
 
         for port in node.metadata['inputs']:
-            matches = query(self.block, kind=ast.InPort, attributes={'actor':node.ident, 'port':port})
-            matches = matches + query(self.block, kind=ast.InternalInPort, attributes={'actor':node.ident, 'port':port})
+            matches = query(self.block, kind=ast.InPort, maxdepth=3, attributes={'actor':node.ident, 'port':port})
+            matches = matches + query(self.block, kind=ast.InternalInPort, maxdepth=3, attributes={'actor':node.ident, 'port':port})
             if not matches:
                 reason = "{} {} ({}.{}) is missing connection to inport '{}'".format(node.metadata['type'].capitalize(), node.ident, node.metadata.get('ns', 'local'), node.metadata['name'], port)
                 self.issue_tracker.add_error(reason, node)
 
         for port in node.metadata['outputs']:
-            matches = query(self.block, kind=ast.OutPort, attributes={'actor':node.ident, 'port':port})
-            matches = matches + query(self.block, kind=ast.InternalOutPort, attributes={'actor':node.ident, 'port':port})
+            matches = query(self.block, kind=ast.OutPort, maxdepth=3, attributes={'actor':node.ident, 'port':port})
+            matches = matches + query(self.block, kind=ast.InternalOutPort, maxdepth=3, attributes={'actor':node.ident, 'port':port})
             if not matches:
                 reason = "{} {} ({}.{}) is missing connection to outport '{}'".format(node.metadata['type'].capitalize(), node.ident, node.metadata.get('ns', 'local'), node.metadata['name'], port)
                 self.issue_tracker.add_error(reason, node)
