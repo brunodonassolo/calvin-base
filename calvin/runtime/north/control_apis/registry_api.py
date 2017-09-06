@@ -246,3 +246,18 @@ def handle_get_port(self, handle, connection, match, data, hdr):
         func=self.storage_cb, handle=handle, connection=connection))
 
 
+@handler(r"POST /node/resource/cpu/avail/([0-9a-zA-Z\.\-/_]*)\sHTTP/1")
+@authentication_decorator
+def handle_resource_cpu_avail(self, handle, connection, match, data, hdr):
+    """
+    POST /node/resource/cpu/avail/{prefix-key}
+    Updates CPU availability in the node identified by prefix-key
+    Body:
+    {
+        "value": <cpu avail (0,25,50,75,100)>
+    }
+    Response status code: OK or INTERNAL_ERROR
+    Response: none
+    """
+    self.node.cpu_monitor.set_avail(match.group(1), data['value'], 
+        CalvinCB(func=self.storage_cb, handle=handle, connection=connection))

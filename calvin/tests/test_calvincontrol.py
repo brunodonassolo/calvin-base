@@ -78,7 +78,8 @@ def test_get_calvincontrol_returns_xxx():
     ("GET /index/abc123 HTTP/1", "abc123", "handle_get_index"),
     ("GET /storage/abc123 HTTP/1", "abc123", "handle_get_storage"),
     ("POST /storage/abc123 HTTP/1", "abc123", "handle_post_storage"),
-    ("OPTIONS /abc123 HTTP/1", None, "handle_options")
+    ("OPTIONS /abc123 HTTP/1", None, "handle_options"),
+    ("POST /node/resource/cpu/avail/" + uuid + "HTTP/1", 25, "handle_monitor_cpu_avail")
 ])
 
 def test_routes_correctly(url, match, handler):
