@@ -20,7 +20,9 @@ if not hasattr(pytest, 'inlineCallbacks'):
 @pytest.mark.skipif(pytest.inlineCallbacks == _dummy_inline,
                     reason="No inline twisted plugin enabled, please use --twisted to py.test")
 
+
 class TestCpuMonitor(object):
+    CPUAVAIL_INDEX_BASE = ['node', 'resource', 'cpuAvail']
 
     @pytest.inlineCallbacks
     def setup(self):
@@ -74,7 +76,8 @@ class TestCpuMonitor(object):
 
             # verify index ok and present for level i
             self.done = False
-            self.storage.get_index(index=['cpu','avail'] + map(str, values[:values.index(i)+1]), cb=CalvinCB(self.cb))
+            print "get " + str(self.CPUAVAIL_INDEX_BASE + map(str, values[:values.index(i)+1]))
+            self.storage.get_index(index=self.CPUAVAIL_INDEX_BASE + map(str, values[:values.index(i)+1]), cb=CalvinCB(self.cb))
             yield wait_for(self.test_done)
             assert self.node.id in self.get_ans
 
@@ -91,7 +94,7 @@ class TestCpuMonitor(object):
 
         # node id must not be present at level 50, only at 25
         self.done = False
-        self.storage.get_index(index=['cpu','avail', '0', '25', '50'], cb=CalvinCB(self.cb))
+        self.storage.get_index(index=self.CPUAVAIL_INDEX_BASE + ['0', '25', '50'], cb=CalvinCB(self.cb))
         yield wait_for(self.test_done)
         assert self.get_ans is None
 
@@ -106,7 +109,7 @@ class TestCpuMonitor(object):
         assert self.get_ans == True
 
         self.done = False
-        self.storage.get_index(index=['cpu','avail', '0', '25'], cb=CalvinCB(self.cb))
+        self.storage.get_index(index=self.CPUAVAIL_INDEX_BASE + ['0', '25'], cb=CalvinCB(self.cb))
         yield wait_for(self.test_done)
         assert self.node.id in self.get_ans
 
@@ -120,7 +123,7 @@ class TestCpuMonitor(object):
 
         # node id must not be present at level 25
         self.done = False
-        self.storage.get_index(index=['cpu','avail', '0', '25'], cb=CalvinCB(self.cb))
+        self.storage.get_index(index=self.CPUAVAIL_INDEX_BASE + ['0', '25'], cb=CalvinCB(self.cb))
         yield wait_for(self.test_done)
         print self.get_ans
         assert self.get_ans is None

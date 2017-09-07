@@ -44,6 +44,16 @@ node_name_help = {"organization": '(reversed DNS) name of organisation',
                   "purpose": 'If specific purpose of node, e.g. test, production',
                   "group": 'Name of node group e.g. "project" name',
                   "name": 'Name of node'}
+# Acceptable values for CPU parameter
+cpuAvail_keys =  ["0", "25", "50", "75", "100"]
+cpuAvail_help = {"0": "No CPU available",
+                 "25": "25% of CPU available",
+                 "50": "50% of CPU available",
+                 "75": "75% of CPU available",
+                 "100":"100% of CPU available"}
+
+# list of acceptable resources
+resource_list = ["cpuAvail"]
 
 attribute_docs = '''
 # Calvin Node Attributes
@@ -76,6 +86,8 @@ attribute_docs += ' ' * _indent_index + '"address": {# The node\'s (static) addr
 attribute_docs += (',\n').join([' ' * _indent_index2 + '"' + a + '": ' + address_help[a] for a in address_keys]) + '\n' + ' ' * _indent_index + '},\n'
 attribute_docs += ' ' * _indent_index + '"node_name": { # The node\'s static easy identification\n'
 attribute_docs += (',\n').join([' ' * _indent_index2 + '"' + a + '": ' + node_name_help[a] for a in node_name_keys]) + '\n' + ' ' * _indent_index + '},\n'
+attribute_docs += ' ' * _indent_index + '"cpuAvail": { # The node\'s CPU availability information\n'
+attribute_docs += (',\n').join([' ' * _indent_index2 + '"' + a + '": ' + cpuAvail_help[a] for a in cpuAvail_keys]) + '\n' + ' ' * _indent_index + '},\n'
 attribute_docs += ' ' * _indent_index + '''"user_extra": {# Any user specific extra attributes, as a list of list with index words, not possible to skip levels
                 }
     }
@@ -158,6 +170,13 @@ class AttributeResolverHelper(object):
         return resolved
 
     @classmethod
+    def cpu_avail_resolver(cls, attr):
+        if attr not in cpuAvail_keys:
+            raise Exception('CPU availability must be: %s' % cpuAvail_keys)
+        resolved = map(cls._to_unicode, cpuAvail_keys[:cpuAvail_keys.index(attr) + 1])
+        return resolved
+
+    @classmethod
     def extra_resolver(cls, attr):
         if isinstance(attr, list) and attr and isinstance(attr[0], list):
             return attr
@@ -166,8 +185,13 @@ class AttributeResolverHelper(object):
 
     @staticmethod
     def encode_index(attr, as_list=False):
-        attr_str = '/node/attribute'
-        attr_list = [u'node', u'attribute']
+        if not set(attr).isdisjoint(resource_list):
+            attr_str = '/node/resource'
+            attr_list = [u'node', u'resource']
+        else:
+            attr_str = '/node/attribute'
+            attr_list = [u'node', u'attribute']
+
         for a in attr:
             if a is None:
                 a = ''
@@ -182,9 +206,13 @@ class AttributeResolverHelper(object):
 
     @staticmethod
     def decode_index(attr_str):
-        if not attr_str.startswith('/node/attribute'):
+        if attr_str.startswith('/node/resource'):
+            attr_str = attr_str[len('/node/resource') + 1:]
+        elif attr_str.startswith('/node/attribute'):
+            attr_str = attr_str[len('/node/attribute') + 1:]
+        else:
             raise Exception('Index %s not a node attribute' % attr_str)
-        attr_str = attr_str[len('/node/attribute') + 1:]
+
         attr = re.split(r"(?<![^\\]\\)/", attr_str)
         attr2 = []
         for a in attr:
@@ -200,11 +228,13 @@ class AttributeResolverHelper(object):
 attr_resolver = {"owner": AttributeResolverHelper.owner_resolver,
                  "node_name": AttributeResolverHelper.node_name_resolver,
                  "address": AttributeResolverHelper.address_resolver,
+                 "cpuAvail" : AttributeResolverHelper.cpu_avail_resolver,
                  "user_extra": AttributeResolverHelper.extra_resolver}
 
 keys = {"owner": owner_keys,
         "node_name": node_name_keys,
-        "address": address_keys}
+        "address": address_keys,
+        "cpuAvail": cpuAvail_keys}
 
 def format_index_string(attr, trim=True):
     ''' To format the index search string an attribute resolver function needs to be used:
@@ -338,7 +368,11 @@ if __name__ == "__main__":
     ar = AttributeResolver({"indexed_public": {
                             "address": {"country": "SE", "locality": "Lund", "street": u"Sölvegatan", "streetNumber": 53},
                             "owner": {"organization": u"ericsson.com", "organizationalUnit": "Ericsson Research", "personOrGroup": "CT"},
-                            "node_name": {"organization": "ericsson.com", "purpose": "Test", "name": "alpha1"}}})
+                            "node_name": {"organization": "ericsson.com", "purpose": "Test", "name": "alpha1"},
+                            "cpuAvail": 50}})
+
+    print attribute_docs
+
     s = AttributeResolverHelper.encode_index(['a1', 'a2', 'a3'])
     print s
     print AttributeResolverHelper.decode_index(s)
@@ -351,7 +385,7 @@ if __name__ == "__main__":
     print AttributeResolverHelper.decode_index(s)
     aa = ar.get_indexed_public(as_list=True)
     print aa
-    print aa[1][6]
+    print aa[2][6]
     ar = AttributeResolver(None)
     aa = ar.get_indexed_public(as_list=True)
     print aa
@@ -360,3 +394,7 @@ if __name__ == "__main__":
     print ar.resolve_indexed_public({"owner": {"organization": "org.testexample"}})
     print format_index_string({"owner": {"organization": "org.testexample"}})
     print format_index_string({"owner": {}})
+    s = AttributeResolverHelper.encode_index(['cpuAvail', '0', '25', '50'])
+    print s
+    print AttributeResolverHelper.decode_index(s)
+    
