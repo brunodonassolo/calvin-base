@@ -50,6 +50,7 @@ from calvin.utilities import certificate
 from calvin.utilities.calvinlogger import get_logger, set_file
 from calvin.utilities import calvinconfig
 from calvin.runtime.north.resource_monitor.cpu import CpuMonitor
+from calvin.runtime.north.resource_monitor.memory import MemMonitor
 
 _log = get_logger(__name__)
 _conf = calvinconfig.get()
@@ -135,6 +136,7 @@ class Node(object):
         self.app_manager = appmanager.AppManager(self)
 
         self.cpu_monitor = CpuMonitor(self.id, self.storage)
+        self.mem_monitor = MemMonitor(self.id, self.storage)
 
         # The initialization that requires the main loop operating is deferred to start function
         async.DelayedCall(0, self.start)
@@ -260,6 +262,7 @@ class Node(object):
         _log.analyze(self.id, "+", {})
         self.storage.delete_node(self, cb=deleted_node)
         self.cpu_monitor.stop()
+        self.mem_monitor.stop()
         for link in self.network.list_direct_links():
             self.network.link_get(link).close()
 
