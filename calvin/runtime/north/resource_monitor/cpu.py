@@ -27,7 +27,7 @@ class CpuMonitor(object):
             for index in new_data.get_indexed_public():
                 self.storage.add_index(index=index, value=node_id, root_prefix_level=4, cb=None)
 
-    def set_avail(self, node_id, avail, cb=None):
+    def set_avail(self, avail, cb=None):
         """
         Sets the CPU availability of a node.
         Acceptable range: [0, 25, 50, 75, 100]
@@ -38,9 +38,9 @@ class CpuMonitor(object):
             return
         
         # get old value to cleanup indexes
-        self.storage.get(prefix="nodeCpuAvail-", key=node_id, cb=CalvinCB(self._set_avail_aux, new_value=avail, node_id=node_id))
+        self.storage.get(prefix="nodeCpuAvail-", key=self.node_id, cb=CalvinCB(self._set_avail_aux, new_value=avail, node_id=self.node_id))
 
-        self.storage.set(prefix="nodeCpuAvail-", key=node_id, value=avail, cb=None)
+        self.storage.set(prefix="nodeCpuAvail-", key=self.node_id, value=avail, cb=None)
         if cb:
             async.DelayedCall(0, cb, avail, True)
 

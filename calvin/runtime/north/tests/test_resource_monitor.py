@@ -50,7 +50,7 @@ class TestCpuMonitor(object):
         """
         for i in [-1, 40, 101]:
             self.done = False
-            self.cpu.set_avail(self.node.id, i, CalvinCB(self.cb))
+            self.cpu.set_avail(i, CalvinCB(self.cb))
             yield wait_for(self.test_done)
             assert self.get_ans == False
 
@@ -64,7 +64,7 @@ class TestCpuMonitor(object):
         for i in values:
             # verify set return
             self.done = False
-            self.cpu.set_avail(self.node.id, i, CalvinCB(self.cb))
+            self.cpu.set_avail(i, CalvinCB(self.cb))
             yield wait_for(self.test_done)
             assert self.get_ans == True
             
@@ -87,8 +87,8 @@ class TestCpuMonitor(object):
         Verify if indexes are ok after a change in CPU avail.
         Old value must be erased from indexes
         """
-        self.cpu.set_avail(self.node.id, 50)
-        self.cpu.set_avail(self.node.id, 25, CalvinCB(self.cb))
+        self.cpu.set_avail(50)
+        self.cpu.set_avail(25, CalvinCB(self.cb))
         yield wait_for(self.test_done)
         assert self.get_ans == True
 
@@ -104,7 +104,7 @@ class TestCpuMonitor(object):
         Verify if indexes are cleared after node stop
         Old value must be erased from indexes
         """
-        self.cpu.set_avail(self.node.id, 25, CalvinCB(self.cb))
+        self.cpu.set_avail(25, CalvinCB(self.cb))
         yield wait_for(self.test_done)
         assert self.get_ans == True
 
