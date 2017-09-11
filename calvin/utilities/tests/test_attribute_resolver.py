@@ -47,6 +47,17 @@ class AttributeResolverTester(unittest.TestCase):
 
         self.assertEqual(att.get_indexed_public()[0], '/node/resource/memAvail/0/25/50/75/100')
 
+    def test_cpu_affinity(self):
+        """
+        Tests cpu affinity parameter in indexed_public field
+        """
+        att = AttributeResolver({"indexed_public": {"cpuAffinity": "dedicated"}})
+        att_list = att.get_indexed_public(as_list=True)
+        self.assertEqual(att_list[0][2], 'cpuAffinity')
+        self.assertEqual(att_list[0][3], 'dedicated')
+
+        self.assertEqual(att.get_indexed_public()[0], '/node/attribute/cpuAffinity/dedicated')
+
     def test_mem_avail_invalid_value(self):
         """
         Tests invalid RAM resources in the indexed_public field

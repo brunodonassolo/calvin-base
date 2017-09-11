@@ -52,6 +52,9 @@ cpuAvail_help = {"0": "No CPU available",
                  "75": "75% of CPU available",
                  "100":"100% of CPU available"}
 
+cpuAffinity_keys = ["dedicated"]
+cpuAffinity_help = {"dedicated": "Runs in a unique CPU"}
+
 # Acceptable values for RAM parameter
 memAvail_keys =  ["0", "25", "50", "75", "100"]
 memAvail_help = {"0": "No RAM available",
@@ -105,6 +108,8 @@ attribute_docs += ' ' * _indent_index + '"node_name": { # The node\'s static eas
 attribute_docs += (',\n').join([' ' * _indent_index2 + '"' + a + '": ' + node_name_help[a] for a in node_name_keys]) + '\n' + ' ' * _indent_index + '},\n'
 attribute_docs += ' ' * _indent_index + '"cpuAvail": { # The node\'s CPU availability information\n'
 attribute_docs += (',\n').join([' ' * _indent_index2 + '"' + a + '": ' + cpuAvail_help[a] for a in cpuAvail_keys]) + '\n' + ' ' * _indent_index + '},\n'
+attribute_docs += ' ' * _indent_index + '"cpuAffinity": { # The node\'s CPU affinity\n'
+attribute_docs += (',\n').join([' ' * _indent_index2 + '"' + a + '": ' + cpuAffinity_help[a] for a in cpuAffinity_keys]) + '\n' + ' ' * _indent_index + '},\n'
 attribute_docs += ' ' * _indent_index + '"memAvail": { # The node\'s RAM availability information\n'
 attribute_docs += (',\n').join([' ' * _indent_index2 + '"' + a + '": ' + memAvail_help[a] for a in memAvail_keys]) + '\n' + ' ' * _indent_index + '},\n'
 attribute_docs += ' ' * _indent_index + '"memTotal": { # The node\'s total RAM information\n'
@@ -198,6 +203,13 @@ class AttributeResolverHelper(object):
         return resolved
 
     @classmethod
+    def cpu_affi_resolver(cls, attr):
+        if attr not in cpuAffinity_keys:
+            raise Exception('CPU affinity must be: %s' % cpuAffinity_keys)
+        resolved = [cls._to_unicode(attr)]
+        return resolved
+
+    @classmethod
     def mem_avail_resolver(cls, attr):
         if attr not in memAvail_keys:
             raise Exception('RAM availability must be: %s' % memAvail_keys)
@@ -264,6 +276,7 @@ attr_resolver = {"owner": AttributeResolverHelper.owner_resolver,
                  "node_name": AttributeResolverHelper.node_name_resolver,
                  "address": AttributeResolverHelper.address_resolver,
                  "cpuAvail" : AttributeResolverHelper.cpu_avail_resolver,
+                 "cpuAffinity" : AttributeResolverHelper.cpu_affi_resolver,
                  "memAvail" : AttributeResolverHelper.mem_avail_resolver,
                  "memTotal" : AttributeResolverHelper.mem_total_resolver,
                  "user_extra": AttributeResolverHelper.extra_resolver}
@@ -272,6 +285,7 @@ keys = {"owner": owner_keys,
         "node_name": node_name_keys,
         "address": address_keys,
         "cpuAvail": cpuAvail_keys,
+        "cpuAffinity": cpuAffinity_keys,
         "memAvail": memAvail_keys,
         "memTotal": memTotal_keys}
 
