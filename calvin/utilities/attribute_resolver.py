@@ -55,6 +55,13 @@ cpuAvail_help = {"0": "No CPU available",
 cpuAffinity_keys = ["dedicated"]
 cpuAffinity_help = {"dedicated": "Runs in a unique CPU"}
 
+cpuTotal_keys = ["1", "1000", "100000", "1000000", "10000000"]
+cpuTotal_help = {"1": "One MIPS",
+                 "1000": "One thousand MIPS",
+                 "100000": "One hundred thousand MIPS",
+                 "1000000": "One GIPS (billion instructions per second)",
+                 "10000000":"Ten GIPS (billion instructions per second)"}
+
 # Acceptable values for RAM parameter
 memAvail_keys =  ["0", "25", "50", "75", "100"]
 memAvail_help = {"0": "No RAM available",
@@ -106,14 +113,16 @@ attribute_docs += ' ' * _indent_index + '"address": {# The node\'s (static) addr
 attribute_docs += (',\n').join([' ' * _indent_index2 + '"' + a + '": ' + address_help[a] for a in address_keys]) + '\n' + ' ' * _indent_index + '},\n'
 attribute_docs += ' ' * _indent_index + '"node_name": { # The node\'s static easy identification\n'
 attribute_docs += (',\n').join([' ' * _indent_index2 + '"' + a + '": ' + node_name_help[a] for a in node_name_keys]) + '\n' + ' ' * _indent_index + '},\n'
+attribute_docs += ' ' * _indent_index + '"cpuTotal": { # The node\'s CPU power in MIPS (million instructions per second)\n'
+attribute_docs += (',\n').join([' ' * _indent_index2 + '"' + a + '": ' + cpuTotal_help[a] for a in cpuTotal_keys]) + '\n' + ' ' * _indent_index + '},\n'
 attribute_docs += ' ' * _indent_index + '"cpuAvail": { # The node\'s CPU availability information\n'
 attribute_docs += (',\n').join([' ' * _indent_index2 + '"' + a + '": ' + cpuAvail_help[a] for a in cpuAvail_keys]) + '\n' + ' ' * _indent_index + '},\n'
 attribute_docs += ' ' * _indent_index + '"cpuAffinity": { # The node\'s CPU affinity\n'
 attribute_docs += (',\n').join([' ' * _indent_index2 + '"' + a + '": ' + cpuAffinity_help[a] for a in cpuAffinity_keys]) + '\n' + ' ' * _indent_index + '},\n'
-attribute_docs += ' ' * _indent_index + '"memAvail": { # The node\'s RAM availability information\n'
-attribute_docs += (',\n').join([' ' * _indent_index2 + '"' + a + '": ' + memAvail_help[a] for a in memAvail_keys]) + '\n' + ' ' * _indent_index + '},\n'
 attribute_docs += ' ' * _indent_index + '"memTotal": { # The node\'s total RAM information\n'
 attribute_docs += (',\n').join([' ' * _indent_index2 + '"' + a + '": ' + memTotal_help[a] for a in memTotal_keys]) + '\n' + ' ' * _indent_index + '},\n'
+attribute_docs += ' ' * _indent_index + '"memAvail": { # The node\'s RAM availability information\n'
+attribute_docs += (',\n').join([' ' * _indent_index2 + '"' + a + '": ' + memAvail_help[a] for a in memAvail_keys]) + '\n' + ' ' * _indent_index + '},\n'
 attribute_docs += ' ' * _indent_index + '''"user_extra": {# Any user specific extra attributes, as a list of list with index words, not possible to skip levels
                 }
     }
@@ -203,6 +212,13 @@ class AttributeResolverHelper(object):
         return resolved
 
     @classmethod
+    def cpu_total_resolver(cls, attr):
+        if attr not in cpuTotal_keys:
+            raise Exception('CPU power must be: %s' % cpuTotal_keys)
+        resolved = map(cls._to_unicode, cpuTotal_keys[:cpuTotal_keys.index(attr) + 1])
+        return resolved
+
+    @classmethod
     def cpu_affi_resolver(cls, attr):
         if attr not in cpuAffinity_keys:
             raise Exception('CPU affinity must be: %s' % cpuAffinity_keys)
@@ -275,6 +291,7 @@ class AttributeResolverHelper(object):
 attr_resolver = {"owner": AttributeResolverHelper.owner_resolver,
                  "node_name": AttributeResolverHelper.node_name_resolver,
                  "address": AttributeResolverHelper.address_resolver,
+                 "cpuTotal" : AttributeResolverHelper.cpu_total_resolver,
                  "cpuAvail" : AttributeResolverHelper.cpu_avail_resolver,
                  "cpuAffinity" : AttributeResolverHelper.cpu_affi_resolver,
                  "memAvail" : AttributeResolverHelper.mem_avail_resolver,
@@ -284,6 +301,7 @@ attr_resolver = {"owner": AttributeResolverHelper.owner_resolver,
 keys = {"owner": owner_keys,
         "node_name": node_name_keys,
         "address": address_keys,
+        "cpuTotal": cpuTotal_keys,
         "cpuAvail": cpuAvail_keys,
         "cpuAffinity": cpuAffinity_keys,
         "memAvail": memAvail_keys,

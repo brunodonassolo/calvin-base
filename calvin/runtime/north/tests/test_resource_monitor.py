@@ -25,13 +25,16 @@ if not hasattr(pytest, 'inlineCallbacks'):
 
 class TestCpuMonitor(object):
     CPUAVAIL_INDEX_BASE = ['node', 'resource', 'cpuAvail']
+    CPUTOTAL_INDEX_BASE = ['node', 'attribute', 'cpuTotal']
 
     @pytest.inlineCallbacks
     def setup(self):
         self.node = calvin.tests.TestNode(["127.0.0.1:5000"])
+        self.node.attributes = AttributeResolver({"indexed_public": {"cpuTotal": "1" }})
         self.storage = storage.Storage(self.node)
         self.cpu = CpuMonitor(self.node.id, self.storage)
         self.done = False
+        self.storage.add_node(self.node)
         yield threads.defer_to_thread(time.sleep, .01)
 
     @pytest.inlineCallbacks
@@ -115,6 +118,7 @@ class TestCpuMonitor(object):
         assert self.node.id in self.get_ans
 
         self.cpu.stop()
+        self.storage.delete_node(self.node)
 
         # nodeCpuAvail must not exist
         self.done = False
@@ -127,6 +131,33 @@ class TestCpuMonitor(object):
         self.storage.get_index(index=self.CPUAVAIL_INDEX_BASE + ['0', '25'], cb=CalvinCB(self.cb))
         yield wait_for(self.test_done)
         assert self.get_ans is None
+
+        # no node in total indexes
+        self.done = False
+        self.storage.get_index(index=self.CPUTOTAL_INDEX_BASE + ['1'], cb=CalvinCB(self.cb))
+        yield wait_for(self.test_done)
+        assert self.get_ans is None
+
+    @pytest.inlineCallbacks
+    def test_total_valid(self):
+        """
+        Test valid values for CPU power.
+        Verify if storage is as expected
+        """
+        values = ["1", "1000", "100000", "1000000", "10000000"]
+        for i in values:
+            # verify set return
+            self.done = False
+            self.node.attributes = AttributeResolver({"indexed_public": {"cpuTotal": i }})
+            self.storage.add_node(self.node, cb=self.cb)
+            yield wait_for(self.test_done)
+            assert self.get_ans == True
+
+            # verify index ok and present for level i
+            self.done = False
+            self.storage.get_index(index=self.CPUTOTAL_INDEX_BASE + map(str, values[:values.index(i)+1]), cb=CalvinCB(self.cb))
+            yield wait_for(self.test_done)
+            assert self.node.id in self.get_ans
 
 
 class TestMemMonitor(object):

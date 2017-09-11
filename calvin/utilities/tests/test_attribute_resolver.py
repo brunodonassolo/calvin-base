@@ -32,6 +32,31 @@ class AttributeResolverTester(unittest.TestCase):
 
         self.assertEqual(att.get_indexed_public()[0], '/node/resource/cpuAvail')
 
+    def test_cpu_total(self):
+        """
+        Tests valid CPU power in the indexed_public field
+        """
+        att = AttributeResolver({"indexed_public": {"cpuTotal": "10000000"}})
+        att_list = att.get_indexed_public(as_list=True)
+        self.assertEqual(att_list[0][2], 'cpuTotal')
+        self.assertEqual(att_list[0][3], '1')
+        self.assertEqual(att_list[0][4], '1000')
+        self.assertEqual(att_list[0][5], '100000')
+        self.assertEqual(att_list[0][6], '1000000')
+        self.assertEqual(att_list[0][7], '10000000')
+
+        self.assertEqual(att.get_indexed_public()[0], '/node/attribute/cpuTotal/1/1000/100000/1000000/10000000')
+
+    def test_cpu_total_invalid_value(self):
+        """
+        Tests invalid CPU power in the indexed_public field
+        """
+        att = AttributeResolver({"indexed_public": {"cpuTotal": "2"}})
+        att_list = att.get_indexed_public(as_list=True)
+        self.assertEqual(att_list[0][2], 'cpuTotal')
+
+        self.assertEqual(att.get_indexed_public()[0], '/node/attribute/cpuTotal')
+
     def test_mem_avail(self):
         """
         Tests valid RAM resources in the indexed_public field
