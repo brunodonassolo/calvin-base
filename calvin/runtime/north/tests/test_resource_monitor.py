@@ -5,6 +5,7 @@ from calvin.runtime.north.resource_monitor.cpu import CpuMonitor
 from calvin.runtime.north.resource_monitor.memory import MemMonitor
 from calvin.runtime.south.plugins.async import threads
 from calvin.utilities.calvin_callback import CalvinCB
+from calvin.utilities.attribute_resolver import AttributeResolver
 from calvin.tests.helpers_twisted import create_callback, wait_for
 import calvin.tests
 import pytest
@@ -77,7 +78,6 @@ class TestCpuMonitor(object):
 
             # verify index ok and present for level i
             self.done = False
-            print "get " + str(self.CPUAVAIL_INDEX_BASE + map(str, values[:values.index(i)+1]))
             self.storage.get_index(index=self.CPUAVAIL_INDEX_BASE + map(str, values[:values.index(i)+1]), cb=CalvinCB(self.cb))
             yield wait_for(self.test_done)
             assert self.node.id in self.get_ans
@@ -126,19 +126,21 @@ class TestCpuMonitor(object):
         self.done = False
         self.storage.get_index(index=self.CPUAVAIL_INDEX_BASE + ['0', '25'], cb=CalvinCB(self.cb))
         yield wait_for(self.test_done)
-        print self.get_ans
         assert self.get_ans is None
 
 
 class TestMemMonitor(object):
     MEMAVAIL_INDEX_BASE = ['node', 'resource', 'memAvail']
+    MEMTOTAL_INDEX_BASE = ['node', 'attribute', 'memTotal']
 
     @pytest.inlineCallbacks
     def setup(self):
         self.node = calvin.tests.TestNode(["127.0.0.1:5000"])
+        self.node.attributes = AttributeResolver({"indexed_public": {"memTotal": "10G" }})
         self.storage = storage.Storage(self.node)
         self.mem = MemMonitor(self.node.id, self.storage)
         self.done = False
+        self.storage.add_node(self.node)
         yield threads.defer_to_thread(time.sleep, .01)
 
     @pytest.inlineCallbacks
@@ -185,10 +187,8 @@ class TestMemMonitor(object):
 
             # verify index ok and present for level i
             self.done = False
-            print "get " + str(self.MEMAVAIL_INDEX_BASE + map(str, values[:values.index(i)+1]))
             self.storage.get_index(index=self.MEMAVAIL_INDEX_BASE + map(str, values[:values.index(i)+1]), cb=CalvinCB(self.cb))
             yield wait_for(self.test_done)
-            print self.get_ans
             assert self.node.id in self.get_ans
 
     @pytest.inlineCallbacks
@@ -224,6 +224,7 @@ class TestMemMonitor(object):
         assert self.node.id in self.get_ans
 
         self.mem.stop()
+        self.storage.delete_node(self.node)
 
         # nodeMemAvail must not exist
         self.done = False
@@ -235,6 +236,31 @@ class TestMemMonitor(object):
         self.done = False
         self.storage.get_index(index=self.MEMAVAIL_INDEX_BASE + ['0', '25'], cb=CalvinCB(self.cb))
         yield wait_for(self.test_done)
-        print self.get_ans
         assert self.get_ans is None
 
+        # no node in total indexes
+        self.done = False
+        self.storage.get_index(index=self.MEMTOTAL_INDEX_BASE + ['1K'], cb=CalvinCB(self.cb))
+        yield wait_for(self.test_done)
+        assert self.get_ans is None
+
+    @pytest.inlineCallbacks
+    def test_total_valid(self):
+        """
+        Test valid values for total RAM.
+        Verify if storage is as expected
+        """
+        values = ["1K", "100K", "1M", "100M", "1G", "10G"]
+        for i in values:
+            # verify set return
+            self.done = False
+            self.node.attributes = AttributeResolver({"indexed_public": {"memTotal": i }})
+            self.storage.add_node(self.node, cb=self.cb)
+            yield wait_for(self.test_done)
+            assert self.get_ans == True
+
+            # verify index ok and present for level i
+            self.done = False
+            self.storage.get_index(index=self.MEMTOTAL_INDEX_BASE + map(str, values[:values.index(i)+1]), cb=CalvinCB(self.cb))
+            yield wait_for(self.test_done)
+            assert self.node.id in self.get_ans

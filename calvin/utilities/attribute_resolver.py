@@ -60,6 +60,15 @@ memAvail_help = {"0": "No RAM available",
                  "75": "75% of RAM available",
                  "100":"100% of RAM available"}
 
+memTotal_keys = ["1K", "100K", "1M", "100M", "1G", "10G"]
+memTotal_help = {"1K": "1Kb of RAM",
+                 "100K": "100Kb of RAM",
+                 "1M": "1Mb of RAM",
+                 "100M": "100Mb of RAM",
+                 "1G":"1Gb of RAM",
+                 "10G":"10Gb of RAM"}
+
+
 # list of acceptable resources
 resource_list = ["cpuAvail", "memAvail"]
 
@@ -98,6 +107,8 @@ attribute_docs += ' ' * _indent_index + '"cpuAvail": { # The node\'s CPU availab
 attribute_docs += (',\n').join([' ' * _indent_index2 + '"' + a + '": ' + cpuAvail_help[a] for a in cpuAvail_keys]) + '\n' + ' ' * _indent_index + '},\n'
 attribute_docs += ' ' * _indent_index + '"memAvail": { # The node\'s RAM availability information\n'
 attribute_docs += (',\n').join([' ' * _indent_index2 + '"' + a + '": ' + memAvail_help[a] for a in memAvail_keys]) + '\n' + ' ' * _indent_index + '},\n'
+attribute_docs += ' ' * _indent_index + '"memTotal": { # The node\'s total RAM information\n'
+attribute_docs += (',\n').join([' ' * _indent_index2 + '"' + a + '": ' + memTotal_help[a] for a in memTotal_keys]) + '\n' + ' ' * _indent_index + '},\n'
 attribute_docs += ' ' * _indent_index + '''"user_extra": {# Any user specific extra attributes, as a list of list with index words, not possible to skip levels
                 }
     }
@@ -194,6 +205,13 @@ class AttributeResolverHelper(object):
         return resolved
 
     @classmethod
+    def mem_total_resolver(cls, attr):
+        if attr not in memTotal_keys:
+            raise Exception('RAM must be: %s' % memTotal_keys)
+        resolved = map(cls._to_unicode, memTotal_keys[:memTotal_keys.index(attr) + 1])
+        return resolved
+
+    @classmethod
     def extra_resolver(cls, attr):
         if isinstance(attr, list) and attr and isinstance(attr[0], list):
             return attr
@@ -247,13 +265,15 @@ attr_resolver = {"owner": AttributeResolverHelper.owner_resolver,
                  "address": AttributeResolverHelper.address_resolver,
                  "cpuAvail" : AttributeResolverHelper.cpu_avail_resolver,
                  "memAvail" : AttributeResolverHelper.mem_avail_resolver,
+                 "memTotal" : AttributeResolverHelper.mem_total_resolver,
                  "user_extra": AttributeResolverHelper.extra_resolver}
 
 keys = {"owner": owner_keys,
         "node_name": node_name_keys,
         "address": address_keys,
         "cpuAvail": cpuAvail_keys,
-        "memAvail": memAvail_keys}
+        "memAvail": memAvail_keys,
+        "memTotal": memTotal_keys}
 
 def format_index_string(attr, trim=True):
     ''' To format the index search string an attribute resolver function needs to be used:
