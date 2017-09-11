@@ -3,6 +3,9 @@
 from calvin.runtime.south.plugins.async import async
 from calvin.utilities.calvin_callback import CalvinCB
 from calvin.utilities.attribute_resolver import AttributeResolver
+from calvin.utilities.calvinlogger import get_logger
+
+_log = get_logger(__name__)
 
 class ResourceMonitorHelper(object):
     def __init__(self, node_id, storage):
@@ -16,20 +19,20 @@ class ResourceMonitorHelper(object):
         """
         # if new value is exactly the same, we don't need to change anything..
         if value is new_value:
-            print "%s, value: %s. Nothing changed, just return.." % (prefix_index, value)
+            _log.debug("%s, value: %s. Nothing changed, just return.." % (prefix_index, value))
             return
 
         # erase indexes related to old value
         if value is not None:
             old_data = AttributeResolver({"indexed_public": {prefix_index: str(value)}})
-            print "Removing " + str(key) + " for " + prefix_index + ": " + str(value)
+            _log.debug("Removing " + str(key) + " for " + prefix_index + ": " + str(value))
             for index in old_data.get_indexed_public():
                 self.storage.remove_index(index=index, value=key, root_prefix_level=2)
 
         # insert the new ones
         if new_value is not None:
             new_data = AttributeResolver({"indexed_public": {prefix_index: str(new_value)}})
-            print "After possible removal, adding new node " + str(self.node_id) + " for " + prefix_index + ": " + str(new_value)
+            _log.debug("After possible removal, adding new node " + str(self.node_id) + " for " + prefix_index + ": " + str(new_value))
             for index in new_data.get_indexed_public():
                 self.storage.add_index(index=index, value=self.node_id, root_prefix_level=4, cb=None)
 

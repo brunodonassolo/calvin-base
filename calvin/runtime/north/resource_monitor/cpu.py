@@ -2,6 +2,9 @@
 
 from calvin.runtime.south.plugins.async import async
 from calvin.runtime.north.resource_monitor.helper import ResourceMonitorHelper
+from calvin.utilities.calvinlogger import get_logger
+
+_log = get_logger(__name__)
 
 class CpuMonitor(object):
     def __init__(self, node_id, storage):
@@ -16,11 +19,11 @@ class CpuMonitor(object):
         Acceptable range: [0, 25, 50, 75, 100]
         """
         if avail not in self.acceptable_avail:
-            print "Invalid CPU avail value: " + str(avail)
+            _log.error("Invalid CPU avail value: %s" % str(avail))
             if cb:
                 async.DelayedCall(0, cb, avail, False)
             return
-        
+
         self.helper.set("nodeCpuAvail-", "cpuAvail", avail, cb)
 
     def stop(self):
