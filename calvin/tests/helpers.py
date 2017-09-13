@@ -8,6 +8,7 @@ import time
 import multiprocessing
 import copy
 import numbers
+import netifaces
 
 _log = calvinlogger.get_logger(__name__)
 _conf = calvinconfig.get()
@@ -366,6 +367,44 @@ def setup_bluetooth(bt_master_controluri, request_handler):
                 runtimes.append(rt3)
     return [runtime] + runtimes
 
+def get_ip_addr():
+    try:
+        ip_addr = os.environ["CALVIN_TEST_LOCALHOST"]
+    except KeyError:
+        import socket
+        # If this fails add hostname to the /etc/hosts file for 127.0.0.1
+        try:
+            ip_addr = socket.gethostbyname(socket.gethostname())
+        except:
+            # Go deeper to get a real IP for this machine
+            def _prefered_addr(key):
+                # Order we prefer addresses
+                if key.startswith("192.168."):
+                    return 10
+                if key.startswith("10."):
+                    return 20
+                if key == "0.0.0.0":
+                    return 80
+                if key == "127.0.0.1":
+                    return 90
+                if key.startswith("99."):
+                    return 100
+                return 50
+            possible_addresses = []
+            for i in netifaces.interfaces():
+                addrs = netifaces.ifaddresses(i)
+                # Ipv4 for now
+                if netifaces.AF_INET in addrs:
+                    for a in addrs[netifaces.AF_INET]:
+                        possible_addresses.append(a.get('addr', '0.0.0.0'))
+            possible_addresses.sort(key=_prefered_addr)
+            try:
+                ip_addr = possible_addresses[0]
+            except:
+                _log.error("You seems to not have a valid ip-address for the machine running the test.")
+                raise Exception("You seems to not have a valid ip-address for the machine running the test.")
+    return ip_addr
+
 def setup_test_type(request_handler, nbr=3, proxy_storage=False):
     control_uri = None
     ip_addr = None
@@ -391,12 +430,7 @@ def setup_test_type(request_handler, nbr=3, proxy_storage=False):
             pass
 
     if not test_type:
-        try:
-            ip_addr = os.environ["CALVIN_TEST_LOCALHOST"]
-        except KeyError:
-            import socket
-            # If this fails add hostname to the /etc/hosts file for 127.0.0.1
-            ip_addr = socket.gethostbyname(socket.gethostname())
+        ip_addr = get_ip_addr()
         test_type = "local"
 
     if test_type == "distributed":
@@ -423,8 +457,8 @@ def teardown_test_type(test_type, runtimes, request_handler):
     if test_type == "local":
         for peer in runtimes:
             request_handler.quit(peer)
-            retry(10, partial(request_handler.get_node_id, peer), lambda _: True, "Failed to stop peer %r" % (peer,))
-            # wait_for_it(peer)
+        for peer in runtimes:
+            retry(10, partial(wait_for_it, peer), lambda r: r, "Failed to stop peer %r" % (peer,))
         for p in multiprocessing.active_children():
             p.terminate()
             time.sleep(1)
