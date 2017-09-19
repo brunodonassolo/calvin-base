@@ -119,14 +119,19 @@ def test_state(actor):
     inport = actor.inports['token']
     outport = actor.outports['token']
     correct_state = {
-        '_component_members': set([actor.id]),
+        'custom': {},
+        'managed': {'dump': False, 'last': None},
+        'private': {
+        '_component_members': [actor.id],
         '_has_started': False,
         '_deployment_requirements': [],
-        '_managed': set(['dump', '_has_started', '_signature', '_id', '_deployment_requirements', '_name', '_subject_attributes', '_migration_info', '_port_property_capabilities', '_replication_data', 'last']),
+        '_managed': set(['last', 'dump']),
         '_signature': None,
-        'dump': False,
         '_id': actor.id,
         '_port_property_capabilities': None,
+        '_migration_info': None,
+        '_subject_attributes': None,
+        '_replication_data': {},
         'inports': {'token': {'properties': {'direction': 'in',
                                              'routing': 'default',
                                              'nbr_peers': 1},
@@ -161,14 +166,19 @@ def test_state(actor):
                                         'tentative_read_pos': {},
                                         'write_pos': 0},
                                'id': outport.id,
-                               'name': 'token'}}}
-    test_state = actor.state()
-    for k, v in correct_state.iteritems():
-        # Read state use list to support JSON serialization
-        if isinstance(v, set):
-            assert set(test_state[k]) == v
-        else:
-            assert test_state[k] == v
+                               'name': 'token'}}
+                           },
+                         }
+
+    test_state = actor.serialize()
+    for prop, expected in correct_state.iteritems():
+        actual = test_state[prop]
+        for k, v in expected.iteritems():
+            # Read state use list to support JSON serialization
+            if isinstance(v, set):
+                assert set(actual[k]) == v
+            else:
+                assert actual[k] == v
 
 @pytest.mark.parametrize("prev_signature,new_signature,expected", [
     (None, "new_val", "new_val"),
