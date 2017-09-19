@@ -208,8 +208,8 @@ class Backport(object):
 
 class DSCodeGen(object):
 
-    verbose = False
-    verbose_nodes = False
+    verbose = True
+    verbose_nodes = True
 
     """
     Generate code from a deploy script file
@@ -240,6 +240,7 @@ class DSCodeGen(object):
 
         gen_deploy_info = DeployInfo(self.root, issue_tracker)
         gen_deploy_info.process()
+        print gen_deploy_info.requirements
 
         bp = Backport(issue_tracker)
         return bp.transform(gen_deploy_info.requirements)

@@ -146,7 +146,6 @@ class CalvinParser(object):
                      | apply"""
         p[0] = p[1]
 
-
     def p_assignment(self, p):
         """assignment : IDENTIFIER COLON qualified_name LPAREN named_args RPAREN"""
         p[0] = ast.Assignment(ident=p[1], actor_type=p[3], args=p[5], debug_info=self.debug_info(p, 1))
@@ -188,13 +187,17 @@ class CalvinParser(object):
         self.issuetracker.add_error('Pointless construct.', info)
 
     def p_link(self, p):
-        """link : real_outport GT void
+        """link : LINK IDENTIFIER COLON link
+                | real_outport GT void
                 | void GT real_inport_list
                 | real_outport GT inport_list
                 | implicit_outport GT inport_list
                 | internal_outport GT inport_list"""
-        p[0] = ast.Link(outport=p[1], inport=p[3], debug_info=self.debug_info(p, 1))
-
+        if len(p) == 5:
+            p[0] = p[4]
+            p[0].ident = p[2]
+        else:
+            p[0] = ast.Link(outport=p[1], inport=p[3], debug_info=self.debug_info(p, 1))
 
     def p_void(self, p):
         """void : VOIDPORT"""
@@ -552,10 +555,11 @@ component Foo(a, b, c)  -> out {
 src : std.CountTimer()
 snk : test.Sink(store_tokens=1, quiet=1)
 src.integer > snk.token
+link xxx : :ssss "test" > snk.token
 
 rule simple : node_attr_match(index=["node_name", {"organization": "com.ericsson"}])
 
-apply src, snk : simple
+apply src, snk, test : simple
 
 '''
     else:
