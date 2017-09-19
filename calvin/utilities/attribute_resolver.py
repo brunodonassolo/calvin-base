@@ -78,6 +78,8 @@ memTotal_help = {"1K": "1Kb of RAM",
                  "1G":"1Gb of RAM",
                  "10G":"10Gb of RAM"}
 
+memAffinity_keys = ["dedicated"]
+memAffinity_help = {"dedicated": "Uses a dedicated NUMA memory node"}
 
 # list of acceptable resources
 resource_list = ["cpuAvail", "memAvail"]
@@ -123,6 +125,8 @@ attribute_docs += ' ' * _indent_index + '"memTotal": { # The node\'s total RAM i
 attribute_docs += (',\n').join([' ' * _indent_index2 + '"' + a + '": ' + memTotal_help[a] for a in memTotal_keys]) + '\n' + ' ' * _indent_index + '},\n'
 attribute_docs += ' ' * _indent_index + '"memAvail": { # The node\'s RAM availability information\n'
 attribute_docs += (',\n').join([' ' * _indent_index2 + '"' + a + '": ' + memAvail_help[a] for a in memAvail_keys]) + '\n' + ' ' * _indent_index + '},\n'
+attribute_docs += ' ' * _indent_index + '"memAffinity": { # The node\'s RAM affinity\n'
+attribute_docs += (',\n').join([' ' * _indent_index2 + '"' + a + '": ' + memAffinity_help[a] for a in memAffinity_keys]) + '\n' + ' ' * _indent_index + '},\n'
 attribute_docs += ' ' * _indent_index + '''"user_extra": {# Any user specific extra attributes, as a list of list with index words, not possible to skip levels
                 }
     }
@@ -240,6 +244,13 @@ class AttributeResolverHelper(object):
         return resolved
 
     @classmethod
+    def mem_affi_resolver(cls, attr):
+        if attr not in memAffinity_keys:
+            raise Exception('RAM affinity must be: %s' % memAffinity_keys)
+        resolved = [cls._to_unicode(attr)]
+        return resolved
+
+    @classmethod
     def extra_resolver(cls, attr):
         if isinstance(attr, list) and attr and isinstance(attr[0], list):
             return attr
@@ -296,6 +307,7 @@ attr_resolver = {"owner": AttributeResolverHelper.owner_resolver,
                  "cpuAffinity" : AttributeResolverHelper.cpu_affi_resolver,
                  "memAvail" : AttributeResolverHelper.mem_avail_resolver,
                  "memTotal" : AttributeResolverHelper.mem_total_resolver,
+                 "memAffinity" : AttributeResolverHelper.mem_affi_resolver,
                  "user_extra": AttributeResolverHelper.extra_resolver}
 
 keys = {"owner": owner_keys,
@@ -305,7 +317,8 @@ keys = {"owner": owner_keys,
         "cpuAvail": cpuAvail_keys,
         "cpuAffinity": cpuAffinity_keys,
         "memAvail": memAvail_keys,
-        "memTotal": memTotal_keys}
+        "memTotal": memTotal_keys,
+        "memAffinity": memAffinity_keys}
 
 def format_index_string(attr, trim=True):
     ''' To format the index search string an attribute resolver function needs to be used:

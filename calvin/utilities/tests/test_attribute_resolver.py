@@ -118,3 +118,15 @@ class AttributeResolverTester(unittest.TestCase):
         self.assertEqual(att_list[0][2], 'memTotal')
 
         self.assertEqual(att.get_indexed_public()[0], '/node/attribute/memTotal')
+
+    def test_mem_affinity(self):
+        """
+        Tests RAM affinity parameter in indexed_public field
+        """
+        att = AttributeResolver({"indexed_public": {"memAffinity": "dedicated"}})
+        att_list = att.get_indexed_public(as_list=True)
+        self.assertEqual(att_list[0][2], 'memAffinity')
+        self.assertEqual(att_list[0][3], 'dedicated')
+
+        self.assertEqual(att.get_indexed_public()[0], '/node/attribute/memAffinity/dedicated')
+
