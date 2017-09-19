@@ -1,0 +1,6 @@
+src : std.CountTimer()
+sum : std.Sum()
+snk : test.Sink()
+
+link linkB : src.integer > sum.integer
+link linkA : sum.integer > snk.token
