@@ -184,6 +184,7 @@ class Link(Node):
     def __init__(self, **kwargs):
         super(Link, self).__init__(**kwargs)
         self.add_children([kwargs.get('outport'), kwargs.get('inport')])
+        self.ident = kwargs.get('ident')
 
     def remove_child(self, child):
         raise Exception("Can't remove child from {}".format(self))
