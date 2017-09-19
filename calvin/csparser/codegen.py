@@ -171,7 +171,7 @@ class PortlistRewrite(object):
         link = node.parent
         block = link.parent
         for inport in node.children:
-            new_link = ast.Link(outport=link.outport.clone(), inport=inport)
+            new_link = ast.Link(ident=link.ident, outport=link.outport.clone(), inport=inport)
             block.add_child(new_link)
         link.delete()
 
@@ -204,7 +204,7 @@ class PortRewrite(object):
         link = node.parent
         block = link.parent
         block.add_child(actor)
-        new_link = ast.Link(outport=outport, inport=node.port)
+        new_link = ast.Link(ident=link.ident, outport=outport, inport=node.port)
         block.add_child(new_link)
         link.inport = inport
 
@@ -524,6 +524,8 @@ class Flatten(object):
         # Make sure real ports have been promoted, i.e. have had the block namspace
         # added to the actor name, before juggling with component internal ports.
         linktype = (type(node.outport), type(node.inport))
+        if node.ident:
+            node.ident = self.stack[-1] + ':' + node.ident
         if linktype == (ast.InternalOutPort, ast.InPort):
             map(self.visit, [node.inport, node.outport])
         else:
@@ -600,7 +602,14 @@ class Flatten(object):
         # 5. Create the new link
         l0_copy = l0.clone()
         l3_copy = l3.clone()
-        l0_l3_link = ast.Link(outport=l0_copy, inport=l3_copy)
+        # set link name for internal ports
+        name = None
+        if type(l1) == ast.InPort:
+            name = l0_l1_link.ident
+        elif type(l2) == ast.OutPort:
+            name = l2_l3_link.ident
+
+        l0_l3_link = ast.Link(ident=name, outport=l0_copy, inport=l3_copy)
         # 8. Transfer port properties
         l0_l3_link.outport.add_children(l2.children)
         l0_l3_link.inport.add_children(l1.children)
@@ -890,6 +899,10 @@ class AppInfo(object):
 
         self.app_info['connections'].setdefault(key, []).append(value)
 
+        # if name is not explicitly given, set it as actor.outport
+        name = node.ident if node.ident else key
+        self.app_info['links'].setdefault(name, []).append((key, value))
+
 
     @visitor.when(ast.PortProperty)
     def visit(self, node):
@@ -1141,6 +1154,7 @@ class CodeGen(object):
             'name':script_name,
             'actors': {},
             'connections': {},
+            'links': {},
             'port_properties': {},
             'valid': True
         }

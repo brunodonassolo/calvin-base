@@ -296,3 +296,33 @@ def handle_resource_avail(self, handle, connection, match, data, hdr):
         self.node.cpu_monitor.set_avail(data['value'], CalvinCB(self.index_cb, handle, connection))
     else:
         self.send_response(handle, connection, None, status=calvinresponse.NOT_FOUND)
+
+@handler(method="POST", path="/link/resource/bandwidth/([0-9a-zA-Z\.\-/_]*)/([0-9a-zA-Z\.\-/_]*)")
+@authentication_decorator
+def handle_resource_bandwidth(self, handle, connection, match, data, hdr):
+    """
+    POST /node/resource/bandwidth
+    Updates the links bandwitdh between 2 runtimes
+    Body:
+    {
+        "value": <bandwidth (1M, 100M, 1G, 10G, 100G)>
+    }
+    Response status code: OK or INTERNAL_ERROR
+    Response: none
+    """
+    self.node.link_monitor.set_bandwidth(match.group(1), match.group(2), data['value'], CalvinCB(func=self.storage_cb, handle=handle, connection=connection))
+
+@handler(method="POST", path="/link/resource/latency/([0-9a-zA-Z\.\-/_]*)/([0-9a-zA-Z\.\-/_]*)")
+@authentication_decorator
+def handle_resource_latency(self, handle, connection, match, data, hdr):
+    """
+    POST /node/resource/latency
+    Updates the links bandwitdh between 2 runtimes
+    Body:
+    {
+        "value": <latency (1us, 100us, 1ms, 100ms, 1s)>
+    }
+    Response status code: OK or INTERNAL_ERROR
+    Response: none
+    """
+    self.node.link_monitor.set_latency(match.group(1), match.group(2), data['value'], CalvinCB(func=self.storage_cb, handle=handle, connection=connection))

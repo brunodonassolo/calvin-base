@@ -81,8 +81,27 @@ memTotal_help = {"1K": "1Kb of RAM",
 memAffinity_keys = ["dedicated"]
 memAffinity_help = {"dedicated": "Uses a dedicated NUMA memory node"}
 
+# Acceptable values for network bandwidth
+bandwidth_keys = ["1M", "100M", "1G", "10G", "100G"]
+bandwidth_help = {"1M": "1Mb/s bandwidth",
+                 "100M": "100Mb/s bandwidth",
+                 "1G": "1Gb/s bandwidth",
+                 "10G": "10G/s bandwidth",
+                 "100G":"100G/s bandwidth"}
+
+# Acceptable values for network latency
+latency_keys = ["1s", "100ms", "1ms", "100us", "1us"]
+latency_help = {"1s":"1 second",
+                "100ms": "100 milliseconds",
+                "1ms": "1 millisecond",
+                "100us": "100 microseconds",
+                "1us": "1 microsecond"}
+
 # list of acceptable resources
 resource_list = ["cpuAvail", "memAvail"]
+
+# list of acceptable links
+links_list = ["bandwidth", "latency"]
 
 attribute_docs = '''
 # Calvin Node Attributes
@@ -127,6 +146,10 @@ attribute_docs += ' ' * _indent_index + '"memAvail": { # The node\'s RAM availab
 attribute_docs += (',\n').join([' ' * _indent_index2 + '"' + a + '": ' + memAvail_help[a] for a in memAvail_keys]) + '\n' + ' ' * _indent_index + '},\n'
 attribute_docs += ' ' * _indent_index + '"memAffinity": { # The node\'s RAM affinity\n'
 attribute_docs += (',\n').join([' ' * _indent_index2 + '"' + a + '": ' + memAffinity_help[a] for a in memAffinity_keys]) + '\n' + ' ' * _indent_index + '},\n'
+attribute_docs += ' ' * _indent_index + '"bandwidth": { # The link\'s bandwidth\n'
+attribute_docs += (',\n').join([' ' * _indent_index2 + '"' + a + '": ' + bandwidth_help[a] for a in bandwidth_keys]) + '\n' + ' ' * _indent_index + '},\n'
+attribute_docs += ' ' * _indent_index + '"latency": { # The link\'s latency\n'
+attribute_docs += (',\n').join([' ' * _indent_index2 + '"' + a + '": ' + latency_help[a] for a in latency_keys]) + '\n' + ' ' * _indent_index + '},\n'
 attribute_docs += ' ' * _indent_index + '''"user_extra": {# Any user specific extra attributes, as a list of list with index words, not possible to skip levels
                 }
     }
@@ -251,6 +274,20 @@ class AttributeResolverHelper(object):
         return resolved
 
     @classmethod
+    def bandwidth_resolver(cls, attr):
+        if attr not in bandwidth_keys:
+            raise Exception('Bandwidth must be: %s' % bandwidth_keys)
+        resolved = map(cls._to_unicode, bandwidth_keys[:bandwidth_keys.index(attr) + 1])
+        return resolved
+
+    @classmethod
+    def latency_resolver(cls, attr):
+        if attr not in latency_keys:
+            raise Exception('Latency must be: %s' % latency_keys)
+        resolved = map(cls._to_unicode, latency_keys[:latency_keys.index(attr) + 1])
+        return resolved
+
+    @classmethod
     def extra_resolver(cls, attr):
         if isinstance(attr, list) and attr and isinstance(attr[0], list):
             return attr
@@ -262,6 +299,9 @@ class AttributeResolverHelper(object):
         if not set(attr).isdisjoint(resource_list):
             attr_str = '/node/resource'
             attr_list = [u'node', u'resource']
+        elif not set(attr).isdisjoint(links_list):
+            attr_str = '/links/resource'
+            attr_list = [u'links', u'resource']
         else:
             attr_str = '/node/attribute'
             attr_list = [u'node', u'attribute']
@@ -284,6 +324,8 @@ class AttributeResolverHelper(object):
             attr_str = attr_str[len('/node/resource') + 1:]
         elif attr_str.startswith('/node/attribute'):
             attr_str = attr_str[len('/node/attribute') + 1:]
+        elif attr_str.startswith('/links/resource'):
+            attr_str = attr_str[len('/links/resource') + 1:]
         else:
             raise Exception('Index %s not a node attribute' % attr_str)
 
@@ -308,7 +350,9 @@ attr_resolver = {"owner": AttributeResolverHelper.owner_resolver,
                  "memAvail" : AttributeResolverHelper.mem_avail_resolver,
                  "memTotal" : AttributeResolverHelper.mem_total_resolver,
                  "memAffinity" : AttributeResolverHelper.mem_affi_resolver,
-                 "user_extra": AttributeResolverHelper.extra_resolver}
+                 "user_extra": AttributeResolverHelper.extra_resolver,
+                 "bandwidth": AttributeResolverHelper.bandwidth_resolver,
+                 "latency": AttributeResolverHelper.latency_resolver}
 
 keys = {"owner": owner_keys,
         "node_name": node_name_keys,
@@ -318,7 +362,9 @@ keys = {"owner": owner_keys,
         "cpuAffinity": cpuAffinity_keys,
         "memAvail": memAvail_keys,
         "memTotal": memTotal_keys,
-        "memAffinity": memAffinity_keys}
+        "memAffinity": memAffinity_keys,
+        "bandwidth": bandwidth_keys,
+        "latency": latency_keys}
 
 def format_index_string(attr, trim=True):
     ''' To format the index search string an attribute resolver function needs to be used:

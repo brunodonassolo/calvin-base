@@ -25,6 +25,7 @@ from calvin.runtime.north.calvinsys import get_calvinsys
 from calvin.runtime.north.calvinlib import get_calvinlib
 
 from calvin.runtime.north import actormanager
+from calvin.runtime.north import linkmanager
 from calvin.runtime.north import replicationmanager
 from calvin.runtime.north import appmanager
 from calvin.runtime.north import scheduler
@@ -48,6 +49,7 @@ from calvin.utilities import calvinconfig
 from calvin.runtime.north.resource_monitor.cpu import CpuMonitor
 from calvin.runtime.north.resource_monitor.memory import MemMonitor
 from calvin.runtime.north.proxyhandler import ProxyHandler
+from calvin.runtime.north.resource_monitor.link import LinkMonitor
 
 _log = get_logger(__name__)
 _conf = calvinconfig.get()
@@ -133,9 +135,11 @@ class Node(object):
         self.proto = CalvinProto(self, self.network)
         self.pm = PortManager(self, self.proto)
         self.app_manager = appmanager.AppManager(self)
+        self.link_manager = linkmanager.LinkManager(self)
 
         self.cpu_monitor = CpuMonitor(self.id, self.storage)
         self.mem_monitor = MemMonitor(self.id, self.storage)
+        self.link_monitor = LinkMonitor(self.id, self.storage)
 
         self.proxy_handler = ProxyHandler(self)
 
@@ -231,6 +235,7 @@ class Node(object):
         # Start storage after network, proto etc since storage proxy expects them
         self.storage.start(cb=CalvinCB(self._storage_started_cb))
         self.storage.add_node(self)
+        self.link_monitor.start()
 
         # Start control API
         proxy_control_uri = _conf.get(None, 'control_proxy')
@@ -260,6 +265,7 @@ class Node(object):
         self.storage.delete_node(self, cb=deleted_node)
         self.cpu_monitor.stop()
         self.mem_monitor.stop()
+        self.link_monitor.stop()
         for link in self.network.list_direct_links():
             self.network.link_get(link).close()
 
@@ -352,6 +358,7 @@ class Node(object):
                 _log.info("TERMINATE MIGRATE ACTOR")
                 self.am.update_requirements(actor.id, [], extend=True, move=True,
                             authorization_check=False, callback=CalvinCB(migrated, actor_id=actor.id))
+
 
     def _storage_started_cb(self, *args, **kwargs):
         self.authentication.find_authentication_server()

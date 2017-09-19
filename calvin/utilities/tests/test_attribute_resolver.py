@@ -125,8 +125,71 @@ class AttributeResolverTester(unittest.TestCase):
         """
         att = AttributeResolver({"indexed_public": {"memAffinity": "dedicated"}})
         att_list = att.get_indexed_public(as_list=True)
+        print str(att_list)
         self.assertEqual(att_list[0][2], 'memAffinity')
         self.assertEqual(att_list[0][3], 'dedicated')
 
         self.assertEqual(att.get_indexed_public()[0], '/node/attribute/memAffinity/dedicated')
 
+    def test_bandwidth(self):
+        """
+        Tests valid bandwidth values in the indexed_public field
+        """
+        att = AttributeResolver({"indexed_public": {"bandwidth": "100G"}})
+        att_list = att.get_indexed_public(as_list=True)
+        print str(att_list)
+        self.assertEqual(att_list[0][2], 'bandwidth')
+        self.assertEqual(att_list[0][3], '1M')
+        self.assertEqual(att_list[0][4], '100M')
+        self.assertEqual(att_list[0][5], '1G')
+        self.assertEqual(att_list[0][6], '10G')
+        self.assertEqual(att_list[0][7], '100G')
+
+        self.assertEqual(att.get_indexed_public()[0], '/links/resource/bandwidth/1M/100M/1G/10G/100G')
+
+    def test_bandwidth_invalid_value(self):
+        """
+        Tests invalid bandwidth in the indexed_public field
+        """
+        att = AttributeResolver({"indexed_public": {"bandwidth": "10K"}})
+        att_list = att.get_indexed_public(as_list=True)
+        self.assertEqual(att_list[0][2], 'bandwidth')
+
+        self.assertEqual(att.get_indexed_public()[0], '/links/resource/bandwidth')
+
+
+
+    def test_bandwidth_invalid_value(self):
+        """
+        Tests invalid bandwidth in the indexed_public field
+        """
+        att = AttributeResolver({"indexed_public": {"bandwidth": "10K"}})
+        att_list = att.get_indexed_public(as_list=True)
+        self.assertEqual(att_list[0][2], 'bandwidth')
+
+        self.assertEqual(att.get_indexed_public()[0], '/links/resource/bandwidth')
+
+    def test_latency(self):
+        """
+        Tests valid latency values in the indexed_public field
+        """
+        att = AttributeResolver({"indexed_public": {"latency": "1us"}})
+        att_list = att.get_indexed_public(as_list=True)
+        self.assertEqual(att_list[0][2], 'latency')
+        self.assertEqual(att_list[0][3], '1s')
+        self.assertEqual(att_list[0][4], '100ms')
+        self.assertEqual(att_list[0][5], '1ms')
+        self.assertEqual(att_list[0][6], '100us')
+        self.assertEqual(att_list[0][7], '1us')
+
+        self.assertEqual(att.get_indexed_public()[0], '/links/resource/latency/1s/100ms/1ms/100us/1us')
+
+    def test_latency_invalid_value(self):
+        """
+        Tests invalid latency in the indexed_public field
+        """
+        att = AttributeResolver({"indexed_public": {"latency": "10ms"}})
+        att_list = att.get_indexed_public(as_list=True)
+        self.assertEqual(att_list[0][2], 'latency')
+
+        self.assertEqual(att.get_indexed_public()[0], '/links/resource/latency')

@@ -11,7 +11,7 @@ class MemMonitor(object):
         self.storage = storage
         self.node_id = node_id
         self.acceptable_avail = [0, 25, 50, 75, 100]
-        self.helper = ResourceMonitorHelper(node_id, storage)
+        self.helper = ResourceMonitorHelper(storage)
 
     def set_avail(self, avail, cb=None):
         """
@@ -24,12 +24,12 @@ class MemMonitor(object):
                 async.DelayedCall(0, cb, avail, False)
             return
 
-        self.helper.set("nodeMemAvail-", "memAvail", avail, cb)
+        self.helper.set(ident=self.node_id, prefix="nodeMemAvail-", prefix_index="memAvail", value=avail, cb=cb)
 
     def stop(self):
         """
         Stops monitoring, cleaning storage
         """
         # get old value to cleanup indexes
-        self.helper.set("nodeMemAvail-", "memAvail", value=None, cb=None)
+        self.helper.set(self.node_id, "nodeMemAvail-", "memAvail", value=None, cb=None)
         self.storage.delete(prefix="nodeMemAvail-", key=self.node_id, cb=None)
