@@ -84,14 +84,14 @@ class ReqMatch(object):
             if req['op']=='union_group':
                 # Special operation that first forms a union of a requirement's list response set
                 # To allow alternative requirements options
-                intersection_iters.append(self._build_union_match(req=req).set_name("SActor" + self.actor_id))
+                intersection_iters.append(self._build_union_match(req=req).set_name("SActor" + str(self.actor_id)))
             else:
                 try:
                     _log.analyze(self.node.id, "+ REQ OP", {'op': req['op'], 'kwargs': req['kwargs']})
                     it = req_operations[req['op']].req_op(self.node,
                                             actor_id=self.actor_id,
                                             component=self.component_ids,
-                                            **req['kwargs']).set_name(req['op']+",SActor" + self.actor_id)
+                                            **req['kwargs']).set_name(req['op']+",SActor" + str(self.actor_id))
                     if req['type']=='+':
                         intersection_iters.append(it)
                     elif req['type']=='-':
@@ -102,9 +102,9 @@ class ReqMatch(object):
                 except:
                     _log.error("actor_requirements one req failed for %s!!!" % self.actor_id, exc_info=True)
                     # FIXME how to handle failed requirements, now we drop it
-        return_iter = dynops.Intersection(*intersection_iters).set_name("SActor" + self.actor_id)
+        return_iter = dynops.Intersection(*intersection_iters).set_name("SActor" + str(self.actor_id))
         if difference_iters:
-            return_iter = dynops.Difference(return_iter, *difference_iters).set_name("SActor" + self.actor_id)
+            return_iter = dynops.Difference(return_iter, *difference_iters).set_name("SActor" + str(self.actor_id))
         return return_iter
 
     def _build_union_match(self, req):
