@@ -40,6 +40,7 @@ class Application(object):
         self.ns = os.path.splitext(os.path.basename(self.name))[0]
         self.am = actor_manager
         self.actors = {} if actors is None else actors
+        self.links = {}
         self.origin_node_id = origin_node_id
         self._track_actor_cb = None
         self.actor_placement = None
@@ -57,6 +58,13 @@ class Application(object):
         for a in actor_id:
             self.actors[a] = self.am.actors[a].name if a in self.am.actors else None
 
+    def add_link(self, link_id):
+        if not isinstance(link_id, list):
+            link_id = [link_id]
+        for l in link_id:
+            # TODO [donassolo]: review...
+            self.links[l] = None
+
     def remove_actor(self, actor_id):
         try:
             self.actors.pop(actor_id)
@@ -65,6 +73,9 @@ class Application(object):
 
     def get_actors(self):
         return self.actors.keys()
+
+    def get_links(self):
+        return self.links.keys()
 
     def get_actor_name_map(self, ns):
         actors = {v: [k] for k, v in self.actors.items() if v is not None}
@@ -164,6 +175,14 @@ class AppManager(object):
             self.applications[application_id].add_actor(actor_id)
         else:
             _log.error("Non existing application id (%s) specified" % application_id)
+            return
+
+    def add_link(self, application_id, link_id):
+        """ Add a link """
+        if application_id in self.applications:
+            self.applications[application_id].add_link(link_id)
+        else:
+            _log.error("Trying to add link(%s) but a non existing application id (%s) specified" % (link_id, application_id))
             return
 
     def req_done(self, status, placement=None):
@@ -406,10 +425,18 @@ class AppManager(object):
             cb(status=response.CalvinResponse(False))
             return
         app._org_cb = cb
-        app.actor_placement = {}  # Clean placement slate
+
         _log.analyze(self._node.id, "+ APP REQ", {}, tb=True)
+
+        app.actor_placement = {}  # Clean placement slate
         actor_ids = app.get_actors()
         app.actor_placement_nbr = len(actor_ids)
+
+        app.link_placement = {}  # Clean placement slate
+        link_ids = app.get_links()
+        app.link_placement_nbr = len(link_ids)
+
+        # requests all actors placements
         for actor_id in actor_ids:
             if actor_id not in self._node.am.actors.keys():
                 _log.debug("Only apply requirements to local actors")
@@ -420,14 +447,49 @@ class AppManager(object):
                          callback=CalvinCB(self.collect_placement, app=app, actor_id=actor_id))
             r.match_for_actor(actor_id)
             _log.analyze(self._node.id, "+ ACTOR REQ DONE", {'actor_id': actor_id}, tb=True)
+
+        # requests all links placements
+        for link_id in link_ids:
+            # TODO [donassolo]
+            _log.analyze(self._node.id, "+ LINK REQ", {'link_id': link_id}, tb=True)
+            r = ReqMatch(self._node,
+                         callback=CalvinCB(self.collect_placement, app=app, actor_id=None, link_id=link_id))
+            r.match(requirements=[])
+            _log.analyze(self._node.id, "+ LINK REQ DONE", {'link_id': link_id}, tb=True)
+
         _log.analyze(self._node.id, "+ DONE", {'application_id': application_id}, tb=True)
 
-    def collect_placement(self, app, actor_id, possible_placements, status):
+    def collect_placement(self, app, actor_id, possible_placements, status, link_id=None):
         _log.analyze(self._node.id, "+ BEGIN", {}, tb=True)
         # TODO look at status
-        app.actor_placement[actor_id] = possible_placements
-        if len(app.actor_placement) < app.actor_placement_nbr:
+        if actor_id:
+            app.actor_placement[actor_id] = possible_placements
+        elif link_id:
+            app.link_placement[link_id] = possible_placements
+        else:
+            _log.error("Impossible happens again?!? Collect placements called without link_id nor actor_id")
+
+        if len(app.actor_placement) < app.actor_placement_nbr or len(app.link_placement) < app.link_placement_nbr:
             return
+
+        # intersect actor placement with link placement
+        for link_id, link_placements in app.link_placement.iteritems():
+            print "Link ID " + str(link_id)
+            print link_placements
+            src_actor = self._node.link_manager.links[link_id].src_id
+            dst_actor = self._node.link_manager.links[link_id].dst_id
+            print app.actor_placement[src_actor]
+            print app.actor_placement[dst_actor]
+            _log.debug("Link identifier: %s, link placement: %s, source actor %s, dst actor %s" % (str(link_id), str(link_placements), str(src_actor), str(dst_actor)))
+            _log.debug("Source actor placement %s" % (str(app.actor_placement[src_actor])))
+            _log.debug("Dst actor placement %s" % (str(app.actor_placement[dst_actor])))
+            app.actor_placement[src_actor].intersection(app.actor_placement[src_actor], link_placements)
+            app.actor_placement[dst_actor].intersection(app.actor_placement[dst_actor], link_placements)
+            print "after"
+            print app.actor_placement[src_actor]
+            print app.actor_placement[dst_actor]
+
+
         # all possible actor placements derived
         _log.analyze(self._node.id, "+ ACTOR PLACEMENT", {'placement': app.actor_placement}, tb=True)
         status = response.CalvinResponse(True)
@@ -783,6 +845,24 @@ class Deployer(object):
                 _log.debug("CURRENT PROPERTIES\n%s\n%s" % (current_properties, kwargs))
                 self.node.pm.set_port_properties(actor_id=self.actor_map[src_name], port_dir='out', port_name=src_port,
                                                  **kwargs)
+
+        print self.deployable['links']
+        for link_name, link_data in self.deployable['links'].iteritems():
+            print "Link"
+            print link_name
+            print link_data
+            for l in link_data:
+                try:
+                    src_name, src_port = l[0].split('.')
+                    dst_name, dst_port = l[1].split('.')
+                    src_id = self.actor_map[src_name]
+                    dst_id = self.actor_map[dst_name]
+                    link_id = self.node.link_manager.new(src_id, dst_id)
+                    self.node.app_manager.add_link(self.app_id, link_id)
+                except:
+                    _log.error("Error creating link(%s) connecting actor (%s) to actor (%s). Actors ID not found" % (link_name, l[0], l[1]))
+                    pass
+
 
         for src, dst_list in self.deployable['connections'].iteritems():
             src_actor, src_port = src.split('.')

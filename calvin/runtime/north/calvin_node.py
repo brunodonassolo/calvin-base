@@ -27,6 +27,7 @@ from calvin.runtime.north.calvinlib import get_calvinlib
 
 import calvin.runtime.south.plugins.ui.uicalvinsys
 from calvin.runtime.north import actormanager
+from calvin.runtime.north import linkmanager
 from calvin.runtime.north import replicationmanager
 from calvin.runtime.north import appmanager
 from calvin.runtime.north import scheduler
@@ -135,6 +136,7 @@ class Node(object):
         self.proto = CalvinProto(self, self.network)
         self.pm = PortManager(self, self.proto)
         self.app_manager = appmanager.AppManager(self)
+        self.link_manager = linkmanager.LinkManager(self)
 
         self.cpu_monitor = CpuMonitor(self.id, self.storage)
         self.mem_monitor = MemMonitor(self.id, self.storage)
