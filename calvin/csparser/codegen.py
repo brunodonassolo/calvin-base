@@ -523,6 +523,8 @@ class Flatten(object):
     def visit(self, node):
         # Make sure real ports have been promoted, i.e. have had the block namspace
         # added to the actor name, before juggling with component internal ports.
+        if node.ident:
+            node.ident = self.stack[-1] + ':' + node.ident
         linktype = (type(node.outport), type(node.inport))
         if linktype == (ast.InternalOutPort, ast.InPort):
             map(self.visit, [node.inport, node.outport])
