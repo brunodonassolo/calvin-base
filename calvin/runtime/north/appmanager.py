@@ -449,11 +449,11 @@ class AppManager(object):
 
         # requests all links placements
         for link_id in link_ids:
-            # TODO [donassolo]
             _log.analyze(self._node.id, "+ LINK REQ", {'link_id': link_id}, tb=True)
             r = ReqMatch(self._node,
                          callback=CalvinCB(self.collect_placement, app=app, actor_id=None, link_id=link_id))
-            r.match(requirements=[])
+            link = self._node.link_manager.links[link_id]
+            r.match(requirements=link.requirements_get())
             _log.analyze(self._node.id, "+ LINK REQ DONE", {'link_id': link_id}, tb=True)
 
         _log.analyze(self._node.id, "+ DONE", {'application_id': application_id}, tb=True)
@@ -856,7 +856,10 @@ class Deployer(object):
                     dst_name, dst_port = l[1].split('.')
                     src_id = self.actor_map[src_name]
                     dst_id = self.actor_map[dst_name]
-                    link_id = self.node.link_manager.new(src_id, dst_id)
+                    deploy_req = self.get_req(link_name)
+                    print "add deployment rules"
+                    print deploy_req
+                    link_id = self.node.link_manager.new(src_id, dst_id, copy.deepcopy(deploy_req))
                     self.node.app_manager.add_link(self.app_id, link_id)
                 except:
                     _log.error("Error creating link(%s) connecting actor (%s) to actor (%s). Actors ID not found" % (link_name, l[0], l[1]))
