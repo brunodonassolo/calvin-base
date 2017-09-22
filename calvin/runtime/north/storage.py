@@ -243,6 +243,8 @@ class Storage(object):
     def get_cb(self, key, value, org_cb, org_key):
         """ get callback
         """
+        print 'sdfsdfsdfsdf'
+        print value
         org_cb(org_key, value)
 
     def get(self, prefix, key, cb):
