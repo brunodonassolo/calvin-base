@@ -1,0 +1,3 @@
+{"requirements":{"snk":[{"op":"node_attr_match","kwargs":{"index":["node_name",{"name":"runtime-3"}]},"type":"+"}],
+                 "XXX":[{"op":"link_attr_match","kwargs":{"index":{"bandwidth":"100M"}},"type":"+"}]
+                 }}

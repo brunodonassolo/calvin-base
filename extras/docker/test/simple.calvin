@@ -1,0 +1,5 @@
+src : std.Trigger(tick=1, data="fire")
+snk : io.Log(loglevel="INFO")
+
+
+link XXX : src.data > snk.data
