@@ -224,8 +224,6 @@ class Storage(object):
         """
         if value:
             value = self.coder.decode(value)
-        print 'sdfsdfsdfsdf'
-        print value
         org_cb(org_key, value)
 
     def get(self, prefix, key, cb):
