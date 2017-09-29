@@ -497,39 +497,76 @@ class AppManager(object):
         if self._verify_collect_placement(app):
             self.decide_placement(app)
 
+    def filter_link_placement(self, app, placement):
+
+        final_placement = {}
+        # build a map of actors that have links requirements
+        actor_link = {}
+        for link_id, link_placements in app.link_placement.iteritems():
+            src_actor = self._node.link_manager.links[link_id].src_id
+            dst_actor = self._node.link_manager.links[link_id].dst_id
+            actor_link.setdefault(src_actor, []).append((dst_actor, link_placements))
+            actor_link.setdefault(dst_actor, []).append((src_actor, link_placements))
+
+        # we are only interested in filtering actors that are in the actor_link map
+        keys_plac = set(placement.keys())
+        keys_act = set(actor_link.keys())
+        actors_to_filter = keys_plac & keys_act
+
+        # copy the other unmodified to final result
+        final_placement = placement
+
+        for actor in actors_to_filter:
+            print "Actor: " + str(actor)
+            for dst_actor, link_set in actor_link[actor]:
+                print "Dst actor: " + str(dst_actor)
+                if not link_set:
+                    print "No link between actors"
+                    print placement[actor]
+                    rts = placement[actor]
+                    if not isinstance(rts, list):
+                        rts = [rts]
+                    for rt in rts:
+                        print rt
+                        if rt in placement[dst_actor]:
+                            final_placement[actor] = [rt]
+                            final_placement[dst_actor] = [rt]
+                for link in link_set:
+                    print "Link: " + str(link)
+                    if isinstance(link, dynops.InfiniteElement):
+                        continue
+                    rt1 = app.link_placement_runtimes[link]['runtime1']
+                    rt2 = app.link_placement_runtimes[link]['runtime2']
+                    print "Runtime1: " + str(rt1)
+                    print "Runtime2: " + str(rt2)
+                    if rt1 not in placement[actor] and rt2 not in placement[actor]:
+                        print 'Impossible to use this physical link with actor'
+                        continue
+                    if rt1 in placement[actor] and rt2 in placement[dst_actor]:
+                        placement[actor] = [rt1]
+                        placement[dst_actor] = [rt2]
+                        print 'Found a good combinaison'
+                    elif rt2 in placement[actor] and rt1 in placement[dst_actor]:
+                        placement[actor] = [rt2]
+                        placement[dst_actor] = [rt1]
+                        print 'Found a good combinaison'
+                    else:
+                        print 'No good combinaison'
+
+        print "Placement " + str(placement)
+        print "Actors to filter: " + str(actors_to_filter)
+        print "Final placement: " + str(final_placement)
+
+        return final_placement
+
     def decide_placement(self, app):
         # this method can be called more than once depending on collect_* callbacks execution order
         if app.placement_done:
             return
         app.placement_done = True
 
-        actor_link = {}
 
         _log.analyze(self._node.id, "+ BEGIN", {}, tb=True)
-        # intersect actor placement with link placement
-        for link_id, link_placements in app.link_placement.iteritems():
-            print "Link ID " + str(link_id)
-            src_actor = self._node.link_manager.links[link_id].src_id
-            dst_actor = self._node.link_manager.links[link_id].dst_id
-            src_link = set()
-            dst_link = set()
-            # FIXME [donassolo]: this approach only works if we have only 1 link that satisfies the requiremenets. Otherwise, we can select runtimes for actors that are not linked by the correct link
-            for rt_link in link_placements:
-                actor_link.setdefault(src_actor, []).append(rt_link)
-                actor_link.setdefault(dst_actor, []).append(rt_link)
-                src_link.add(app.link_placement_runtimes[rt_link]['runtime1'])
-                dst_link.add(app.link_placement_runtimes[rt_link]['runtime2'])
-
-            _log.info("Link identifier: %s, link placement: %s, source actor %s, dst actor %s" % (str(link_id), str(link_placements), str(src_actor), str(dst_actor)))
-            _log.info("Source actor placement %s" % (str(app.actor_placement[src_actor])))
-            _log.info("Dst actor placement %s" % (str(app.actor_placement[dst_actor])))
-            _log.info("Link source runtime %s" % (str(src_link)))
-            _log.info("Link dst runtime %s" % (str(dst_link)))
-            app.actor_placement[src_actor] &= src_link
-            app.actor_placement[dst_actor] &= dst_link
-            _log.info("Link/actor merged source placement %s" % (str(app.actor_placement[src_actor])))
-            _log.info("Link/actor merged dst placement %s" % (str(app.actor_placement[dst_actor])))
-
 
         # all possible actor placements derived
         _log.analyze(self._node.id, "+ ACTOR PLACEMENT", {'placement': app.actor_placement}, tb=True)
@@ -545,7 +582,6 @@ class AppManager(object):
 
         # Collect an actor by actor matrix stipulating a weighting 0.0 - 1.0 for their connectivity
         actor_ids, actor_matrix = self._actor_connectivity(app)
-        print actor_matrix
 
         # Get list of all possible nodes
         node_ids = set([])
@@ -569,10 +605,6 @@ class AppManager(object):
             weights = [sum([actor_weights[actor_ids.index(_id)] if node_id in app.actor_placement[actor_id] else 0
                              for _id in actor_ids])
                              for node_id in node_ids]
-            print actor_id
-            print node_ids
-            print actor_weights
-            print weights
             # Get first node with highest weight
             # FIXME should verify that the node actually exist also
             # TODO should select from a resource sharing perspective also, instead of picking first max
@@ -581,11 +613,11 @@ class AppManager(object):
             #weighted_actor_placement[actor_id] = node_ids[weights.index(max(weights))]
             # Get a list of nodes in sorted weighted order
             weighted_actor_placement[actor_id] = [n for (w, n) in sorted(zip(weights, node_ids), reverse=True)]
-        print 'final'
+        print 'Weighted ACtor Placement before filtering...'
         print weighted_actor_placement
+        weighted_actor_placement = self.filter_link_placement(app, weighted_actor_placement)
         for actor_id, node_id in weighted_actor_placement.iteritems():
             _log.info("Actor deployment %s \t-> %s" % (app.actors[actor_id], node_id))
-            print node_id[:]
             # FIXME add callback that recreate the actor locally
             self._node.am.robust_migrate(actor_id, node_id[:], None)
 
@@ -607,8 +639,6 @@ class AppManager(object):
         for actor_id in list_actors:
             connections = self._node.am.connections(actor_id)
             for p in connections['inports'].values():
-                print 'actor connect P'
-                print p
                 try:
                     peer_actor_id = self._node.pm._get_local_port(port_id=p[1]).owner.id
                 except:
