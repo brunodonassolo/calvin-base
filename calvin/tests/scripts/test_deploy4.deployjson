@@ -1,5 +1,4 @@
 {
-    "groups": {"firstgroup": ["src", "sum"]},
     "requirements": {
         "src": [{"op": "node_attr_match", 
                  "kwargs": {"index": ["node_name", {"name": "serv"}]},

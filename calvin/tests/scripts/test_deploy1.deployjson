@@ -1,5 +1,4 @@
 {
-    "groups": {"firstgroup": ["src", "sum"]},
     "requirements": {
         "src": [{"op": "union_group", 
                  "requirements": [{"op": "node_attr_match", 

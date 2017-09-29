@@ -100,7 +100,7 @@ def control_deploy(args):
     req_handler= handle_security_arguments(args)
     try:
         response = req_handler.deploy_application(args.node, args.script.name, source_text, reqs,
-                                            content=content, check=args.check)
+                                            content=content, check=args.check, timeout=args.timeout)
     except Exception as e:
         print e
     return response
