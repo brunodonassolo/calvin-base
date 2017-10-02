@@ -56,6 +56,15 @@ def absolute_filename(filename):
     import os.path
     return os.path.join(os.path.dirname(__file__), filename)
 
+def assert_helper(runtimes, condition, times=5):
+    def get_actors(runtimes):
+        actors=[]
+        for rt in runtimes:
+            actors += request_handler.get_actors(rt)
+        return actors
+    from functools import partial
+    rt_id = helpers.retry(times, partial(get_actors, runtimes), condition, "Failed to assert")
+
 def verify_storage(runtimes):
 
     from functools import partial
@@ -151,11 +160,10 @@ class TestDeployScript(unittest.TestCase):
         except:
             _log.exception("Test deploy failed")
             raise Exception("Failed deployment of app %s, no use to verify if requirements fulfilled" % args.script.name)
-        actors = [request_handler.get_actors(rt1, timeout=TEST_TIMEOUT), request_handler.get_actors(rt2, timeout=TEST_TIMEOUT), request_handler.get_actors(rt3, timeout=TEST_TIMEOUT)]
         # src -> rt2, sum -> rt2, snk -> rt3
-        assert result['actor_map']['test_deploy1:src'] in actors[1]
-        assert result['actor_map']['test_deploy1:sum'] in actors[1]
-        assert result['actor_map']['test_deploy1:snk'] in actors[2]
+        assert_helper([rt2], lambda actors: result['actor_map']['test_deploy1:src'] in actors)
+        assert_helper([rt2], lambda actors: result['actor_map']['test_deploy1:sum'] in actors)
+        assert_helper([rt3], lambda actors: result['actor_map']['test_deploy1:snk'] in actors)
         request_handler.delete_application(rt1, result['application_id'])
 
     @pytest.mark.slow
@@ -175,15 +183,12 @@ class TestDeployScript(unittest.TestCase):
         except:
             _log.exception("Test deploy failed")
             raise Exception("Failed deployment of app %s, no use to verify if requirements fulfilled" % args.script.name)
-        from functools import partial
-        actors1 = helpers.retry(30, partial(request_handler.get_actors, rt1), lambda _: True, "Failed to get actors")
-        actors2 = helpers.retry(30, partial(request_handler.get_actors, rt2), lambda _: True, "Failed to get actors")
-        actors3 = helpers.retry(30, partial(request_handler.get_actors, rt3), lambda _: True, "Failed to get actors")
         # src -> rt1, sum[1:8] -> [rt1, rt2, rt3], snk -> rt3
-        assert result['actor_map']['test_deploy2:src'] in actors1
-        assert result['actor_map']['test_deploy2:snk'] in actors3
+        assert_helper([rt1], lambda actors: result['actor_map']['test_deploy2:src'] in actors)
+        assert_helper([rt3], lambda actors: result['actor_map']['test_deploy2:snk'] in actors)
+        actors = [request_handler.get_actors(rt1), request_handler.get_actors(rt2), request_handler.get_actors(rt3)]
         sum_list=[result['actor_map']['test_deploy2:sum%d'%i] for i in range(1,9)]
-        sum_place = [0 if a in actors1 else 1 if a in actors2 else 2 if a in actors3 else -1 for a in sum_list]
+        sum_place = [0 if a in actors[0] else 1 if a in actors[1] else 2 if a in actors[2] else -1 for a in sum_list]
         assert not any([p==-1 for p in sum_place])
         assert all(x<=y for x, y in zip(sum_place, sum_place[1:]))
         request_handler.delete_application(rt1, result['application_id'])
@@ -205,13 +210,11 @@ class TestDeployScript(unittest.TestCase):
         except:
             _log.exception("Test deploy failed")
             raise Exception("Failed deployment of app %s, no use to verify if requirements fulfilled" % args.script.name)
-        time.sleep(5)
-        actors = [request_handler.get_actors(rt1), request_handler.get_actors(rt2), request_handler.get_actors(rt3)]
         # src:(first, second) -> rt1, sum -> rt2, snk -> rt3
-        assert result['actor_map']['test_deploy3:src:first'] in actors[0]
-        assert result['actor_map']['test_deploy3:src:second'] in actors[0]
-        assert result['actor_map']['test_deploy3:sum'] in actors[1]
-        assert result['actor_map']['test_deploy3:snk'] in actors[2]
+        assert_helper([rt1], lambda actors: result['actor_map']['test_deploy3:src:first'] in actors)
+        assert_helper([rt1], lambda actors: result['actor_map']['test_deploy3:src:second'] in actors)
+        assert_helper([rt2], lambda actors: result['actor_map']['test_deploy3:sum'] in actors)
+        assert_helper([rt3], lambda actors: result['actor_map']['test_deploy3:snk'] in actors)
         request_handler.delete_application(rt1, result['application_id'])
 
 @pytest.mark.slow
@@ -316,12 +319,10 @@ class TestDeployment3NodesProxyStorage(unittest.TestCase):
         except:
             _log.exception("Test deploy failed")
             raise Exception("Failed deployment of app %s, no use to verify if requirements fulfilled" % "test_deploy1")
-        time.sleep(2)
-        actors = [request_handler.get_actors(rt1, timeout=TEST_TIMEOUT), request_handler.get_actors(rt2, timeout=TEST_TIMEOUT), request_handler.get_actors(rt3, timeout=TEST_TIMEOUT)]
         # src -> rt2 or rt3, sum & snk -> rt1, rt2 or rt3
-        assert result['actor_map']['test_deploy1:src'] in (actors[1] + actors[2])
-        assert result['actor_map']['test_deploy1:sum'] in (actors[0] + actors[1] + actors[2])
-        assert result['actor_map']['test_deploy1:snk'] in (actors[0] + actors[1] + actors[2])
+        assert_helper([rt2, rt3], lambda actors: result['actor_map']['test_deploy1:src'] in actors)
+        assert_helper([rt1, rt2, rt3], lambda actors: result['actor_map']['test_deploy1:sum'] in actors)
+        assert_helper([rt1, rt2, rt3], lambda actors: result['actor_map']['test_deploy1:snk'] in actors)
         request_handler.delete_application(rt1, result['application_id'])
 
     @pytest.mark.slow
@@ -345,14 +346,12 @@ class TestDeployment3NodesProxyStorage(unittest.TestCase):
         except:
             raise Exception("Failed deployment of app %s, no use to verify if requirements fulfilled" % args.script.name)
         #print "RESULT:", result
-        time.sleep(2)
-
-        actors = [request_handler.get_actors(rt1), request_handler.get_actors(rt2), request_handler.get_actors(rt3)]
         # src -> rt1, sum -> rt2, snk -> rt1
-        assert result['actor_map']['test_shadow4:button'] in actors[1]
-        assert result['actor_map']['test_shadow4:check'] in actors[0]
-        assert result['actor_map']['test_shadow4:bell'] in actors[2]
+        assert_helper([rt2], lambda actors: result['actor_map']['test_shadow4:button'] in actors)
+        assert_helper([rt1], lambda actors: result['actor_map']['test_shadow4:check'] in actors)
+        assert_helper([rt3], lambda actors: result['actor_map']['test_shadow4:bell'] in actors)
         
+        time.sleep(2)
         actual = request_handler.report(rt3, result['actor_map']['test_shadow4:bell'])
         assert len(actual) > 5
         assert all([y-x > 0 for x, y in zip(actual, actual[1:])])
@@ -379,15 +378,13 @@ class TestDeployment3NodesProxyStorage(unittest.TestCase):
             result = deploy_app(args)
         except:
             raise Exception("Failed deployment of app %s, no use to verify if requirements fulfilled" % args.script.name)
-        #print "RESULT:", result
-        time.sleep(2)
 
-        actors = [request_handler.get_actors(rt1), request_handler.get_actors(rt2), request_handler.get_actors(rt3)]
         # src -> rt1, sum -> rt2, snk -> rt1
-        assert result['actor_map']['test_shadow4:button'] in actors[1]
-        assert result['actor_map']['test_shadow4:check'] in actors[0]
-        assert result['actor_map']['test_shadow4:bell'] in actors[2]
+        assert_helper([rt2], lambda actors: result['actor_map']['test_shadow4:button'] in actors)
+        assert_helper([rt1], lambda actors: result['actor_map']['test_shadow4:check'] in actors)
+        assert_helper([rt3], lambda actors: result['actor_map']['test_shadow4:bell'] in actors)
         
+        time.sleep(2)
         actual = request_handler.report(rt3, result['actor_map']['test_shadow4:bell'])
         assert len(actual) > 5
         request_handler.migrate_use_req(rt3, result['actor_map']['test_shadow4:bell'], 
@@ -397,8 +394,7 @@ class TestDeployment3NodesProxyStorage(unittest.TestCase):
                                     "type": "+"
                                 }])
         time.sleep(1)
-        actors2 = request_handler.get_actors(rt2)
-        assert result['actor_map']['test_shadow4:bell'] in actors2
+        assert_helper([rt2], lambda actors: result['actor_map']['test_shadow4:bell'] in actors)
         actual2 = request_handler.report(rt2, result['actor_map']['test_shadow4:bell'])
         assert len(actual2) > len(actual)
         assert all([y-x > 0 for x, y in zip(actual2, actual2[1:])])
@@ -426,14 +422,12 @@ class TestDeployment3NodesProxyStorage(unittest.TestCase):
         except:
             raise Exception("Failed deployment of app %s, no use to verify if requirements fulfilled" % args.script.name)
         #print "RESULT:", result
-        time.sleep(2)
-
-        actors = [request_handler.get_actors(rt1), request_handler.get_actors(rt2), request_handler.get_actors(rt3)]
         # src -> rt1, sum -> rt2, snk -> rt1
-        assert result['actor_map']['test_shadow4:button'] in actors[1]
-        assert result['actor_map']['test_shadow4:check'] in actors[0]
-        assert result['actor_map']['test_shadow4:bell'] in actors[2]
+        assert_helper([rt2], lambda actors: result['actor_map']['test_shadow4:button'] in actors)
+        assert_helper([rt1], lambda actors: result['actor_map']['test_shadow4:check'] in actors)
+        assert_helper([rt3], lambda actors: result['actor_map']['test_shadow4:bell'] in actors)
         
+        time.sleep(2)
         actual = request_handler.report(rt3, result['actor_map']['test_shadow4:bell'])
         assert len(actual) > 5
         request_handler.migrate_app_use_req(rt3, result['application_id'], 
@@ -459,11 +453,10 @@ class TestDeployment3NodesProxyStorage(unittest.TestCase):
                                         }]
                                 }
                             })
-        time.sleep(1)
-        actors2 = [request_handler.get_actors(rt1), request_handler.get_actors(rt2), request_handler.get_actors(rt3)]
-        assert result['actor_map']['test_shadow4:bell'] in actors2[1]
-        assert result['actor_map']['test_shadow4:check'] in actors[0]
-        assert result['actor_map']['test_shadow4:button'] in actors2[2]
+        assert_helper([rt2], lambda actors: result['actor_map']['test_shadow4:bell'] in actors)
+        assert_helper([rt1], lambda actors: result['actor_map']['test_shadow4:check'] in actors)
+        assert_helper([rt3], lambda actors: result['actor_map']['test_shadow4:button'] in actors)
+        time.sleep(2)
         actual2 = request_handler.report(rt2, result['actor_map']['test_shadow4:bell'])
         assert len(actual2) > len(actual)
         assert all([y-x > 0 for x, y in zip(actual2, actual2[1:])])
@@ -492,15 +485,13 @@ class TestDeployment3NodesProxyStorage(unittest.TestCase):
         except:
             raise Exception("Failed deployment of app %s, no use to verify if requirements fulfilled" % args.script.name)
         #print "RESULT:", result
-        time.sleep(2)
-
-        actors = [request_handler.get_actors(rt1), request_handler.get_actors(rt2), request_handler.get_actors(rt3)]
         # src -> rt1, sum -> rt2, snk -> rt1
-        assert result['actor_map']['test_shadow5:button:first'] in actors[1]
-        assert result['actor_map']['test_shadow5:button:second'] in actors[1]
-        assert result['actor_map']['test_shadow5:check'] in actors[0]
-        assert result['actor_map']['test_shadow5:bell'] in actors[2]
+        assert_helper([rt2], lambda actors: result['actor_map']['test_shadow5:button:first'] in actors)
+        assert_helper([rt2], lambda actors: result['actor_map']['test_shadow5:button:second'] in actors)
+        assert_helper([rt1], lambda actors: result['actor_map']['test_shadow5:check'] in actors)
+        assert_helper([rt3], lambda actors: result['actor_map']['test_shadow5:bell'] in actors)
         
+        time.sleep(2)
         actual = request_handler.report(rt3, result['actor_map']['test_shadow5:bell'])
         assert len(actual) > 5
         request_handler.migrate_app_use_req(rt3, result['application_id'], 
@@ -526,12 +517,12 @@ class TestDeployment3NodesProxyStorage(unittest.TestCase):
                                         }]
                                 }
                             })
+        assert_helper([rt2], lambda actors: result['actor_map']['test_shadow5:bell'] in actors)
+        assert_helper([rt1], lambda actors: result['actor_map']['test_shadow5:check'] in actors)
+        assert_helper([rt3], lambda actors: result['actor_map']['test_shadow5:button:first'] in actors)
+        assert_helper([rt3], lambda actors: result['actor_map']['test_shadow5:button:second'] in actors)
+
         time.sleep(1)
-        actors2 = [request_handler.get_actors(rt1), request_handler.get_actors(rt2), request_handler.get_actors(rt3)]
-        assert result['actor_map']['test_shadow5:bell'] in actors2[1]
-        assert result['actor_map']['test_shadow5:check'] in actors[0]
-        assert result['actor_map']['test_shadow5:button:first'] in actors2[2]
-        assert result['actor_map']['test_shadow5:button:second'] in actors2[2]
         actual2 = request_handler.report(rt2, result['actor_map']['test_shadow5:bell'])
         assert len(actual2) > len(actual)
         assert all([y-x > 0 for x, y in zip(actual2, actual2[1:])])
@@ -559,15 +550,13 @@ class TestDeployment3NodesProxyStorage(unittest.TestCase):
         except:
             raise Exception("Failed deployment of app %s, no use to verify if requirements fulfilled" % args.script.name)
         print "RESULT:", result
-        time.sleep(2)
 
         assert result['requirements_fulfilled']
 
-        actors = [request_handler.get_actors(rt1), request_handler.get_actors(rt2), request_handler.get_actors(rt3)]
         # src -> rt1, sum -> rt1, snk -> rt2
-        assert result['actor_map']['test_deploy1:src'] in actors[1]
-        assert result['actor_map']['test_deploy1:sum'] in actors[0]
-        assert result['actor_map']['test_deploy1:snk'] in actors[1]
+        assert_helper([rt2], lambda actors: result['actor_map']['test_deploy1:src'] in actors)
+        assert_helper([rt1], lambda actors: result['actor_map']['test_deploy1:sum'] in actors)
+        assert_helper([rt2], lambda actors: result['actor_map']['test_deploy1:snk'] in actors)
 
         for i in range(10):
             request_handler.migrate_app_use_req(rt1, result['application_id'],
@@ -579,9 +568,7 @@ class TestDeployment3NodesProxyStorage(unittest.TestCase):
                                      }]
                                 }
                             }, move=False)
-            time.sleep(1)
-            actors = request_handler.get_actors(rt3)
-            assert result['actor_map']['test_deploy1:snk'] in actors
+            assert_helper([rt3], lambda actors: result['actor_map']['test_deploy1:snk'] in actors)
             request_handler.migrate_app_use_req(rt1, result['application_id'],
                              {"requirements":
                                 {"snk":
@@ -591,8 +578,6 @@ class TestDeployment3NodesProxyStorage(unittest.TestCase):
                                      }]
                                 }
                             }, move=False)
-            time.sleep(1)
-            actors = request_handler.get_actors(rt2)
-            assert result['actor_map']['test_deploy1:snk'] in actors
+            assert_helper([rt2], lambda actors: result['actor_map']['test_deploy1:snk'] in actors)
 
         request_handler.delete_application(rt1, result['application_id'])
