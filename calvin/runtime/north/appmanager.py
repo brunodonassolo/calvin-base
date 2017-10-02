@@ -521,16 +521,18 @@ class AppManager(object):
             for dst_actor, link_set in actor_link[actor]:
                 print "Dst actor: " + str(dst_actor)
                 if not link_set:
-                    print "No link between actors"
+                    print "No physical link to connect both actors, select 1 runtime to host them"
                     print placement[actor]
                     rts = placement[actor]
                     if not isinstance(rts, list):
                         rts = [rts]
                     for rt in rts:
                         print rt
-                        if rt in placement[dst_actor]:
+                        if rt in final_placement[dst_actor]:
+                            print "Selected runtime: " + str(rt)
                             final_placement[actor] = [rt]
                             final_placement[dst_actor] = [rt]
+                            break
                 for link in link_set:
                     print "Link: " + str(link)
                     if isinstance(link, dynops.InfiniteElement):
@@ -582,9 +584,6 @@ class AppManager(object):
 
         if any([not n for n in app.link_placement.values()]):
             # At least one link have no required placement
-            # Let it be any link
-            app.link_placement = {link_id: set([dynops.InfiniteElement]) if placement is None else placement
-                                     for link_id, placement in app.link_placement.items()}
             # Status will indicate success, but be different than the normal OK code
             status = response.CalvinResponse(response.CREATED)
 
