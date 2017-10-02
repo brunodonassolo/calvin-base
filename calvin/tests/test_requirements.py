@@ -234,12 +234,13 @@ class TestDeployScript(unittest.TestCase):
             _log.exception("Test deploy failed")
             raise Exception("Failed deployment of app %s, no use to verify if requirements fulfilled" % args.script.name)
 
+        print "RESULT:", result
         # can be anywhere: src, sum, snk -> rt1 or rt2 or rt3
         assert_helper([rt1, rt2, rt3], lambda actors: result['actor_map']['test_network:src'] in actors)
         assert_helper([rt1, rt2, rt3], lambda actors: result['actor_map']['test_network:sum'] in actors)
         assert_helper([rt1, rt2, rt3], lambda actors: result['actor_map']['test_network:snk'] in actors)
         # but sum, snk must be the same
-        assert result['actor_map']['test_network:sum'] == result['actor_map']['test_network:snk']
+        assert result['placement'][result['actor_map']['test_network:sum']] == result['placement'][result['actor_map']['test_network:snk']]
         request_handler.delete_application(rt1, result['application_id'])
 
     @pytest.mark.slow

@@ -1124,9 +1124,6 @@ class Storage(object):
             # get all links of 1 runtime, so adds link_id index to both runtimes
             self.add_index(['links', runtime1], link_id, root_prefix_level=2, cb=None)
             self.add_index(['links', rt], link_id, root_prefix_level=2, cb=None)
-            # create index for latency and bandwidth
-            self.add_index(['links', 'bandwidth', '1M', '100M'], link_id, root_prefix_level=2, cb=None)
-            self.add_index(['links', 'latency'], link_id, root_prefix_level=2, cb=None)
 
     def create_links(self, node_id):
         """
