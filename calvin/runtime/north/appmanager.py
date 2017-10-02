@@ -938,7 +938,7 @@ class Deployer(object):
                     dst_name, dst_port = l[1].split('.')
                     src_id = self.actor_map[src_name]
                     dst_id = self.actor_map[dst_name]
-                    deploy_req = self.get_req(link_name)
+                    deploy_req = self.deploy_info['requirements'].get(link_name, [])
                     print "add deployment rules"
                     print deploy_req
                     link_id = self.node.link_manager.new(src_id, dst_id, copy.deepcopy(deploy_req))
