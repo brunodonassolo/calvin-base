@@ -580,6 +580,14 @@ class AppManager(object):
             status = response.CalvinResponse(response.CREATED)
             _log.analyze(self._node.id, "+ MISS PLACEMENT", {'app_id': app.id, 'placement': app.actor_placement}, tb=True)
 
+        if any([not n for n in app.link_placement.values()]):
+            # At least one link have no required placement
+            # Let it be any link
+            app.link_placement = {link_id: set([dynops.InfiniteElement]) if placement is None else placement
+                                     for link_id, placement in app.link_placement.items()}
+            # Status will indicate success, but be different than the normal OK code
+            status = response.CalvinResponse(response.CREATED)
+
         # Collect an actor by actor matrix stipulating a weighting 0.0 - 1.0 for their connectivity
         actor_ids, actor_matrix = self._actor_connectivity(app)
 
@@ -938,7 +946,8 @@ class Deployer(object):
                     dst_name, dst_port = l[1].split('.')
                     src_id = self.actor_map[src_name]
                     dst_id = self.actor_map[dst_name]
-                    deploy_req = self.deploy_info['requirements'].get(link_name, [])
+                    link_name_deploy = link_name.split(':', 1)[1]
+                    deploy_req = self.deploy_info['requirements'].get(link_name_deploy, [])
                     print "add deployment rules"
                     print deploy_req
                     link_id = self.node.link_manager.new(src_id, dst_id, copy.deepcopy(deploy_req))
