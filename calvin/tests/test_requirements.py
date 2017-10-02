@@ -217,6 +217,103 @@ class TestDeployScript(unittest.TestCase):
         assert_helper([rt3], lambda actors: result['actor_map']['test_deploy3:snk'] in actors)
         request_handler.delete_application(rt1, result['application_id'])
 
+    @pytest.mark.slow
+    def testNetworkNoLink(self):
+        _log.analyze("TESTRUN", "+", {})
+        verify_storage([rt1, rt2, rt3])
+
+        from calvin.Tools.cscontrol import control_deploy as deploy_app
+        args = DeployArgs(node='http://%s:5003' % ip_addr,
+                          script=open(test_script_dir+"test_network.calvin"), attr=None,
+                                reqs=test_script_dir+"test_network.deployjson",
+                                check=True, timeout=TEST_TIMEOUT)
+        result = {}
+        try:
+            result = deploy_app(args)
+        except:
+            _log.exception("Test deploy failed")
+            raise Exception("Failed deployment of app %s, no use to verify if requirements fulfilled" % args.script.name)
+
+        # can be anywhere: src, sum, snk -> rt1 or rt2 or rt3
+        assert_helper([rt1, rt2, rt3], lambda actors: result['actor_map']['test_network:src'] in actors)
+        assert_helper([rt1, rt2, rt3], lambda actors: result['actor_map']['test_network:sum'] in actors)
+        assert_helper([rt1, rt2, rt3], lambda actors: result['actor_map']['test_network:snk'] in actors)
+        # but sum, snk must be the same
+        assert result['actor_map']['test_network:sum'] == result['actor_map']['test_network:snk']
+        request_handler.delete_application(rt1, result['application_id'])
+
+    @pytest.mark.slow
+    def testNetworkBandwidth(self):
+        _log.analyze("TESTRUN", "+", {})
+        verify_storage([rt1, rt2, rt3])
+
+        from calvin.Tools.cscontrol import control_deploy as deploy_app
+        args = DeployArgs(node='http://%s:5003' % ip_addr,
+                          script=open(test_script_dir+"test_network.calvin"), attr=None,
+                                reqs=test_script_dir+"test_network_bandwidth.deployjson",
+                                check=True, timeout=TEST_TIMEOUT)
+        result = {}
+        try:
+            result = deploy_app(args)
+        except:
+            _log.exception("Test deploy failed")
+            raise Exception("Failed deployment of app %s, no use to verify if requirements fulfilled" % args.script.name)
+
+        assert result['requirements_fulfilled']
+        # src -> rt1 or rt2 or rt3; sum, snk -> rt2 or rt3
+        assert_helper([rt1, rt2, rt3], lambda actors: result['actor_map']['test_network:src'] in actors)
+        assert_helper([rt2, rt3], lambda actors: result['actor_map']['test_network:sum'] in actors)
+        assert_helper([rt2, rt3], lambda actors: result['actor_map']['test_network:snk'] in actors)
+        request_handler.delete_application(rt1, result['application_id'])
+
+    @pytest.mark.slow
+    def testNetworkLatency(self):
+        _log.analyze("TESTRUN", "+", {})
+        verify_storage([rt1, rt2, rt3])
+
+        from calvin.Tools.cscontrol import control_deploy as deploy_app
+        args = DeployArgs(node='http://%s:5003' % ip_addr,
+                          script=open(test_script_dir+"test_network.calvin"), attr=None,
+                                reqs=test_script_dir+"test_network_latency.deployjson",
+                                check=True, timeout=TEST_TIMEOUT)
+        result = {}
+        try:
+            result = deploy_app(args)
+        except:
+            _log.exception("Test deploy failed")
+            raise Exception("Failed deployment of app %s, no use to verify if requirements fulfilled" % args.script.name)
+
+        assert result['requirements_fulfilled']
+        # src -> rt1 or rt2 or rt3; sum, snk -> rt2 or rt3
+        assert_helper([rt1, rt2, rt3], lambda actors: result['actor_map']['test_network:src'] in actors)
+        assert_helper([rt2, rt3], lambda actors: result['actor_map']['test_network:sum'] in actors)
+        assert_helper([rt2, rt3], lambda actors: result['actor_map']['test_network:snk'] in actors)
+        request_handler.delete_application(rt1, result['application_id'])
+
+    @pytest.mark.slow
+    def testNetworkFull(self):
+        _log.analyze("TESTRUN", "+", {})
+        verify_storage([rt1, rt2, rt3])
+
+        from calvin.Tools.cscontrol import control_deploy as deploy_app
+        args = DeployArgs(node='http://%s:5003' % ip_addr,
+                          script=open(test_script_dir+"test_network.calvin"), attr=None,
+                                reqs=test_script_dir+"test_network_full.deployjson",
+                                check=True, timeout=TEST_TIMEOUT)
+        result = {}
+        try:
+            result = deploy_app(args)
+        except:
+            _log.exception("Test deploy failed")
+            raise Exception("Failed deployment of app %s, no use to verify if requirements fulfilled" % args.script.name)
+
+        assert result['requirements_fulfilled']
+        # src -> rt1 or rt2 or rt3; sum, snk -> rt2 or rt3
+        assert_helper([rt1, rt2, rt3], lambda actors: result['actor_map']['test_network:src'] in actors)
+        assert_helper([rt2, rt3], lambda actors: result['actor_map']['test_network:sum'] in actors)
+        assert_helper([rt2, rt3], lambda actors: result['actor_map']['test_network:snk'] in actors)
+        request_handler.delete_application(rt1, result['application_id'])
+
 @pytest.mark.slow
 class TestDeployment3NodesProxyStorage(unittest.TestCase):
 
