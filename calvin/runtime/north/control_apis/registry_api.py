@@ -277,3 +277,18 @@ def handle_resource_mem_avail(self, handle, connection, match, data, hdr):
     """
     self.node.mem_monitor.set_avail(data['value'],
         CalvinCB(func=self.storage_cb, handle=handle, connection=connection))
+
+@handler(r"POST /link/resource/bandwidth/([0-9a-zA-Z\.\-/_]*)/([0-9a-zA-Z\.\-/_]*)\sHTTP/1")
+@authentication_decorator
+def handle_resource_bandwidth(self, handle, connection, match, data, hdr):
+    """
+    POST /node/resource/bandwidth
+    Updates the links bandwitdh between 2 runtimes
+    Body:
+    {
+        "value": <bandwidth (100K, 1M, 100M, 1G, 10G)>
+    }
+    Response status code: OK or INTERNAL_ERROR
+    Response: none
+    """
+    self.node.link_monitor.set_bandwidth(match.group(1), match.group(2), data['value'], CalvinCB(func=self.storage_cb, handle=handle, connection=connection))

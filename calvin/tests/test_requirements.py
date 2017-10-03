@@ -248,6 +248,13 @@ class TestDeployScript(unittest.TestCase):
         _log.analyze("TESTRUN", "+", {})
         verify_storage([rt1, rt2, rt3])
 
+        time.sleep(20)
+
+        from functools import partial
+        rt2_id = helpers.retry(30, partial(request_handler.get_node_id, rt2), lambda _: True, "Failed to get node id")
+        rt3_id = helpers.retry(30, partial(request_handler.get_node_id, rt3), lambda _: True, "Failed to get node id")
+        print request_handler.set_bandwidth(rt2, rt2_id, rt3_id, '100M')
+
         from calvin.Tools.cscontrol import control_deploy as deploy_app
         args = DeployArgs(node='http://%s:5003' % ip_addr,
                           script=open(test_script_dir+"test_network.calvin"), attr=None,

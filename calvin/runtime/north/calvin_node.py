@@ -52,6 +52,7 @@ from calvin.utilities.calvinlogger import get_logger, set_file
 from calvin.utilities import calvinconfig
 from calvin.runtime.north.resource_monitor.cpu import CpuMonitor
 from calvin.runtime.north.resource_monitor.memory import MemMonitor
+from calvin.runtime.north.resource_monitor.link import LinkMonitor
 
 _log = get_logger(__name__)
 _conf = calvinconfig.get()
@@ -139,6 +140,7 @@ class Node(object):
 
         self.cpu_monitor = CpuMonitor(self.id, self.storage)
         self.mem_monitor = MemMonitor(self.id, self.storage)
+        self.link_monitor = LinkMonitor(self.id, self.storage)
 
         # The initialization that requires the main loop operating is deferred to start function
         async.DelayedCall(0, self.start)
@@ -236,8 +238,7 @@ class Node(object):
         # Start storage after network, proto etc since storage proxy expects them
         self.storage.start(cb=CalvinCB(self._storage_started_cb))
         self.storage.add_node(self)
-        # Start links if needed
-        self.storage.get_links(self.id, cb=CalvinCB(self._verify_links_initialization))
+        self.link_monitor.start()
 
         # Start control API
         proxy_control_uri = _conf.get(None, 'control_proxy')
@@ -267,6 +268,7 @@ class Node(object):
         self.storage.delete_node(self, cb=deleted_node)
         self.cpu_monitor.stop()
         self.mem_monitor.stop()
+        self.link_monitor.stop()
         for link in self.network.list_direct_links():
             self.network.link_get(link).close()
 
@@ -359,15 +361,6 @@ class Node(object):
                 _log.info("TERMINATE MIGRATE ACTOR")
                 self.am.update_requirements(actor.id, [], extend=True, move=True,
                             authorization_check=False, callback=CalvinCB(migrated, actor_id=actor.id))
-
-    def _verify_links_initialization(self, key, value):
-        if not value:
-            self.storage.create_links(self.id)
-            async.DelayedCall(10, self.storage.get_links, self.id, self._verify_links_initialization)
-            print "Links not initialized yet, trying in 10s..."
-        else:
-            print "Links already initialized, everything ok"
-            print value
 
 
     def _storage_started_cb(self, *args, **kwargs):
