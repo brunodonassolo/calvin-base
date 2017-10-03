@@ -283,8 +283,8 @@ class AttributeResolverHelper(object):
             attr_str = '/node/resource'
             attr_list = [u'node', u'resource']
         elif not set(attr).isdisjoint(links_list):
-            attr_str = '/links'
-            attr_list = [u'links']
+            attr_str = '/links/resource'
+            attr_list = [u'links', u'resource']
         else:
             attr_str = '/node/attribute'
             attr_list = [u'node', u'attribute']
@@ -307,8 +307,8 @@ class AttributeResolverHelper(object):
             attr_str = attr_str[len('/node/resource') + 1:]
         elif attr_str.startswith('/node/attribute'):
             attr_str = attr_str[len('/node/attribute') + 1:]
-        elif attr_str.startswith('/links/'):
-            attr_str = attr_str[len('/links/') + 1:]
+        elif attr_str.startswith('/links/resource'):
+            attr_str = attr_str[len('/links/resource') + 1:]
         else:
             raise Exception('Index %s not a node attribute' % attr_str)
 

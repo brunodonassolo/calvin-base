@@ -822,8 +822,6 @@ class Storage(object):
                 #Remove node from list of authorization servers
                 self.remove_index(['authorization_server'], self.node.id, root_prefix_level=1, cb=cb)
 
-        self.delete_links(node.id)
-
     def _delete_node_index(self, node, cb=None):
         indexes = node.attributes.get_indexed_public()
         _log.analyze(self.node.id, "+", {'indexes': indexes})
@@ -1030,74 +1028,3 @@ class Storage(object):
             kwargs['key'] = key
         tunnel.send(kwargs)
 
-
-    def _create_links_cb(self, key, value, runtime1):
-        """
-        Create 1 link to each pair of runtimes
-        Adds this link to storage: link-ID : { "runtime1_id", "runtime2_id" }
-        Also, associate the link with both runtimes to find it easier (on node removal)
-        """
-        from calvin.utilities import calvinuuid
-        for rt in value:
-            if (rt == runtime1):
-                print "Skipping same runtime:" + str(runtime1)
-                continue
-            data = { "runtime1" : runtime1,
-                     "runtime2" : rt}
-            link_id = calvinuuid.uuid("Link")
-            print "Adding link-" + str(link_id)
-            print data
-            self.set(prefix="link-", key=link_id, value=data, cb = None)
-            # get all links of 1 runtime, so adds link_id index to both runtimes
-            self.add_index(['links', runtime1], link_id, root_prefix_level=2, cb=None)
-            self.add_index(['links', rt], link_id, root_prefix_level=2, cb=None)
-
-    def create_links(self, node_id):
-        """
-        Create links between node_id and all nodes available
-        """
-        from calvin.utilities.attribute_resolver import format_index_string
-        index_str = format_index_string(("node_name", {}))
-        self.get_index(index_str, CalvinCB(func=self._create_links_cb, runtime1=node_id))
-
-    def get_links(self, node_id, cb):
-        """
-        Gets all links related to a node id, i.e. source or destination is the node_id
-        """
-        self.get_index(['links', node_id], cb=cb)
-
-    def _delete_links_1link_cb(self, key, value):
-        """
-        Callback for _delete_links_cb
-        Do steps: 
-        - Remove links from /links-ID/ database
-        - Remove from /links/runtimes the link
-        """
-        print "Removing link: " + str(key)
-        print "Removing association with runtime: " + str(value['runtime1'])
-        print "Removing association with runtime: " + str(value['runtime2'])
-        self.remove_index(['links', value['runtime1']], key, root_prefix_level=1, cb=None)
-        self.remove_index(['links', value['runtime2']], key, root_prefix_level=1, cb=None)
-        self.delete('link-', key, cb=None)
-
-    def _delete_links_cb(self, key, value):
-        """
-        Callback for delete_links
-        Do step: Gets all runtimes that could use these links
-        """
-        if not value:
-            print "Empty link list, nothing to do..."
-            return
-        for link in value:
-            self.get("link-", link, CalvinCB(func=self._delete_links_1link_cb))
-
-    def delete_links(self, node_id):
-        """
-        Delete all links related to specified node
-        Steps:
-        - Search all links whose src or dst is the node
-        - Gets all runtimes that could use these links
-        - Remove links from /links-ID/ database
-        - Remove from /links/runtimes the link
-        """
-        self.get_links(node_id, cb=CalvinCB(self._delete_links_cb))

@@ -63,6 +63,7 @@ AUTHENTICATION = '/authentication'
 AUTHENTICATION_USERS_DB = '/authentication/users_db'
 AUTHENTICATION_GROUPS_DB = '/authentication/groups_db'
 PROXY_PEER_ABOLISH = '/proxy/{}/migrate'
+BANDWIDTH_PATH = '/link/resource/bandwidth/{}/{}'
 
 
 def get_runtime(value):
@@ -441,6 +442,12 @@ class RequestHandler(object):
     def post_users_db(self, rt, users_db, timeout=DEFAULT_TIMEOUT, async=False):
         data = {'users_db': users_db}
         r = self._put(rt, timeout, async, AUTHENTICATION_USERS_DB, data=data)
+        return self.check_response(r)
+
+    def set_bandwidth(self, rt, rt1_id, rt2_id, bandwidth, timeout=DEFAULT_TIMEOUT, async=False):
+        data = {'value': bandwidth}
+        path = BANDWIDTH_PATH.format(rt1_id, rt2_id)
+        r = self._post(rt, timeout, async, path, data)
         return self.check_response(r)
 
     def abolish_proxy_peer(self, rt, peer_id, timeout=DEFAULT_TIMEOUT, async=False):

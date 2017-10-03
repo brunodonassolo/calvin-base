@@ -8,11 +8,10 @@ from calvin.utilities.calvinlogger import get_logger
 _log = get_logger(__name__)
 
 class ResourceMonitorHelper(object):
-    def __init__(self, node_id, storage):
+    def __init__(self, storage):
         self.storage = storage
-        self.node_id = node_id
 
-    def _set_aux(self, key, value, prefix_index, new_value=None):
+    def _set_aux(self, key, value, prefix_index, ident, new_value=None):
         """
         Auxiliary method to set indexes .
         Removes old indexes before adding the new ones. Triggered by a get in the database
@@ -26,17 +25,20 @@ class ResourceMonitorHelper(object):
         if value is not None:
             old_data = AttributeResolver({"indexed_public": {prefix_index: str(value)}})
             _log.debug("Removing " + str(key) + " for " + prefix_index + ": " + str(value))
+            print("Removing " + str(key) + " for " + prefix_index + ": " + str(value))
             for index in old_data.get_indexed_public():
                 self.storage.remove_index(index=index, value=key, root_prefix_level=2)
 
         # insert the new ones
         if new_value is not None:
             new_data = AttributeResolver({"indexed_public": {prefix_index: str(new_value)}})
-            _log.debug("After possible removal, adding new node " + str(self.node_id) + " for " + prefix_index + ": " + str(new_value))
+            _log.debug("After possible removal, adding new node " + str(ident) + " for " + prefix_index + ": " + str(new_value))
+            print("After possible removal, adding new node " + str(ident) + " for " + prefix_index + ": " + str(new_value))
+            print new_data
             for index in new_data.get_indexed_public():
                 self.storage.add_index(index=index, value=self.node_id, root_prefix_level=2, cb=None)
 
-    def set(self, prefix, prefix_index, value, cb=None):
+    def set(self, ident, prefix, prefix_index, value, cb=None):
         """
         Sets a certain resource of a node.
         Gets the old value to erase from indexes.
@@ -48,10 +50,10 @@ class ResourceMonitorHelper(object):
         """
 
         # get old value to cleanup indexes
-        self.storage.get(prefix=prefix, key=self.node_id, cb=CalvinCB(self._set_aux,
-            prefix_index=prefix_index, new_value=value))
+        self.storage.get(prefix=prefix, key=ident, cb=CalvinCB(self._set_aux,
+            ident=ident, prefix_index=prefix_index, new_value=value))
 
-        self.storage.set(prefix=prefix, key=self.node_id, value=value, cb=None)
+        self.storage.set(prefix=prefix, key=ident, value=value, cb=None)
         if cb:
             async.DelayedCall(0, cb, value, True)
 
