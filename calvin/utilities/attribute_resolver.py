@@ -89,11 +89,19 @@ bandwidth_help = {"1M": "1Mb/s bandwidth",
                  "10G": "10G/s bandwidth",
                  "100G":"100G/s bandwidth"}
 
+# Acceptable values for network latency
+latency_keys = ["1s", "100ms", "1ms", "100us", "1us"]
+latency_help = {"1s":"1 second",
+                "100ms": "100 milliseconds",
+                "1ms": "1 millisecond",
+                "100us": "100 microseconds",
+                "1us": "1 microsecond"}
+
 # list of acceptable resources
 resource_list = ["cpuAvail", "memAvail"]
 
 # list of acceptable links
-links_list = ["bandwidth"]
+links_list = ["bandwidth", "latency"]
 
 attribute_docs = '''
 # Calvin Node Attributes
@@ -140,6 +148,8 @@ attribute_docs += ' ' * _indent_index + '"memAffinity": { # The node\'s RAM affi
 attribute_docs += (',\n').join([' ' * _indent_index2 + '"' + a + '": ' + memAffinity_help[a] for a in memAffinity_keys]) + '\n' + ' ' * _indent_index + '},\n'
 attribute_docs += ' ' * _indent_index + '"bandwidth": { # The link\'s bandwidth\n'
 attribute_docs += (',\n').join([' ' * _indent_index2 + '"' + a + '": ' + bandwidth_help[a] for a in bandwidth_keys]) + '\n' + ' ' * _indent_index + '},\n'
+attribute_docs += ' ' * _indent_index + '"latency": { # The link\'s latency\n'
+attribute_docs += (',\n').join([' ' * _indent_index2 + '"' + a + '": ' + latency_help[a] for a in latency_keys]) + '\n' + ' ' * _indent_index + '},\n'
 attribute_docs += ' ' * _indent_index + '''"user_extra": {# Any user specific extra attributes, as a list of list with index words, not possible to skip levels
                 }
     }
@@ -264,10 +274,17 @@ class AttributeResolverHelper(object):
         return resolved
 
     @classmethod
-    def bandwitdh_resolver(cls, attr):
+    def bandwidth_resolver(cls, attr):
         if attr not in bandwidth_keys:
             raise Exception('Bandwidth must be: %s' % bandwidth_keys)
         resolved = map(cls._to_unicode, bandwidth_keys[:bandwidth_keys.index(attr) + 1])
+        return resolved
+
+    @classmethod
+    def latency_resolver(cls, attr):
+        if attr not in latency_keys:
+            raise Exception('Latency must be: %s' % latency_keys)
+        resolved = map(cls._to_unicode, latency_keys[:latency_keys.index(attr) + 1])
         return resolved
 
     @classmethod
@@ -334,7 +351,8 @@ attr_resolver = {"owner": AttributeResolverHelper.owner_resolver,
                  "memTotal" : AttributeResolverHelper.mem_total_resolver,
                  "memAffinity" : AttributeResolverHelper.mem_affi_resolver,
                  "user_extra": AttributeResolverHelper.extra_resolver,
-                 "bandwidth": AttributeResolverHelper.bandwitdh_resolver}
+                 "bandwidth": AttributeResolverHelper.bandwidth_resolver,
+                 "latency": AttributeResolverHelper.latency_resolver}
 
 keys = {"owner": owner_keys,
         "node_name": node_name_keys,
@@ -345,7 +363,8 @@ keys = {"owner": owner_keys,
         "memAvail": memAvail_keys,
         "memTotal": memTotal_keys,
         "memAffinity": memAffinity_keys,
-        "bandwidth": bandwidth_keys}
+        "bandwidth": bandwidth_keys,
+        "latency": latency_keys}
 
 def format_index_string(attr, trim=True):
     ''' To format the index search string an attribute resolver function needs to be used:

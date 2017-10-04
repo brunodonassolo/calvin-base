@@ -303,6 +303,7 @@ class TestMemMonitor(object):
 
 class TestLinkMonitor(object):
     BANDWIDTH_INDEX_BASE = ['links', 'resource', 'bandwidth']
+    LATENCY_INDEX_BASE = ['links', 'resource', 'latency']
 
     @pytest.inlineCallbacks
     def setup(self):
@@ -371,7 +372,7 @@ class TestLinkMonitor(object):
         Old value must be erased from indexes
         """
         self.done = False
-        self.link.set_bandwidth(self.node.id, self.node2.id, '100M', CalvinCB(self.cb))
+        self.link.set_bandwidth(self.node.id, self.node2.id, '100m', CalvinCB(self.cb))
         yield wait_for(self._test_done)
         assert self.get_ans == True
         self.done = False
@@ -382,6 +383,66 @@ class TestLinkMonitor(object):
         # node id must not be present at level 100M, only at 1M
         self.done = False
         self.storage.get_index(index=self.BANDWIDTH_INDEX_BASE + ['1M', '100M'], cb=CalvinCB(self.cb))
+        yield wait_for(self._test_done)
+        print self.get_ans
+        assert self.get_ans is None
+
+    @pytest.inlineCallbacks
+    def test_latency_invalid(self):
+        """
+        Verify invalid values for latency
+        """
+        for i in ['10us', '2ms', '10s']:
+            self.done = False
+            self.link.set_latency(self.node.id, self.node2.id, i, CalvinCB(self.cb))
+            yield wait_for(self._test_done)
+            assert self.get_ans == False
+
+    @pytest.inlineCallbacks
+    def test_latency_valid(self):
+        """
+        Test valid values for latency.
+        Verify if storage is as expected
+        """
+        values = ['1s', '100ms', '1ms', '100us', '1us']
+        for i in values:
+            # verify set return
+            self.done = False
+            self.link.set_latency(self.node.id, self.node2.id, i, CalvinCB(self.cb))
+            yield wait_for(self._test_done)
+            assert self.get_ans == True
+
+            # verify linkLatency in DB
+            self.done = False
+            self.storage.get(prefix="linkLatency-", key=self.link_id, cb=CalvinCB(self.cb))
+            yield wait_for(self._test_done)
+            assert self.get_ans == i
+
+            # verify index ok and present until level i
+            for j in range(0, values.index(i)):
+                self.done = False
+                self.storage.get_index(index=self.LATENCY_INDEX_BASE + map(str, values[:j+1]), cb=CalvinCB(self.cb))
+                yield wait_for(self._test_done)
+                assert self.link_id in self.get_ans
+
+    @pytest.inlineCallbacks
+    def test_latency_change(self):
+        """
+        Verify if indexes are ok after a change in latency.
+        Old value must be erased from indexes
+        """
+        self.done = False
+        self.link.set_latency(self.node.id, self.node2.id, '100MS', CalvinCB(self.cb))
+        yield wait_for(self._test_done)
+        assert self.get_ans == True
+        self.done = False
+        self.link.set_latency(self.node.id, self.node2.id, '1S', CalvinCB(self.cb))
+        yield wait_for(self._test_done)
+        assert self.get_ans == True
+
+        # node id must not be present at level 100ms, only at 1ms
+        self.done = False
+        self.storage.get_index(index=self.LATENCY_INDEX_BASE + ['1s', '100ms'], cb=CalvinCB(self.cb))
         yield wait_for(self._test_done)
         print self.get_ans
         assert self.get_ans is None
@@ -398,6 +459,16 @@ class TestLinkMonitor(object):
 
         self.done = False
         self.storage.get_index(index=self.BANDWIDTH_INDEX_BASE + ['1M', '100M'], cb=CalvinCB(self.cb))
+        yield wait_for(self._test_done)
+        assert self.link_id in self.get_ans
+
+        self.done = False
+        self.link.set_latency(self.node.id, self.node2.id, '100ms', CalvinCB(self.cb))
+        yield wait_for(self._test_done)
+        assert self.get_ans == True
+
+        self.done = False
+        self.storage.get_index(index=self.LATENCY_INDEX_BASE + ['1s', '100ms'], cb=CalvinCB(self.cb))
         yield wait_for(self._test_done)
         assert self.link_id in self.get_ans
 
@@ -423,3 +494,14 @@ class TestLinkMonitor(object):
         yield wait_for(self._test_done)
         assert self.get_ans is None
 
+        # linkLatency- must not exist
+        self.done = False
+        self.storage.get(prefix="linkLatency-", key=self.link_id, cb=CalvinCB(self.cb))
+        yield wait_for(self._test_done)
+        assert self.get_ans is False
+
+        # link id must not be present at level 100M
+        self.done = False
+        self.storage.get_index(index=self.LATENCY_INDEX_BASE + ['1us', '100us'], cb=CalvinCB(self.cb))
+        yield wait_for(self._test_done)
+        assert self.get_ans is None

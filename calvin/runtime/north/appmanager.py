@@ -462,9 +462,11 @@ class AppManager(object):
         _log.analyze(self._node.id, "+ DONE", {'application_id': application_id}, tb=True)
 
     def _verify_collect_placement(self, app):
+        print 'VERIFY %d %d %d %d %d %d' % (len(app.actor_placement), app.actor_placement_nbr, len(app.link_placement), app.link_placement_nbr, len(app.link_placement_runtimes), app.link_placement_runtimes_nbr)
+
         return (len(app.actor_placement) == app.actor_placement_nbr and
             len(app.link_placement) == app.link_placement_nbr and
-            len (app.link_placement_runtimes) == app.link_placement_runtimes_nbr)
+            len(app.link_placement_runtimes) == app.link_placement_runtimes_nbr)
 
     def collect_actor_placement(self, app, actor_id, possible_placements, status):
         # TODO look at status
@@ -479,24 +481,25 @@ class AppManager(object):
         print "Collect possible placements: %s for link: %s" %(str(possible_placements), link_id)
         app.link_placement[link_id] = possible_placements
 
+        app.link_placement_runtimes_nbr += len(possible_placements)
         for candidate in possible_placements:
             if isinstance(candidate, dynops.InfiniteElement):
                 print "Skipping InfiniteElement in link placement"
+                app.link_placement_runtimes_nbr -= 1
                 continue
-            app.link_placement_runtimes_nbr += 1
-            self.storage.get("link-", candidate, cb=CalvinCB(func=self.collect_link_placement_runtime, app=app))
+            self.storage.get("link-", candidate, cb=CalvinCB(func=self.collect_link_placement_runtime, app=app, link=link_id))
 
         if self._verify_collect_placement(app):
             self.decide_placement(app)
 
-    def collect_link_placement_runtime(self, key, value, app):
+    def collect_link_placement_runtime(self, key, value, app, link):
         if not value:
-            _log.error("Error collecting placement for link %s. Application placement is probably incomplete" % (key))
+            _log.error("Error collecting placement for physical link %s. Application placement is probably incomplete" % (key))
+            app.link_placement[link].remove(key)
             app.link_placement_runtimes_nbr -= 1
-            return
-
-        print "Collect runtimes for link: %s, source: %s, dst: %s" % (key, value['runtime1'], value['runtime2'])
-        app.link_placement_runtimes[key] = value
+        else:
+            print "Collect runtimes for physical link: %s, source: %s, dst: %s" % (key, value['runtime1'], value['runtime2'])
+            app.link_placement_runtimes[key] = value
 
         if self._verify_collect_placement(app):
             self.decide_placement(app)

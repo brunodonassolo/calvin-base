@@ -67,6 +67,7 @@ AUTHENTICATION = '/authentication'
 AUTHENTICATION_USERS_DB = '/authentication/users_db'
 AUTHENTICATION_GROUPS_DB = '/authentication/groups_db'
 BANDWIDTH_PATH = '/link/resource/bandwidth/{}/{}'
+LATENCY_PATH = '/link/resource/latency/{}/{}'
 def get_runtime(value):
     if isinstance(value, basestring):
         return RT(value)
@@ -464,6 +465,12 @@ class RequestHandler(object):
     def set_bandwidth(self, rt, rt1_id, rt2_id, bandwidth, timeout=DEFAULT_TIMEOUT, async=False):
         data = {'value': bandwidth}
         path = BANDWIDTH_PATH.format(rt1_id, rt2_id)
+        r = self._post(rt, timeout, async, path, data)
+        return self.check_response(r)
+
+    def set_latency(self, rt, rt1_id, rt2_id, latency, timeout=DEFAULT_TIMEOUT, async=False):
+        data = {'value': latency}
+        path = LATENCY_PATH.format(rt1_id, rt2_id)
         r = self._post(rt, timeout, async, path, data)
         return self.check_response(r)
 

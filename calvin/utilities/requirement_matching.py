@@ -114,7 +114,7 @@ class ReqMatch(object):
                 union_iters.append(req_operations[union_req['op']].req_op(self.node,
                                         actor_id=self.actor_id,
                                         component=self.component_ids,
-                                        **union_req['kwargs']).set_name(union_req['op'] + ",UActor" + self.actor_id))
+                                        **union_req['kwargs']).set_name(union_req['op'] + ",UActor" + str(self.actor_id)))
             except:
                 _log.error("union_requirements one req failed for %s!!!" % self.actor_id, exc_info=True)
         return dynops.Union(*union_iters)
