@@ -18,7 +18,7 @@ class LinkMonitor(object):
         if not value:
             print "Link not found for key: " + key
             if org_cb:
-                async.DelayedCall(0, cb, bandwidth, False)
+                async.DelayedCall(0, org_cb, bandwidth, False)
             return
 
         print key

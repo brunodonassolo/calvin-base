@@ -491,6 +491,11 @@ class AppManager(object):
             self.decide_placement(app)
 
     def collect_link_placement_runtime(self, key, value, app):
+        if not value:
+            _log.error("Error collecting placement for link %s. Application placement is probably incomplete" % (key))
+            app.link_placement_runtimes_nbr -= 1
+            return
+
         print "Collect runtimes for link: %s, source: %s, dst: %s" % (key, value['runtime1'], value['runtime2'])
         app.link_placement_runtimes[key] = value
 
