@@ -1,10 +1,5 @@
 {
     "requirements": {
-        "linkA": {"op": "union_group", 
-                 "requirements": [{"op": "link_attr_match", 
-                                   "kwargs": {"index": {"bandwidth": "100M"}}
-                                   },
-                 "type": "+"
-                }
-                }
+        "linkA": [{"op": "link_attr_match", "kwargs": {"index": {"bandwidth": "100M"}}, "type": "+"}]
+    }
 }

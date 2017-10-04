@@ -123,6 +123,8 @@ class TestDeployScript(unittest.TestCase):
         test_script_dir = absolute_filename('scripts/')
         request.addfinalizer(self.teardown)
 
+        verify_storage([rt1, rt2, rt3])
+
     def teardown(self):
         global rt1
         global rt2
@@ -147,7 +149,6 @@ class TestDeployScript(unittest.TestCase):
     def testDeploySimple(self):
         _log.analyze("TESTRUN", "+", {})
         verify_storage([rt1, rt2, rt3])
-        self.assert_storage()
         
         from calvin.Tools.cscontrol import control_deploy as deploy_app
         args = DeployArgs(node='http://%s:5003' % ip_addr,
@@ -170,7 +171,6 @@ class TestDeployScript(unittest.TestCase):
     def testDeployLongActorChain(self):
         _log.analyze("TESTRUN", "+", {})
         verify_storage([rt1, rt2, rt3])
-        self.assert_storage()
 
         from calvin.Tools.cscontrol import control_deploy as deploy_app
         args = DeployArgs(node='http://%s:5003' % ip_addr,
@@ -196,7 +196,6 @@ class TestDeployScript(unittest.TestCase):
     @pytest.mark.slow
     def testDeployComponent(self):
         _log.analyze("TESTRUN", "+", {})
-        verify_storage([rt1, rt2, rt3])
         self.assert_storage()
 
         from calvin.Tools.cscontrol import control_deploy as deploy_app
@@ -220,7 +219,6 @@ class TestDeployScript(unittest.TestCase):
     @pytest.mark.slow
     def testNetworkNoLink(self):
         _log.analyze("TESTRUN", "+", {})
-        verify_storage([rt1, rt2, rt3])
 
         from calvin.Tools.cscontrol import control_deploy as deploy_app
         args = DeployArgs(node='http://%s:5003' % ip_addr,
@@ -246,14 +244,14 @@ class TestDeployScript(unittest.TestCase):
     @pytest.mark.slow
     def testNetworkBandwidth(self):
         _log.analyze("TESTRUN", "+", {})
-        verify_storage([rt1, rt2, rt3])
-
-        time.sleep(20)
 
         from functools import partial
         rt2_id = helpers.retry(30, partial(request_handler.get_node_id, rt2), lambda _: True, "Failed to get node id")
         rt3_id = helpers.retry(30, partial(request_handler.get_node_id, rt3), lambda _: True, "Failed to get node id")
-        print request_handler.set_bandwidth(rt2, rt2_id, rt3_id, '100M')
+        helpers.retry(30, partial(request_handler.get_index, rt2, 'links/' + str(rt2_id)), lambda res: res, "Failed to get index")
+        helpers.retry(30, partial(request_handler.get_index, rt2, 'links/' + str(rt3_id)), lambda res: res, "Failed to get index")
+        helpers.retry(30, partial(request_handler.set_bandwidth,rt2, rt2_id, rt3_id, '100M'), lambda _: True, "Failed to set bandwidth")
+        helpers.retry(30, partial(request_handler.get_index, rt1, format_index_string({'bandwidth': '100M'})), lambda res: res, "Failed to get index")
 
         from calvin.Tools.cscontrol import control_deploy as deploy_app
         args = DeployArgs(node='http://%s:5003' % ip_addr,
@@ -277,7 +275,6 @@ class TestDeployScript(unittest.TestCase):
     @pytest.mark.slow
     def testNetworkLatency(self):
         _log.analyze("TESTRUN", "+", {})
-        verify_storage([rt1, rt2, rt3])
 
         from calvin.Tools.cscontrol import control_deploy as deploy_app
         args = DeployArgs(node='http://%s:5003' % ip_addr,
@@ -301,7 +298,6 @@ class TestDeployScript(unittest.TestCase):
     @pytest.mark.slow
     def testNetworkFull(self):
         _log.analyze("TESTRUN", "+", {})
-        verify_storage([rt1, rt2, rt3])
 
         from calvin.Tools.cscontrol import control_deploy as deploy_app
         args = DeployArgs(node='http://%s:5003' % ip_addr,
