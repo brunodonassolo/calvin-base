@@ -11,32 +11,45 @@ class LinkMonitor(object):
     def __init__(self, node_id, storage):
         self.storage = storage
         self.node_id = node_id
-        self.acceptable = ['1M', '100M', '1G', '10G', '100G']
+        self.band_acceptable = ['1M', '100M', '1G', '10G', '100G']
+        self.lat_acceptable = ['1us', '100us', '1ms', '100ms', '1s']
         self.helper = ResourceMonitorHelper(storage)
 
-    def _set_bandwidth_cb(self, key, value, bandwidth, org_cb):
+    def _set_helper_cb(self, key, value, link_prefix, link_prefix_index, link_value, org_cb):
         if not value:
-            print "Link not found for key: " + key
+            print "LinkMonitor (%s, %s): Link not found for key: %s. Value %s not updated" % (link_prefix, link_prefix_index, key, str(link_value))
             if org_cb:
-                async.DelayedCall(0, org_cb, bandwidth, False)
+                async.DelayedCall(0, org_cb, link_value, False)
             return
 
-        print key
-        print "link id found " + str(value)
-        self.helper.set(ident=value, prefix="linkBandwidth-", prefix_index="bandwidth", value=bandwidth, cb=org_cb)
+        print "LinkMonitor (%s, %s): Link found (%s) for key: %s. Value %s will be updated" % (link_prefix, link_prefix_index, value, key, str(link_value))
+        self.helper.set(ident=value, prefix=link_prefix, prefix_index=link_prefix_index, value=link_value, cb=org_cb)
 
     def set_bandwidth(self, runtime1, runtime2, bandwidth, cb=None):
         """
         Sets the link bandwidth
         Acceptable range: ['1M', '100M', '1G', '10G', '100G']
         """
-        if bandwidth not in self.acceptable:
+        if bandwidth.upper() not in self.band_acceptable:
             _log.error("Invalid bandwidth value: " + str(bandwidth))
             if cb:
                 async.DelayedCall(0, cb, bandwidth, False)
             return
 
-        self.storage.get("rt-link-", runtime1 + runtime2, CalvinCB(func=self._set_bandwidth_cb, bandwidth=bandwidth, org_cb=cb))
+        self.storage.get("rt-link-", runtime1 + runtime2, CalvinCB(func=self._set_helper_cb, link_prefix = "linkBandwidth-", link_prefix_index = "bandwidth", link_value=bandwidth.upper(), org_cb=cb))
+
+    def set_latency(self, runtime1, runtime2, latency, cb=None):
+        """
+        Sets the link latency
+        Acceptable range: ['1us', '100us', '1ms', '100ms', '1s']
+        """
+        if latency.lower() not in self.lat_acceptable:
+            _log.error("Invalid latency value: " + str(latency))
+            if cb:
+                async.DelayedCall(0, cb, latency, False)
+            return
+
+        self.storage.get("rt-link-", runtime1 + runtime2, CalvinCB(func=self._set_helper_cb, link_prefix = "linkLatency-", link_prefix_index = "latency", link_value=latency.lower(), org_cb=cb))
 
     def _verify_links_initialization(self, key, value):
         if not value:
@@ -112,12 +125,14 @@ class LinkMonitor(object):
         print "Removing association with runtime: " + str(value['runtime1'])
         print "Removing association with runtime: " + str(value['runtime2'])
         self.helper.set(key, "linkBandwidth-", "bandwidth", value=None, cb=None)
+        self.helper.set(key, "linkLatency-", "latency", value=None, cb=None)
         self.storage.remove_index(['links', value['runtime1']], key, root_prefix_level=1, cb=None)
         self.storage.remove_index(['links', value['runtime2']], key, root_prefix_level=1, cb=None)
         self.storage.delete('rt-link-', value['runtime1'] + value['runtime2'], cb=None)
         self.storage.delete('rt-link-', value['runtime2'] + value['runtime1'], cb=None)
         self.storage.delete('link-', key, cb=None)
         self.storage.delete('linkBandwidth-', key, cb=None)
+        self.storage.delete('linkLatency-', key, cb=None)
 
     def _delete_links_cb(self, key, value):
         """

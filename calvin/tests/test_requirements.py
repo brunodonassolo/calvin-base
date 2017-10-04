@@ -92,6 +92,18 @@ def verify_storage(runtimes):
                 time.sleep(0.1)
         assert not failed
 
+def wait_link_convergence(runtimes):
+    from functools import partial
+
+    rt_ids = []
+    for rt in runtimes:
+        rt_id = helpers.retry(30, partial(request_handler.get_node_id, rt), lambda _: True, "Failed to get node id")
+        rt_ids.append(rt_id)
+
+    for rt_id in rt_ids:
+        helpers.retry(30, partial(request_handler.get_index, runtimes[0], 'links/' + str(rt_id)), lambda res: res, "Failed to get index")
+    return rt_ids
+
 @pytest.mark.slow
 class TestDeployScript(unittest.TestCase):
 
@@ -244,13 +256,11 @@ class TestDeployScript(unittest.TestCase):
     @pytest.mark.slow
     def testNetworkBandwidth(self):
         _log.analyze("TESTRUN", "+", {})
+        rt_ids = wait_link_convergence([rt2, rt3])
 
+        # setting bandwidth between runtimes 2 and 3 to deploy later
         from functools import partial
-        rt2_id = helpers.retry(30, partial(request_handler.get_node_id, rt2), lambda _: True, "Failed to get node id")
-        rt3_id = helpers.retry(30, partial(request_handler.get_node_id, rt3), lambda _: True, "Failed to get node id")
-        helpers.retry(30, partial(request_handler.get_index, rt2, 'links/' + str(rt2_id)), lambda res: res, "Failed to get index")
-        helpers.retry(30, partial(request_handler.get_index, rt2, 'links/' + str(rt3_id)), lambda res: res, "Failed to get index")
-        helpers.retry(30, partial(request_handler.set_bandwidth,rt2, rt2_id, rt3_id, '100M'), lambda _: True, "Failed to set bandwidth")
+        helpers.retry(30, partial(request_handler.set_bandwidth,rt2, rt_ids[0], rt_ids[1], '100M'), lambda _: True, "Failed to set bandwidth")
         helpers.retry(30, partial(request_handler.get_index, rt1, format_index_string({'bandwidth': '100M'})), lambda res: res, "Failed to get index")
 
         from calvin.Tools.cscontrol import control_deploy as deploy_app
@@ -276,6 +286,13 @@ class TestDeployScript(unittest.TestCase):
     def testNetworkLatency(self):
         _log.analyze("TESTRUN", "+", {})
 
+        rt_ids = wait_link_convergence([rt2, rt3])
+
+        # setting latency between runtimes 2 and 3 to deploy later
+        from functools import partial
+        helpers.retry(30, partial(request_handler.set_latency,rt2, rt_ids[0], rt_ids[1], '100ms'), lambda _: True, "Failed to set latency")
+        helpers.retry(30, partial(request_handler.get_index, rt1, format_index_string({'latency': '100ms'})), lambda res: res, "Failed to get index")
+
         from calvin.Tools.cscontrol import control_deploy as deploy_app
         args = DeployArgs(node='http://%s:5003' % ip_addr,
                           script=open(test_script_dir+"test_network.calvin"), attr=None,
@@ -299,6 +316,21 @@ class TestDeployScript(unittest.TestCase):
     def testNetworkFull(self):
         _log.analyze("TESTRUN", "+", {})
 
+        rt_ids = wait_link_convergence([rt1, rt2, rt3])
+
+        # setting bandwidth between runtimes 1 and 2, it fulfills the requirements partially
+        from functools import partial
+        helpers.retry(30, partial(request_handler.set_bandwidth,rt2, rt_ids[0], rt_ids[1], '1G'), lambda _: True, "Failed to set bandwidth")
+        helpers.retry(30, partial(request_handler.get_index, rt1, format_index_string({'bandwidth': '1G'})), lambda res: res, "Failed to get index")
+
+        # setting latency and bandwidth between runtimes 2 and 3 to deploy later
+        from functools import partial
+        helpers.retry(30, partial(request_handler.set_bandwidth,rt2, rt_ids[1], rt_ids[2], '1G'), lambda _: True, "Failed to set bandwidth")
+        helpers.retry(30, partial(request_handler.get_index, rt1, format_index_string({'bandwidth': '1G'})), lambda res: res, "Failed to get index")
+        helpers.retry(30, partial(request_handler.set_latency,rt2, rt_ids[1], rt_ids[2], '100ms'), lambda _: True, "Failed to set latency")
+        helpers.retry(30, partial(request_handler.get_index, rt1, format_index_string({'latency': '100ms'})), lambda res: res, "Failed to get index")
+
+        # try to deploy the application and verify the result
         from calvin.Tools.cscontrol import control_deploy as deploy_app
         args = DeployArgs(node='http://%s:5003' % ip_addr,
                           script=open(test_script_dir+"test_network.calvin"), attr=None,

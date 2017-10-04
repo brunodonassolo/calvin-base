@@ -1,13 +1,10 @@
 {
     "requirements": {
-        "linkA": {"op": "union_group", 
-                 "requirements": [{"op": "link_attr_match", 
-                                   "kwargs": {"index": {"bandwidth": "1G"}}
-                                   },
-                                  {"op": "link_attr_match", 
-                                   "kwargs": {"index": {"latency" : "1000"}}
-                                   }],
-                 "type": "+"
-                }
-                }
+        "linkA": [{"op": "link_attr_match",
+                                   "kwargs": {"index": {"bandwidth": "1G"}},
+                  "type": "+"},
+                  {"op": "link_attr_match",
+                                   "kwargs": {"index": {"latency" : "100ms"}},
+                  "type": "+"}]
+     }
 }
