@@ -1027,4 +1027,3 @@ class Storage(object):
         if key is not None:
             kwargs['key'] = key
         tunnel.send(kwargs)
-

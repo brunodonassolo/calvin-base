@@ -523,9 +523,9 @@ class Flatten(object):
     def visit(self, node):
         # Make sure real ports have been promoted, i.e. have had the block namspace
         # added to the actor name, before juggling with component internal ports.
+        linktype = (type(node.outport), type(node.inport))
         if node.ident:
             node.ident = self.stack[-1] + ':' + node.ident
-        linktype = (type(node.outport), type(node.inport))
         if linktype == (ast.InternalOutPort, ast.InPort):
             map(self.visit, [node.inport, node.outport])
         else:
@@ -602,12 +602,12 @@ class Flatten(object):
         # 5. Create the new link
         l0_copy = l0.clone()
         l3_copy = l3.clone()
+        # set link name for internal ports
         name = None
         if type(l1) == ast.InPort:
             name = l0_l1_link.ident
         elif type(l2) == ast.OutPort:
             name = l2_l3_link.ident
-        print "REWRITE " + str(name)
 
         l0_l3_link = ast.Link(ident=name, outport=l0_copy, inport=l3_copy)
         # 8. Transfer port properties
@@ -899,6 +899,7 @@ class AppInfo(object):
 
         self.app_info['connections'].setdefault(key, []).append(value)
 
+        # if name is not explicitly given, set it as actor.outport
         name = node.ident if node.ident else key
         self.app_info['links'].setdefault(name, []).append((key, value))
 

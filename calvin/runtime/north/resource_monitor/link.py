@@ -17,12 +17,12 @@ class LinkMonitor(object):
 
     def _set_helper_cb(self, key, value, link_prefix, link_prefix_index, link_value, org_cb):
         if not value:
-            print "LinkMonitor (%s, %s): Link not found for key: %s. Value %s not updated" % (link_prefix, link_prefix_index, key, str(link_value))
+            _log.error("LinkMonitor (%s, %s): Link not found for key: %s. Value %s not updated" % (link_prefix, link_prefix_index, key, str(link_value)))
             if org_cb:
                 async.DelayedCall(0, org_cb, link_value, False)
             return
 
-        print "LinkMonitor (%s, %s): Link found (%s) for key: %s. Value %s will be updated" % (link_prefix, link_prefix_index, value, key, str(link_value))
+        _log.debug("LinkMonitor (%s, %s): Link found (%s) for key: %s. Value %s will be updated" % (link_prefix, link_prefix_index, value, key, str(link_value)))
         self.helper.set(ident=value, prefix=link_prefix, prefix_index=link_prefix_index, value=link_value, cb=org_cb)
 
     def set_bandwidth(self, runtime1, runtime2, bandwidth, cb=None):
@@ -51,14 +51,21 @@ class LinkMonitor(object):
 
         self.storage.get("rt-link-", runtime1 + runtime2, CalvinCB(func=self._set_helper_cb, link_prefix = "linkLatency-", link_prefix_index = "latency", link_value=latency.lower(), org_cb=cb))
 
+    def get_info(self, phys_link, cb):
+        """
+        Gets information saved in storage about a physical link
+        phys_link: Link identifier (UUID)
+        cb: callback to receive information
+        """
+        self.storage.get("phyLink-", phys_link, cb=cb)
+
     def _verify_links_initialization(self, key, value):
         if not value:
             self._create_links()
             async.DelayedCall(10, self._get_links, self.node_id, self._verify_links_initialization)
-            print "Links not initialized yet, trying in 10s..."
+            _log.debug("Links not initialized yet for node %s, trying again later..." % (key))
         else:
-            print "Links already initialized, everything ok"
-            print value
+            _log.debug("Links already initialized for node %s: %s" % (key, str(value)))
 
     def start(self):
         # Start links if needed
@@ -67,37 +74,38 @@ class LinkMonitor(object):
     def stop(self):
         """
         Stops monitoring, cleaning storage
+        Delete all links related to specified node
+        Steps:
+        - Search all links whose src or dst is the node
+        - Gets all runtimes that could use these links
+        - Remove links from /links-ID/ database
+        - Remove from /phyLinks/runtimes the link
         """
-        # get old value to cleanup indexes
-        #self.helper.set("nodeMemAvail-", "memAvail", value=None, cb=None)
-        #self.storage.delete(prefix="nodeMemAvail-", key=self.node_id, cb=None)
-        self._delete_links()
+        self._get_links(self.node_id, cb=CalvinCB(self._delete_links_cb))
 
     def _create_links_cb(self, key, value, runtime1):
         """
         Create 1 link to each pair of runtimes
-        Adds this link to storage: link-ID : { "runtime1_id", "runtime2_id" }
+        Adds this link to storage: phyLink-ID : { "runtime1_id", "runtime2_id" }
         Also, associate the link with both runtimes to find it easier (on node removal)
         """
         from calvin.utilities import calvinuuid
         links_id = []
         for rt in value:
             if (rt == runtime1):
-                print "Skipping same runtime:" + str(runtime1)
+                _log.debug("Skipping same runtime:" + str(runtime1))
                 continue
             data = { "runtime1" : runtime1,
                      "runtime2" : rt}
             link_id = calvinuuid.uuid("Link")
             links_id.append(link_id)
-            print "Adding link-" + str(link_id)
-            print data
-            self.storage.set(prefix="link-", key=link_id, value=data, cb = None)
+            self.storage.set(prefix="phyLink-", key=link_id, value=data, cb = None)
             # search link id by its origin/dst runtimes
             self.storage.set(prefix="rt-link-", key=runtime1 + rt, value=link_id, cb=None)
             self.storage.set(prefix="rt-link-", key=rt + runtime1, value=link_id, cb=None)
             # get all links of 1 runtime, so adds link_id index to both runtimes
-            self.storage.add_index(['links', runtime1], link_id, root_prefix_level=2, cb=None)
-            self.storage.add_index(['links', rt], link_id, root_prefix_level=2, cb=None)
+            self.storage.add_index(['phyLinks', runtime1], link_id, root_prefix_level=2, cb=None)
+            self.storage.add_index(['phyLinks', rt], link_id, root_prefix_level=2, cb=None)
         return links_id
 
     def _create_links(self):
@@ -112,25 +120,22 @@ class LinkMonitor(object):
         """
         Gets all links related to a node id, i.e. source or destination is the node_id
         """
-        self.storage.get_index(['links', node_id], cb=cb)
+        self.storage.get_index(['phyLinks', node_id], cb=cb)
 
     def _delete_links_1link_cb(self, key, value):
         """
         Callback for _delete_links_cb
         Do steps: 
-        - Remove links from /links-ID/ database
-        - Remove from /links/runtimes the link
+        - Remove links from /phyLink-ID/ database
+        - Remove from /phyLinks/runtimes the link
         """
-        print "Removing link: " + str(key)
-        print "Removing association with runtime: " + str(value['runtime1'])
-        print "Removing association with runtime: " + str(value['runtime2'])
         self.helper.set(key, "linkBandwidth-", "bandwidth", value=None, cb=None)
         self.helper.set(key, "linkLatency-", "latency", value=None, cb=None)
-        self.storage.remove_index(['links', value['runtime1']], key, root_prefix_level=1, cb=None)
-        self.storage.remove_index(['links', value['runtime2']], key, root_prefix_level=1, cb=None)
+        self.storage.remove_index(['phyLinks', value['runtime1']], key, root_prefix_level=1, cb=None)
+        self.storage.remove_index(['phyLinks', value['runtime2']], key, root_prefix_level=1, cb=None)
         self.storage.delete('rt-link-', value['runtime1'] + value['runtime2'], cb=None)
         self.storage.delete('rt-link-', value['runtime2'] + value['runtime1'], cb=None)
-        self.storage.delete('link-', key, cb=None)
+        self.storage.delete('phyLink-', key, cb=None)
         self.storage.delete('linkBandwidth-', key, cb=None)
         self.storage.delete('linkLatency-', key, cb=None)
 
@@ -140,18 +145,7 @@ class LinkMonitor(object):
         Do step: Gets all runtimes that could use these links
         """
         if not value:
-            print "Empty link list, nothing to do..."
             return
         for link in value:
-            self.storage.get("link-", link, CalvinCB(func=self._delete_links_1link_cb))
+            self.storage.get("phyLink-", link, CalvinCB(func=self._delete_links_1link_cb))
 
-    def _delete_links(self):
-        """
-        Delete all links related to specified node
-        Steps:
-        - Search all links whose src or dst is the node
-        - Gets all runtimes that could use these links
-        - Remove links from /links-ID/ database
-        - Remove from /links/runtimes the link
-        """
-        self._get_links(self.node_id, cb=CalvinCB(self._delete_links_cb))
