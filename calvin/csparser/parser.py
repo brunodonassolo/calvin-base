@@ -186,6 +186,7 @@ class CalvinParser(object):
                 | real_outport GT inport_list
                 | implicit_outport GT inport_list
                 | internal_outport GT inport_list"""
+        # link identifier given, set ident value
         if len(p) == 5:
             p[0] = p[4]
             p[0].ident = p[2]

@@ -40,7 +40,7 @@ class Application(object):
         self.ns = os.path.splitext(os.path.basename(self.name))[0]
         self.am = actor_manager
         self.actors = {} if actors is None else actors
-        self.links = {}
+        self.links = set() #links described by user application
         self.origin_node_id = origin_node_id
         self._track_actor_cb = None
         self.actor_placement = None
@@ -59,11 +59,13 @@ class Application(object):
             self.actors[a] = self.am.actors[a].name if a in self.am.actors else None
 
     def add_link(self, link_id):
+        """ Add links to the application structure
+        link_id: Link identifiers (UUID)
+        """
         if not isinstance(link_id, list):
             link_id = [link_id]
         for l in link_id:
-            # TODO [donassolo]: review...
-            self.links[l] = None
+            self.links.add(l)
 
     def remove_actor(self, actor_id):
         try:
@@ -75,7 +77,8 @@ class Application(object):
         return self.actors.keys()
 
     def get_links(self):
-        return self.links.keys()
+        """ Recovery all links of this application """
+        return self.links
 
     def get_actor_name_map(self, ns):
         actors = {v: [k] for k, v in self.actors.items() if v is not None}
@@ -178,7 +181,10 @@ class AppManager(object):
             return
 
     def add_link(self, application_id, link_id):
-        """ Add a link """
+        """ Proxy to add a link  to an application
+            application_id: Identifier, must exist in the manager
+            link_id: Link identifier
+        """
         if application_id in self.applications:
             self.applications[application_id].add_link(link_id)
         else:
@@ -431,12 +437,12 @@ class AppManager(object):
         actor_ids = app.get_actors()
         app.actor_placement_nbr = len(actor_ids)
 
-        app.link_placement = {}  # Clean placement slate
-        app.link_placement_runtimes = {}  # Clean placement slate
+        app.link_placement = {}  # Clean placement slate, saves possible physical links that satifies requirements
+        app.phys_link_placement_runtimes = {}  # Clean placement slate, saves the runtimes that the physical link connects
         link_ids = app.get_links()
-        app.link_placement_nbr = len(link_ids)
-        app.link_placement_runtimes_nbr = 0
-        app.placement_done = False
+        app.link_placement_nbr = len(link_ids) # number of links that must be found
+        app.phys_link_placement_runtimes_nbr = 0
+        app.placement_done = False # controls when the placement was done
 
         # requests all actors placements
         for actor_id in actor_ids:
@@ -462,118 +468,161 @@ class AppManager(object):
         _log.analyze(self._node.id, "+ DONE", {'application_id': application_id}, tb=True)
 
     def _verify_collect_placement(self, app):
-        print 'VERIFY %d %d %d %d %d %d' % (len(app.actor_placement), app.actor_placement_nbr, len(app.link_placement), app.link_placement_nbr, len(app.link_placement_runtimes), app.link_placement_runtimes_nbr)
-
         return (len(app.actor_placement) == app.actor_placement_nbr and
             len(app.link_placement) == app.link_placement_nbr and
-            len(app.link_placement_runtimes) == app.link_placement_runtimes_nbr)
+            len(app.phys_link_placement_runtimes) == app.phys_link_placement_runtimes_nbr)
 
     def collect_actor_placement(self, app, actor_id, possible_placements, status):
+        """
+        Collects possible runtimes that satisfies the requirements for a certain actor
+        app: Application structure
+        actor_id: Actor (described in .calvin file) identifier in UUID format
+        possible_placements: all possible runtimes that respect the requirements
+        status: return status from ReqMatch
+        """
         # TODO look at status
-        print "Collect possible placements: %s for actor: %s" %(str(possible_placements), actor_id)
+        _log.debug("Collect possible placements: %s for actor: %s" %(str(possible_placements), actor_id))
         app.actor_placement[actor_id] = possible_placements
 
         if self._verify_collect_placement(app):
             self.decide_placement(app)
 
     def collect_link_placement(self, app, link_id, possible_placements, status):
-        # TODO look at status
-        print "Collect possible placements: %s for link: %s" %(str(possible_placements), link_id)
-        app.link_placement[link_id] = possible_placements
+        """
+        Collects possible physical links that matches the requirement for a certain link specified by user
+        app: Application structure
+        link_id: Link (described in .calvin file) identifier in UUID format
+        possible_placements: all possible physical links that respect the requirements
+        status: return status from ReqMatch
+        """
+        _log.debug("Collect possible placements: %s for link: %s" %(str(possible_placements), link_id))
+        app.link_placement[link_id] = copy.deepcopy(possible_placements)
 
-        app.link_placement_runtimes_nbr += len(possible_placements)
+        # expect to receive all answers before continuing the placement
+        app.phys_link_placement_runtimes_nbr += len(possible_placements)
         for candidate in possible_placements:
             if isinstance(candidate, dynops.InfiniteElement):
-                print "Skipping InfiniteElement in link placement"
-                app.link_placement_runtimes_nbr -= 1
+                _log.debug("Skipping InfiniteElement in link placement")
+                app.phys_link_placement_runtimes_nbr -= 1
                 continue
-            self.storage.get("link-", candidate, cb=CalvinCB(func=self.collect_link_placement_runtime, app=app, link=link_id))
+            # requesting the runtimes that this physical link connects
+            self._node.link_monitor.get_info(candidate, cb=CalvinCB(func=self.collect_link_placement_runtime, app=app, link=link_id))
 
         if self._verify_collect_placement(app):
             self.decide_placement(app)
 
     def collect_link_placement_runtime(self, key, value, app, link):
+        """
+        Collects the information about the physical links got in the collect_link_placement method
+        This information is the 2 runtimes that this "physical link" interconnects.
+        key: Physical link identifier (UUID)
+        value: Structure containing the 2 runtimes that this link interconnects
+        app: Application structure
+        link_id: Link (described in .calvin file) identifier in UUID format
+        """
         if not value:
             _log.error("Error collecting placement for physical link %s. Application placement is probably incomplete" % (key))
             app.link_placement[link].remove(key)
-            app.link_placement_runtimes_nbr -= 1
+            app.phys_link_placement_runtimes_nbr -= 1
         else:
-            print "Collect runtimes for physical link: %s, source: %s, dst: %s" % (key, value['runtime1'], value['runtime2'])
-            app.link_placement_runtimes[key] = value
+            _log.debug("Collect runtimes for physical link: %s, source: %s, dst: %s" % (key, value['runtime1'], value['runtime2']))
+            app.phys_link_placement_runtimes[key] = value
 
         if self._verify_collect_placement(app):
             self.decide_placement(app)
 
-    def filter_link_placement(self, app, placement):
+    def filter_link_placement_no_link(self, placement, actor, dst_actor):
+        """
+        Auxiliary method to filter runtimes when no physical link is available
+        """
+        rts = placement[actor]
+        if not isinstance(rts, list):
+            rts = [rts]
+        for rt in rts:
+            # the runtime selected must be acceptable for both actors
+            if rt in placement[dst_actor]:
+                return rt
 
-        final_placement = {}
+    def filter_link_placement_with_link(self, app, placement, actor, dst_actor, link):
+        """
+        Auxiliary method to filter runtimes when 1 physical link is available
+        """
+
+        _log.debug("Filtering placement for actors: %s and %s, Link: %s" % (actor, dst_actor, link))
+        rt1 = app.phys_link_placement_runtimes[link]['runtime1']
+        rt2 = app.phys_link_placement_runtimes[link]['runtime2']
+
+        _log.debug("Possible runtimes: %s and %s" % (rt1, rt2))
+        if rt1 not in placement[actor] and rt2 not in placement[actor]:
+            return
+        if rt1 in placement[actor] and rt2 in placement[dst_actor]:
+            return rt1, rt2
+        elif rt2 in placement[actor] and rt1 in placement[dst_actor]:
+            return rt2, rt1
+
+    def filter_link_placement(self, app, placement):
+        """
+        After deciding the actors placement, filter out the possible runtimes considering the links
+
+        General idea: For each pair of actors, select the runtimes which links respect the initial requirements.
+
+        3 possibilities:
+        1) InfinityElement: No link requirements. So, we can put the actor anywhere.
+        2) set([]): No physical link matches the requirements. We must put the pair of actors in the same runtime.
+        3) set(link1, link2): Several links matches the requirements. We got the first pair of runtimes that respect both actor and link requirements. Note that other possible placements are discarded.
+
+        app: Application structure
+        placement: map of actor -> possible runtimes
+        """
+
         # build a map of actors that have links requirements
         actor_link = {}
-        for link_id, link_placements in app.link_placement.iteritems():
+        for link_id, phys_link_placements in app.link_placement.iteritems():
             src_actor = self._node.link_manager.links[link_id].src_id
             dst_actor = self._node.link_manager.links[link_id].dst_id
-            actor_link.setdefault(src_actor, []).append((dst_actor, link_placements))
-            actor_link.setdefault(dst_actor, []).append((src_actor, link_placements))
+            actor_link.setdefault(src_actor, []).append((dst_actor, phys_link_placements))
+            actor_link.setdefault(dst_actor, []).append((src_actor, phys_link_placements))
 
         # we are only interested in filtering actors that are in the actor_link map
         keys_plac = set(placement.keys())
         keys_act = set(actor_link.keys())
         actors_to_filter = keys_plac & keys_act
 
-        # copy the other unmodified to final result
-        final_placement = placement
-
         for actor in actors_to_filter:
-            print "Actor: " + str(actor)
+            _log.debug("Source actor: " + str(actor))
             for dst_actor, link_set in actor_link[actor]:
-                print "Dst actor: " + str(dst_actor)
+                _log.debug("Dst actor: " + str(dst_actor))
                 if not link_set:
-                    print "No physical link to connect both actors, select 1 runtime to host them"
-                    print placement[actor]
-                    rts = placement[actor]
-                    if not isinstance(rts, list):
-                        rts = [rts]
-                    for rt in rts:
-                        print rt
-                        if rt in final_placement[dst_actor]:
-                            print "Selected runtime: " + str(rt)
-                            final_placement[actor] = [rt]
-                            final_placement[dst_actor] = [rt]
-                            break
+                    _log.debug("No physical link to connect both actors, select 1 runtime to host them")
+                    rt = self.filter_link_placement_no_link(placement, actor, dst_actor)
+                    _log.debug("Selected runtime: " + str(rt))
+                    if rt:
+                        placement[actor] = [rt]
+                        placement[dst_actor] = [rt]
+
                 for link in link_set:
-                    print "Link: " + str(link)
+                    _log.debug("Link: " + str(link))
                     if isinstance(link, dynops.InfiniteElement):
                         continue
-                    rt1 = app.link_placement_runtimes[link]['runtime1']
-                    rt2 = app.link_placement_runtimes[link]['runtime2']
-                    print "Runtime1: " + str(rt1)
-                    print "Runtime2: " + str(rt2)
-                    if rt1 not in placement[actor] and rt2 not in placement[actor]:
-                        print 'Impossible to use this physical link with actor'
-                        continue
-                    if rt1 in placement[actor] and rt2 in placement[dst_actor]:
+                    rt1, rt2 = self.filter_link_placement_with_link(app, placement, actor, dst_actor, link)
+                    if rt1 and rt2:
+                        _log.debug('Found a good combinaison, actor %s -> %s, dst_actor %s -> %s' % (actor, rt1, dst_actor, rt2))
                         placement[actor] = [rt1]
                         placement[dst_actor] = [rt2]
-                        print 'Found a good combinaison'
-                    elif rt2 in placement[actor] and rt1 in placement[dst_actor]:
-                        placement[actor] = [rt2]
-                        placement[dst_actor] = [rt1]
-                        print 'Found a good combinaison'
+                        break
                     else:
-                        print 'No good combinaison'
+                        _log.debug('Impossible to use this physical link with actor')
 
-        print "Placement " + str(placement)
-        print "Actors to filter: " + str(actors_to_filter)
-        print "Final placement: " + str(final_placement)
 
-        return final_placement
+        _log.debug("Placement " + str(placement))
+
 
     def decide_placement(self, app):
-        # this method can be called more than once depending on collect_* callbacks execution order
+        # this method can be called more than once depending on collect_* callbacks execution order (inlined calls)
+        # So, we added this verification here
         if app.placement_done:
             return
         app.placement_done = True
-
 
         _log.analyze(self._node.id, "+ BEGIN", {}, tb=True)
 
@@ -627,11 +676,10 @@ class AppManager(object):
             #weighted_actor_placement[actor_id] = node_ids[weights.index(max(weights))]
             # Get a list of nodes in sorted weighted order
             weighted_actor_placement[actor_id] = [n for (w, n) in sorted(zip(weights, node_ids), reverse=True)]
-        print 'Weighted ACtor Placement before filtering...'
-        print weighted_actor_placement
-        weighted_actor_placement = self.filter_link_placement(app, weighted_actor_placement)
+        _log.debug("Actor Placement before network filtering %s" % (str(weighted_actor_placement)))
+        self.filter_link_placement(app, weighted_actor_placement)
         for actor_id, node_id in weighted_actor_placement.iteritems():
-            _log.info("Actor deployment %s \t-> %s" % (app.actors[actor_id], node_id))
+            _log.debug("Actor deployment %s \t-> %s" % (app.actors[actor_id], node_id))
             # FIXME add callback that recreate the actor locally
             self._node.am.robust_migrate(actor_id, node_id[:], None)
 
@@ -941,23 +989,18 @@ class Deployer(object):
                 self.node.pm.set_port_properties(actor_id=self.actor_map[src_name], port_dir='out', port_name=src_port,
                                                  **kwargs)
 
-        print self.deployable['links']
         for link_name, link_data in self.deployable['links'].iteritems():
-            print "Link"
-            print link_name
-            print link_data
             for l in link_data:
                 try:
                     src_name, src_port = l[0].split('.')
                     dst_name, dst_port = l[1].split('.')
                     src_id = self.actor_map[src_name]
                     dst_id = self.actor_map[dst_name]
-                    link_name_deploy = link_name.split(':', 1)[1]
+                    link_name_deploy = link_name.split(':', 1)[1] # get only link name to search in requirements list
                     deploy_req = self.deploy_info['requirements'].get(link_name_deploy, [])
-                    print "add deployment rules"
-                    print deploy_req
-                    link_id = self.node.link_manager.new(src_id, dst_id, copy.deepcopy(deploy_req))
+                    link_id = self.node.link_manager.new(link_name, src_id, dst_id, copy.deepcopy(deploy_req))
                     self.node.app_manager.add_link(self.app_id, link_id)
+                    _log.debug("App Mgr: Creating link: name %s id %s. Between actor: %s and %s. Deployment rules: %s" % (link_name, link_id, src_name, dst_name, str(deploy_req)))
                 except:
                     _log.error("Error creating link(%s) connecting actor (%s) to actor (%s). Actors ID not found" % (link_name, l[0], l[1]))
                     pass

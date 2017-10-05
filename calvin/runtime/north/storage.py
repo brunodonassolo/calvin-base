@@ -1100,4 +1100,3 @@ class Storage(object):
     def _proxy_send_reply(self, key, value, tunnel, encode, msgid):
         _log.analyze(self.node.id, "+ SERVER", {'msgid': msgid, 'key': key, 'value': value})
         tunnel.send({'cmd': 'REPLY', 'msg_uuid': msgid, 'key': key, 'value': self.coder.encode(value) if encode else value})
-

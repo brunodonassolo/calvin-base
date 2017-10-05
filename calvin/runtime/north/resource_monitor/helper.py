@@ -25,7 +25,6 @@ class ResourceMonitorHelper(object):
         if value is not None:
             old_data = AttributeResolver({"indexed_public": {prefix_index: str(value)}})
             _log.debug("Removing " + str(key) + " for " + prefix_index + ": " + str(value))
-            print("Removing " + str(key) + " for " + prefix_index + ": " + str(value))
             for index in old_data.get_indexed_public():
                 self.storage.remove_index(index=index, value=key, root_prefix_level=2)
 
@@ -33,10 +32,7 @@ class ResourceMonitorHelper(object):
         if new_value is not None:
             new_data = AttributeResolver({"indexed_public": {prefix_index: str(new_value)}})
             _log.debug("After possible removal, adding new node " + str(ident) + " for " + prefix_index + ": " + str(new_value))
-            print("After possible removal, adding new node " + str(ident) + " for " + prefix_index + ": " + str(new_value))
-            print new_data
             for index in new_data.get_indexed_public():
-                print index
                 self.storage.add_index(index=index, value=ident, root_prefix_level=4, cb=None)
 
     def set(self, ident, prefix, prefix_index, value, cb=None):

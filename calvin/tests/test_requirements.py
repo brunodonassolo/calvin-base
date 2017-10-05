@@ -101,7 +101,7 @@ def wait_link_convergence(runtimes):
         rt_ids.append(rt_id)
 
     for rt_id in rt_ids:
-        helpers.retry(30, partial(request_handler.get_index, runtimes[0], 'links/' + str(rt_id)), lambda res: res, "Failed to get index")
+        helpers.retry(30, partial(request_handler.get_index, runtimes[0], 'phyLinks/' + str(rt_id)), lambda res: res, "Failed to get index")
     return rt_ids
 
 @pytest.mark.slow
@@ -244,7 +244,6 @@ class TestDeployScript(unittest.TestCase):
             _log.exception("Test deploy failed")
             raise Exception("Failed deployment of app %s, no use to verify if requirements fulfilled" % args.script.name)
 
-        print "RESULT:", result
         # can be anywhere: src, sum, snk -> rt1 or rt2 or rt3
         assert_helper([rt1, rt2, rt3], lambda actors: result['actor_map']['test_network:src'] in actors)
         assert_helper([rt1, rt2, rt3], lambda actors: result['actor_map']['test_network:sum'] in actors)
@@ -280,6 +279,9 @@ class TestDeployScript(unittest.TestCase):
         assert_helper([rt1, rt2, rt3], lambda actors: result['actor_map']['test_network:src'] in actors)
         assert_helper([rt2, rt3], lambda actors: result['actor_map']['test_network:sum'] in actors)
         assert_helper([rt2, rt3], lambda actors: result['actor_map']['test_network:snk'] in actors)
+        # sum and snk should have only 1 possible placement
+        assert len(result['placement'][result['actor_map']['test_network:sum']]) == 1
+        assert len(result['placement'][result['actor_map']['test_network:snk']]) == 1
         request_handler.delete_application(rt1, result['application_id'])
 
     @pytest.mark.slow
@@ -310,6 +312,9 @@ class TestDeployScript(unittest.TestCase):
         assert_helper([rt1, rt2, rt3], lambda actors: result['actor_map']['test_network:src'] in actors)
         assert_helper([rt2, rt3], lambda actors: result['actor_map']['test_network:sum'] in actors)
         assert_helper([rt2, rt3], lambda actors: result['actor_map']['test_network:snk'] in actors)
+        # sum and snk should have only 1 possible placement
+        assert len(result['placement'][result['actor_map']['test_network:sum']]) == 1
+        assert len(result['placement'][result['actor_map']['test_network:snk']]) == 1
         request_handler.delete_application(rt1, result['application_id'])
 
     @pytest.mark.slow
@@ -348,6 +353,9 @@ class TestDeployScript(unittest.TestCase):
         assert_helper([rt1, rt2, rt3], lambda actors: result['actor_map']['test_network:src'] in actors)
         assert_helper([rt2, rt3], lambda actors: result['actor_map']['test_network:sum'] in actors)
         assert_helper([rt2, rt3], lambda actors: result['actor_map']['test_network:snk'] in actors)
+        # sum and snk should have only 1 possible placement
+        assert len(result['placement'][result['actor_map']['test_network:sum']]) == 1
+        assert len(result['placement'][result['actor_map']['test_network:snk']]) == 1
         request_handler.delete_application(rt1, result['application_id'])
 
 @pytest.mark.slow

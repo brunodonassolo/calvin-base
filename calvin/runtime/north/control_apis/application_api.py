@@ -490,7 +490,6 @@ def handle_deploy_cont(self, app_info, issuetracker, handle, connection, data, s
             elif not deploy_info['requirements']:
                 deploy_info = None
 
-        print app_info
         d = Deployer(
                 deployable=app_info,
                 deploy_info=deploy_info,
