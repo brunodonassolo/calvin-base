@@ -560,7 +560,7 @@ class AppManager(object):
         elif rt2 in placement[actor] and rt1 in placement[dst_actor]:
             return rt2, rt1
 
-    def filter_link_placement(self, app, placement):
+    def filter_link_placement(self, app, placement, status):
         """
         After deciding the actors placement, filter out the possible runtimes considering the links
 
@@ -573,6 +573,7 @@ class AppManager(object):
 
         app: Application structure
         placement: map of actor -> possible runtimes
+        status: result of deployment
         """
 
         # build a map of actors that have links requirements
@@ -592,6 +593,7 @@ class AppManager(object):
             _log.debug("Source actor: " + str(actor))
             for dst_actor, link_set in actor_link[actor]:
                 _log.debug("Dst actor: " + str(dst_actor))
+                found = False
                 if not link_set:
                     _log.debug("No physical link to connect both actors, select 1 runtime to host them")
                     rt = self.filter_link_placement_no_link(placement, actor, dst_actor)
@@ -599,20 +601,25 @@ class AppManager(object):
                     if rt:
                         placement[actor] = [rt]
                         placement[dst_actor] = [rt]
+                        found = True
 
                 for link in link_set:
                     _log.debug("Link: " + str(link))
                     if isinstance(link, dynops.InfiniteElement):
+                        found = True
                         continue
                     rt1, rt2 = self.filter_link_placement_with_link(app, placement, actor, dst_actor, link)
                     if rt1 and rt2:
                         _log.debug('Found a good combinaison, actor %s -> %s, dst_actor %s -> %s' % (actor, rt1, dst_actor, rt2))
                         placement[actor] = [rt1]
                         placement[dst_actor] = [rt2]
+                        found = True
                         break
                     else:
                         _log.debug('Impossible to use this physical link with actor')
-
+                if not found:
+                    _log.debug("Placement impossible for %s -> %s" % (actor, dst_actor))
+                    status = response.CalvinResponse(response.CREATED)
 
         _log.debug("Placement " + str(placement))
 
@@ -677,7 +684,7 @@ class AppManager(object):
             # Get a list of nodes in sorted weighted order
             weighted_actor_placement[actor_id] = [n for (w, n) in sorted(zip(weights, node_ids), reverse=True)]
         _log.debug("Actor Placement before network filtering %s" % (str(weighted_actor_placement)))
-        self.filter_link_placement(app, weighted_actor_placement)
+        self.filter_link_placement(app, weighted_actor_placement, status)
         for actor_id, node_id in weighted_actor_placement.iteritems():
             _log.debug("Actor deployment %s \t-> %s" % (app.actors[actor_id], node_id))
             # FIXME add callback that recreate the actor locally
