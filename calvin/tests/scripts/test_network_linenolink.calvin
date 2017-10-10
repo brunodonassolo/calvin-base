@@ -1,0 +1,7 @@
+src : std.CountTimer()
+sum : std.Sum()
+snk : test.Sink()
+snk.token(routing="collect-tagged")
+link linkA : src.integer > sum.integer
+sum.integer > snk.token
+link linkB : src.integer > snk.token

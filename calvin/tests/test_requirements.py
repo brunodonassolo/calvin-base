@@ -279,9 +279,6 @@ class TestDeployScript(unittest.TestCase):
         assert_helper([rt1, rt2, rt3], lambda actors: result['actor_map']['test_network:src'] in actors)
         assert_helper([rt2, rt3], lambda actors: result['actor_map']['test_network:sum'] in actors)
         assert_helper([rt2, rt3], lambda actors: result['actor_map']['test_network:snk'] in actors)
-        # sum and snk should have only 1 possible placement
-        assert len(result['placement'][result['actor_map']['test_network:sum']]) == 1
-        assert len(result['placement'][result['actor_map']['test_network:snk']]) == 1
         request_handler.delete_application(rt1, result['application_id'])
 
     @pytest.mark.slow
@@ -312,9 +309,6 @@ class TestDeployScript(unittest.TestCase):
         assert_helper([rt1, rt2, rt3], lambda actors: result['actor_map']['test_network:src'] in actors)
         assert_helper([rt2, rt3], lambda actors: result['actor_map']['test_network:sum'] in actors)
         assert_helper([rt2, rt3], lambda actors: result['actor_map']['test_network:snk'] in actors)
-        # sum and snk should have only 1 possible placement
-        assert len(result['placement'][result['actor_map']['test_network:sum']]) == 1
-        assert len(result['placement'][result['actor_map']['test_network:snk']]) == 1
         request_handler.delete_application(rt1, result['application_id'])
 
     @pytest.mark.slow
@@ -353,9 +347,73 @@ class TestDeployScript(unittest.TestCase):
         assert_helper([rt1, rt2, rt3], lambda actors: result['actor_map']['test_network:src'] in actors)
         assert_helper([rt2, rt3], lambda actors: result['actor_map']['test_network:sum'] in actors)
         assert_helper([rt2, rt3], lambda actors: result['actor_map']['test_network:snk'] in actors)
-        # sum and snk should have only 1 possible placement
-        assert len(result['placement'][result['actor_map']['test_network:sum']]) == 1
-        assert len(result['placement'][result['actor_map']['test_network:snk']]) == 1
+        request_handler.delete_application(rt1, result['application_id'])
+
+    @pytest.mark.slow
+    def testNetworkLine(self):
+        #  sum  --- linkA  --- src --- linkB --- snk
+        #  rt1  --- 100G   --- rt2 --- 1s    --- rt3
+        _log.analyze("TESTRUN", "+", {})
+        rt_ids = wait_link_convergence([rt1, rt2, rt3])
+
+        from functools import partial
+        # ok for linkB
+        helpers.retry(30, partial(request_handler.set_bandwidth, rt1, rt_ids[0], rt_ids[1], '100G'), lambda _: True, "Failed to set bandwidth")
+        # ok for linkA
+        helpers.retry(30, partial(request_handler.set_latency,rt2, rt_ids[1], rt_ids[2], '1s'), lambda _: True, "Failed to set latency")
+        helpers.retry(30, partial(request_handler.get_index, rt1, format_index_string({'bandwidth': '100G'})), lambda res: res, "Failed to get index")
+        helpers.retry(30, partial(request_handler.get_index, rt1, format_index_string({'latency': '1s'})), lambda res: res, "Failed to get index")
+
+        from calvin.Tools.cscontrol import control_deploy as deploy_app
+        args = DeployArgs(node='http://%s:5003' % ip_addr,
+                          script=open(test_script_dir+"test_network_line.calvin"), attr=None,
+                                reqs=test_script_dir+"test_network_line.deployjson",
+                                check=True, timeout=TEST_TIMEOUT)
+        result = {}
+        try:
+            result = deploy_app(args)
+        except:
+            _log.exception("Test deploy failed")
+            raise Exception("Failed deployment of app %s, no use to verify if requirements fulfilled" % args.script.name)
+
+        # print "RESULT:", result
+        assert result['requirements_fulfilled']
+        assert_helper([rt1], lambda actors: result['actor_map']['test_network_line:src'] in actors)
+        assert_helper([rt2], lambda actors: result['actor_map']['test_network_line:sum'] in actors)
+        assert_helper([rt3], lambda actors: result['actor_map']['test_network_line:snk'] in actors)
+        request_handler.delete_application(rt1, result['application_id'])
+
+    @pytest.mark.slow
+    def testNetworkLineNoLink(self):
+        #       --- linkA --- src,sum --- linkB --- snk
+        #  rt1  --- 100G  --- rt2     --- 1s    --- rt3
+        _log.analyze("TESTRUN", "+", {})
+        rt_ids = wait_link_convergence([rt1, rt2, rt3])
+
+        from functools import partial
+        # ok for linkB
+        helpers.retry(30, partial(request_handler.set_bandwidth, rt1, rt_ids[0], rt_ids[1], '100G'), lambda _: True, "Failed to set bandwidth")
+        # ok for linkA
+        helpers.retry(30, partial(request_handler.set_latency,rt2, rt_ids[1], rt_ids[2], '1s'), lambda _: True, "Failed to set latency")
+        helpers.retry(30, partial(request_handler.get_index, rt1, format_index_string({'bandwidth': '100G'})), lambda res: res, "Failed to get index")
+        helpers.retry(30, partial(request_handler.get_index, rt1, format_index_string({'latency': '1s'})), lambda res: res, "Failed to get index")
+
+        from calvin.Tools.cscontrol import control_deploy as deploy_app
+        args = DeployArgs(node='http://%s:5003' % ip_addr,
+                          script=open(test_script_dir+"test_network_linenolink.calvin"), attr=None,
+                                reqs=test_script_dir+"test_network_linenolink.deployjson",
+                                check=True, timeout=TEST_TIMEOUT)
+        result = {}
+        try:
+            result = deploy_app(args)
+        except:
+            _log.exception("Test deploy failed")
+            raise Exception("Failed deployment of app %s, no use to verify if requirements fulfilled" % args.script.name)
+
+        # print "RESULT:", result
+        assert_helper([rt2], lambda actors: result['actor_map']['test_network_linenolink:src'] in actors)
+        assert_helper([rt2], lambda actors: result['actor_map']['test_network_linenolink:sum'] in actors)
+        assert_helper([rt3], lambda actors: result['actor_map']['test_network_linenolink:snk'] in actors)
         request_handler.delete_application(rt1, result['application_id'])
 
 @pytest.mark.slow

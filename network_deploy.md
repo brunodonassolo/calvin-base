@@ -24,7 +24,7 @@ The *src.data > snk.data* identifies a link between the *src.data* port and *snk
 src : std.Trigger(tick=1, data="fire")
 snk : io.Log(loglevel="INFO")
 
-link myLink src.data > snk.data
+link myLink : src.data > snk.data
 ---
 
 The work *link* in the beginning of the line is reserved. The string *myLink* identifies this connection.

@@ -531,19 +531,39 @@ class AppManager(object):
         if self._verify_collect_placement(app):
             self.decide_placement(app)
 
-    def filter_link_placement_no_link(self, placement, actor, dst_actor):
+    def filter_update_placement_set(self, actor, rt_actor, dst_actor, rt_dst, plac_set):
+        for opt in plac_set:
+            # actor already in some placement option
+            if actor in opt and opt[actor] == rt_actor:
+                if dst_actor not in opt:
+                    opt[dst_actor] = rt_dst
+                    return
+                elif opt[dst_actor] == rt_dst:
+                    #nothing to do, already there
+                    return
+            # actor already in some placement option
+            if dst_actor in opt and opt[dst_actor] == rt_dst:
+                if actor not in opt:
+                    opt[actor] = rt_actor
+                    return
+                elif opt[actor] == rt_actor:
+                    #nothing to do, already there
+                    return
+        # neither actor nor dst_actor already in some placement option, create a new one
+        plac_set.append({actor: rt_actor, dst_actor: rt_dst})
+
+    def filter_link_placement_no_link(self, app, actor, dst_actor, plac_set):
         """
         Auxiliary method to filter runtimes when no physical link is available
         """
-        rts = placement[actor]
-        if not isinstance(rts, list):
-            rts = [rts]
-        for rt in rts:
+        rts_actor = app.actor_placement[actor]
+        rts_dst = app.actor_placement[dst_actor]
+        for rt in rts_actor:
             # the runtime selected must be acceptable for both actors
-            if rt in placement[dst_actor]:
-                return rt
+            if rt in rts_dst:
+                self.filter_update_placement_set(actor, rt, dst_actor, rt, plac_set)
 
-    def filter_link_placement_with_link(self, app, placement, actor, dst_actor, link):
+    def filter_link_placement_with_link(self, app, actor, dst_actor, link, plac_set):
         """
         Auxiliary method to filter runtimes when 1 physical link is available
         """
@@ -553,14 +573,17 @@ class AppManager(object):
         rt2 = app.phys_link_placement_runtimes[link]['runtime2']
 
         _log.debug("Possible runtimes: %s and %s" % (rt1, rt2))
-        if rt1 not in placement[actor] and rt2 not in placement[actor]:
-            return
-        if rt1 in placement[actor] and rt2 in placement[dst_actor]:
-            return rt1, rt2
-        elif rt2 in placement[actor] and rt1 in placement[dst_actor]:
-            return rt2, rt1
+        useful_link = False
+        if rt1 in app.actor_placement[actor] and rt2 in app.actor_placement[dst_actor]:
+            self.filter_update_placement_set(actor, rt1, dst_actor, rt2, plac_set)
+            useful_link = True
+        if rt2 in app.actor_placement[actor] and rt1 in app.actor_placement[dst_actor]:
+            self.filter_update_placement_set(actor, rt2, dst_actor, rt1, plac_set)
+            useful_link = True
+        return useful_link
 
-    def filter_link_placement(self, app, placement, status):
+
+    def filter_link_placement(self, app, status):
         """
         After deciding the actors placement, filter out the possible runtimes considering the links
 
@@ -572,7 +595,6 @@ class AppManager(object):
         3) set(link1, link2): Several links matches the requirements. We got the first pair of runtimes that respect both actor and link requirements. Note that other possible placements are discarded.
 
         app: Application structure
-        placement: map of actor -> possible runtimes
         status: result of deployment
         """
 
@@ -585,43 +607,41 @@ class AppManager(object):
             actor_link.setdefault(dst_actor, []).append((src_actor, phys_link_placements))
 
         # we are only interested in filtering actors that are in the actor_link map
-        keys_plac = set(placement.keys())
+        keys_plac = set(app.actor_placement.keys())
         keys_act = set(actor_link.keys())
         actors_to_filter = keys_plac & keys_act
 
+        place_set = []
         for actor in actors_to_filter:
             _log.debug("Source actor: " + str(actor))
             for dst_actor, link_set in actor_link[actor]:
-                _log.debug("Dst actor: " + str(dst_actor))
-                found = False
-                if not link_set:
-                    _log.debug("No physical link to connect both actors, select 1 runtime to host them")
-                    rt = self.filter_link_placement_no_link(placement, actor, dst_actor)
-                    _log.debug("Selected runtime: " + str(rt))
-                    if rt:
-                        placement[actor] = [rt]
-                        placement[dst_actor] = [rt]
-                        found = True
+                # don't build the placement set for actors without link requirements (infiniteElement)
+                if any([isinstance(n, dynops.InfiniteElement) for n in link_set]):
+                    continue
 
+                _log.debug("Dst actor: " + str(dst_actor))
+                self.filter_link_placement_no_link(app, actor, dst_actor, place_set)
+                found = False
                 for link in link_set:
                     _log.debug("Link: " + str(link))
-                    if isinstance(link, dynops.InfiniteElement):
+                    if self.filter_link_placement_with_link(app, actor, dst_actor, link, place_set):
                         found = True
-                        continue
-                    rt1, rt2 = self.filter_link_placement_with_link(app, placement, actor, dst_actor, link)
-                    if rt1 and rt2:
-                        _log.debug('Found a good combinaison, actor %s -> %s, dst_actor %s -> %s' % (actor, rt1, dst_actor, rt2))
-                        placement[actor] = [rt1]
-                        placement[dst_actor] = [rt2]
-                        found = True
-                        break
-                    else:
-                        _log.debug('Impossible to use this physical link with actor')
-                if not found:
+                if not found and link_set:
                     _log.debug("Placement impossible for %s -> %s" % (actor, dst_actor))
                     status = response.CalvinResponse(response.CREATED)
 
-        _log.debug("Placement " + str(placement))
+        if place_set:
+            # get the placement that contains the largest number of actors
+            # and prefers the placement where actors are spread between runtimes
+            # otherwise we would always put everybody in the same runtime
+            place_set = sorted(place_set, key=len, reverse=True)
+            place_set = sorted(place_set, key=lambda k : len(set(k.values())), reverse=True)
+            elected_placement = place_set[0]
+            _log.debug("Elected placement" + str(elected_placement))
+            for actor in elected_placement:
+                app.actor_placement[actor] = elected_placement[actor]
+
+        _log.debug("Final actor placement " + str(app.actor_placement))
 
 
     def decide_placement(self, app):
@@ -665,6 +685,8 @@ class AppManager(object):
         _log.analyze(self._node.id, "+ ACTOR MATRIX", {'actor_ids': actor_ids, 'actor_matrix': actor_matrix,
                                             'node_ids': node_ids, 'placement': app.actor_placement}, tb=True)
 
+        _log.debug("Actor Placement before network filtering %s" % (str(app.actor_placement)))
+        self.filter_link_placement(app, status)
         # Weight the actors possible placement with their connectivity matrix
         weighted_actor_placement = {}
         for actor_id in actor_ids:
@@ -683,8 +705,6 @@ class AppManager(object):
             #weighted_actor_placement[actor_id] = node_ids[weights.index(max(weights))]
             # Get a list of nodes in sorted weighted order
             weighted_actor_placement[actor_id] = [n for (w, n) in sorted(zip(weights, node_ids), reverse=True)]
-        _log.debug("Actor Placement before network filtering %s" % (str(weighted_actor_placement)))
-        self.filter_link_placement(app, weighted_actor_placement, status)
         for actor_id, node_id in weighted_actor_placement.iteritems():
             _log.debug("Actor deployment %s \t-> %s" % (app.actors[actor_id], node_id))
             # FIXME add callback that recreate the actor locally
