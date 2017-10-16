@@ -227,6 +227,8 @@ def parse_args():
     cmd_deploy.add_argument('--reqs', metavar='<reqs>', type=str,
                             help='deploy script, currently JSON coded data file',
                             dest='reqs')
+    cmd_deploy.add_argument('-t', '--timeout', dest='timeout', type=int, default=5,
+                           help='Timeout for request in seconds')
     cmd_deploy.set_defaults(func=control_deploy)
 
     # parsers for actor commands
