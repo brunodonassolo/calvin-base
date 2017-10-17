@@ -1,0 +1,9 @@
+{
+    "container" : "76413f4ccdbf",
+    "runtimes" : [
+        {
+            "name": "f5a7fcaf-e845-467a-86a9-c8ffd23c9495",
+            "bandwidth": 1000000
+        }
+    ]
+}
