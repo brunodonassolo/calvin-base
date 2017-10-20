@@ -20,6 +20,7 @@ from calvin.utilities import calvinlogger
 from calvin.utilities import calvinconfig
 from calvin.utilities.calvin_callback import CalvinCB
 from calvin.utilities import calvinuuid
+from calvin.requests import calvinresponse
 
 _conf = calvinconfig.get()
 _log = calvinlogger.get_logger(__name__)
@@ -53,6 +54,7 @@ class StorageProxy(StorageBase):
                                corresponding_server_node_names=[self._server_node_name])
 
     def _got_link(self, master_id, org_cb):
+        _log.debug("_got_link %s, %s" % (master_id, org_cb))
         self.master_id = master_id
         self.tunnel = self.node.proto.tunnel_new(self.master_id, 'storage', {})
         self.tunnel.register_tunnel_down(CalvinCB(self.tunnel_down, org_cb=org_cb))
@@ -114,11 +116,19 @@ class StorageProxy(StorageBase):
         """ Gets called when a storage master replies"""
         _log.analyze(self.node.id, "+ CLIENT", {'payload': payload})
         if 'msg_uuid' in payload and payload['msg_uuid'] in self.replies and 'cmd' in payload and payload['cmd']=='REPLY':
-            self.replies.pop(payload['msg_uuid'])(**{k: v for k, v in payload.iteritems() if k in ('key', 'value')})
+            kwargs = {}
+            if 'key' in payload:
+                kwargs['key'] = payload['key']
+            if 'value' in payload:
+                kwargs['value'] = payload['value']
+            if 'response' in payload:
+                kwargs['value'] = calvinresponse.CalvinResponse(encoded=payload['response'])
+            self.replies.pop(payload['msg_uuid'])(**kwargs)
 
     def send(self, cmd, msg, cb):
         msg_id = calvinuuid.uuid("MSGID")
-        self.replies[msg_id] = cb
+        if cb:
+            self.replies[msg_id] = cb
         msg['msg_uuid'] = msg_id
         self.tunnel.send(dict(msg, cmd=cmd, msg_uuid=msg_id))
 
@@ -136,6 +146,10 @@ class StorageProxy(StorageBase):
         _log.analyze(self.node.id, "+ CLIENT", {'key': key})
         self.send(cmd='GET',msg={'key':key}, cb=cb)
 
+    def delete(self, key, cb=None):
+        _log.analyze(self.node.id, "+ CLIENT", {'key': key})
+        self.send(cmd='DELETE',msg={'key':key}, cb=cb)
+
     def get_concat(self, key, cb=None):
         """
             Gets a value from the storage
@@ -150,6 +164,22 @@ class StorageProxy(StorageBase):
     def remove(self, key, value, cb=None):
         _log.analyze(self.node.id, "+ CLIENT", {'key': key, 'value': value})
         self.send(cmd='REMOVE',msg={'key':key, 'value': value}, cb=cb)
+
+    def add_index(self, prefix, indexes, value, cb=None):
+        _log.analyze(self.node.id, "+ CLIENT", {'indexes': indexes, 'value': value})
+        self.send(cmd='ADD_INDEX',msg={'prefix': prefix, 'index': indexes, 'value': value}, cb=cb)
+
+    def remove_index(self, prefix, indexes, value, cb=None):
+        _log.analyze(self.node.id, "+ CLIENT", {'indexes': indexes, 'value': value})
+        self.send(cmd='REMOVE_INDEX',msg={'prefix': prefix, 'index': indexes, 'value': value}, cb=cb)
+
+    def get_index(self, prefix, index, cb=None):
+        _log.analyze(self.node.id, "+ CLIENT", {'index': index})
+        self.send(cmd='GET_INDEX',msg={'prefix': prefix, 'index': index}, cb=cb)
+
+    def delete_index(self, prefix, indexes, cb=None):
+        _log.analyze(self.node.id, "+ CLIENT", {'indexes': indexes})
+        self.send(cmd='DELETE_INDEX',msg={'prefix': prefix, 'index': indexes}, cb=cb)
 
     def bootstrap(self, addrs, cb=None):
         _log.analyze(self.node.id, "+ CLIENT", None)

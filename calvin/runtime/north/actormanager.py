@@ -180,7 +180,6 @@ class ActorManager(object):
             if '_shadow_args' in state['managed']:
                 # We were a shadow, do a full init
                 args = state['managed'].pop('_shadow_args')
-                state['private']['_managed'].remove('_shadow_args')
                 a.init(**args)
                 # If still shadow don't call did_migrate
                 did_migrate = isinstance(a, ShadowActor)
@@ -205,7 +204,7 @@ class ActorManager(object):
         # @TOOD - check order here
         self.node.metering.remove_actor_info(actor_id)
         a = self.actors[actor_id]
-        a.will_end()
+        a._will_end()
         port_ids = self.node.pm.remove_ports_of_actor(a)
         # @TOOD - insert callback here
         if not temporary:

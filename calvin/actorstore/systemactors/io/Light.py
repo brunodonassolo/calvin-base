@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from calvin.actor.actor import Actor, condition, stateguard, calvinsys
+from calvin.actor.actor import Actor, manage, condition, stateguard, calvinsys
 
 
 class Light(Actor):
@@ -25,28 +25,14 @@ class Light(Actor):
       on : true if light should be on, false if turned off
     """
 
+    @manage(include = ["light"])
     def init(self):
-        self.light= None
-        self.setup()
-
-    def setup(self):
         self.light = calvinsys.open(self, "io.light")
 
-    def will_migrate(self):
-        calvinsys.close(self.light)
-        self.light = None
-
-    def will_end(self):
-        if self.light :
-            calvinsys.close(self.light)
-
-    def did_migrate(self):
-        self.setup()
-
-    @stateguard(lambda self: self.light and calvinsys.can_write(self.light))
+    @stateguard(lambda self: calvinsys.can_write(self.light))
     @condition(action_input=("on",))
-    def set_state(self, state):
-        calvinsys.write(self.light, 1 if state else 0)
+    def light(self, on):
+        calvinsys.write(self.light, 1 if on else 0)
 
-    action_priority = (set_state, )
+    action_priority = (light, )
     requires = ["io.light"]

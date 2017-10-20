@@ -22,51 +22,35 @@ _log = get_logger(__name__)
 class Temperature(Actor):
 
     """
-    Measure temperature. Takes the frequency of measurements, in Hz, as input.
+    Measure temperature. Takes the period of measurements, in seconds, as input.
 
     Outputs:
         centigrade :  temperature, in centigrade
     """
 
-    @manage(['frequency'])
-    def init(self, frequency):
-        self.frequency = frequency
-        self.setup()
+    @manage(['period', 'timer', 'temperature'])
+    def init(self, period):
+        self.period = period
+        self.temperature = calvinsys.open(self, "io.temperature")
+        self.timer = calvinsys.open(self, "sys.timer.once")
+        calvinsys.write(self.timer, 0)
 
-    def setup(self):
-        self._temperature = calvinsys.open(self, "io.temperature")
-        self._timer = calvinsys.open(self, "sys.timer.once")
-        calvinsys.write(self._timer, 0)
-
-    def will_migrate(self):
-        calvinsys.close(self._temperature)
-        self._temperature = None
-
-    def did_migrate(self):
-        self.setup()
-
-    def will_end(self):
-        calvinsys.close(self._temperature)
-        calvinsys.close(self._timer)
-
-    @stateguard(lambda self: calvinsys.can_read(self._temperature))
+    @stateguard(lambda self: calvinsys.can_read(self.temperature))
     @condition([], ['centigrade'])
     def read_measurement(self):
-        temperature = calvinsys.read(self._temperature)
+        value = calvinsys.read(self.temperature)
         # reset timer
-        calvinsys.write(self._timer, 1.0/self.frequency) 
-        return (temperature,)
+        calvinsys.write(self.timer, self.period)
+        return (value,)
 
-    @stateguard(lambda self: calvinsys.can_read(self._timer) and calvinsys.can_write(self._temperature))
+    @stateguard(lambda self: calvinsys.can_read(self.timer) and calvinsys.can_write(self.temperature))
     @condition([], [])
     def start_measurement(self):
         # ack timer
-        calvinsys.read(self._timer)
+        calvinsys.read(self.timer)
         # start measurement
-        calvinsys.write(self._temperature, True)
+        calvinsys.write(self.temperature, True)
 
 
     action_priority = (read_measurement, start_measurement)
     requires =  ['io.temperature', 'sys.timer.once']
-
-

@@ -62,6 +62,12 @@ class StorageBase(object):
         """
         raise NotImplementedError()
 
+    def delete(self, key, cb=None):
+        """
+            Delete a value from the storage
+        """
+        raise NotImplementedError()
+
     def get_concat(self, key, cb=None):
         """
             Gets a value from the storage
@@ -72,6 +78,18 @@ class StorageBase(object):
         raise NotImplementedError()
 
     def remove(self, key, value, cb=None):
+        raise NotImplementedError()
+
+    def add_index(self, prefix, indexes, value, cb=None):
+        raise NotImplementedError()
+
+    def remove_index(self, prefix, indexes, value, cb=None):
+        raise NotImplementedError()
+
+    def get_index(self, prefix, index, cb=None):
+        raise NotImplementedError()
+
+    def delete_index(self, prefix, indexes, cb=None):
         raise NotImplementedError()
 
     def bootstrap(self, addrs, cb=None):

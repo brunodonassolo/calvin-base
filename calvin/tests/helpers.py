@@ -3,12 +3,14 @@ from calvin.utilities.attribute_resolver import format_index_string
 from calvin.utilities import calvinconfig
 from calvin.utilities import calvinlogger
 from calvin.requests.request_handler import RT
+from calvin.requests import calvinresponse
 import os
 import time
 import multiprocessing
 import copy
 import numbers
 import netifaces
+import json
 
 _log = calvinlogger.get_logger(__name__)
 _conf = calvinconfig.get()
@@ -160,8 +162,11 @@ def delete_app(request_handler, runtime, app_id, check_actor_ids=None, retries=1
                 response = request_handler.async_response(r)
                 if response is not None:
                     gone = False
-            except:
-                pass
+            except Exception as e:
+                msg = str(e.message)
+                if not msg.startswith(str(calvinresponse.NOT_FOUND)):
+                    gone = False
+                _log.exception("verify_actors_gone %s %s" % (gone, msg))
         return gone
 
     try:
@@ -739,6 +744,11 @@ def start_runtime0(runtimes, rt, hostname, request_handler, tls=False, enroll_pa
     except:
         logfile = None
         outfile = None
+    try:
+        # Dump attribute file to allow manual check of starting runtimes later
+        json.dump(runtimes[0]["attributes"], open("/tmp/calvin5000.attr", "w"))
+    except:
+        pass
     csruntime(hostname, port=5000, controlport=5020, attr=runtimes[0]["attributes"],
                loglevel=_config_pytest.getoption("loglevel"), logfile=logfile, outfile=outfile,
                configfile="/tmp/calvin5000.conf")
@@ -763,6 +773,11 @@ def start_other_runtimes(runtimes, rt, hostname, request_handler, tls=False):
         except:
             logfile = None
             outfile = None
+        try:
+            # Dump attribute file to allow manual check of starting runtimes later
+            json.dump(runtimes[0]["attributes"], open("/tmp/calvin500{}.attr".format(i), "w"))
+        except:
+            pass
         csruntime(hostname,
                   port=5000+i,
                   controlport=5020+i,
