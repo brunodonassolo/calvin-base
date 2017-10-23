@@ -16,8 +16,11 @@ if [ $status -ne 0 ]; then
   exit $status
 fi
 
-ip_addr=`ifconfig eth0 | grep 'inet addr' | cut -d: -f2 | awk '{print $1}'`
-csruntime -n $ip_addr -p $CALVIN_PORT -c $CALVIN_CONTROL_PORT --loglevel=INFO &
+if [ -z "$CALVIN_IP" ];
+then
+    CALVIN_IP=`ifconfig eth0 | grep 'inet addr' | cut -d: -f2 | awk '{print $1}'`
+fi
+csruntime -n $CALVIN_IP -p $CALVIN_PORT -c $CALVIN_CONTROL_PORT --loglevel=INFO &
 status=$?
 if [ $status -ne 0 ]; then
   echo "Failed to start csruntime: $status"
