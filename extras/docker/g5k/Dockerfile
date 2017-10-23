@@ -1,5 +1,9 @@
 FROM alpine:3.2
 ARG branch=networkMonitor
+ARG mode="dht"
+ARG proxy_ip=""
+ARG port=5000
+ARG control_port=5001
 
 #calvin
 RUN apk --update add python py-pip openssl ca-certificates \
@@ -27,7 +31,12 @@ RUN cd $HOME/go/src/github.com/prometheus/blackbox_exporter && make build
 ENV PATH=$PATH:/root/go/bin/
 
 WORKDIR /calvin-base/
-EXPOSE 5000 5001 19999
+EXPOSE $port $control_port 19999
 
 COPY calvin_startup.sh calvin_startup.sh
+
+ENV CALVIN_GLOBAL_STORAGE_TYPE="\"$mode\""
+ENV CALVIN_GLOBAL_STORAGE_PROXY="\"$proxy_ip\"" 
+ENV CALVIN_PORT=$port
+ENV CALVIN_CONTROL_PORT=$control_port
 CMD ./calvin_startup.sh
