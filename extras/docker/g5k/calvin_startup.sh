@@ -20,7 +20,13 @@ if [ -z "$CALVIN_IP" ];
 then
     CALVIN_IP=`ifconfig eth0 | grep 'inet addr' | cut -d: -f2 | awk '{print $1}'`
 fi
-csruntime -n $CALVIN_IP --external $CALVIN_EXTERNAL_IP --external-control $CALVIN_EXTERNAL_CONTROL_IP -p $CALVIN_PORT -c $CALVIN_CONTROL_PORT --loglevel=INFO &
+if [ -z "$CALVIN_EXTERNAL_IP" -o -z "$CALVIN_EXTERNAL_CONTROL_IP" ];
+then
+    csruntime -n $CALVIN_IP -p $CALVIN_PORT -c $CALVIN_CONTROL_PORT --loglevel=INFO &
+else
+    csruntime -n $CALVIN_IP --external $CALVIN_EXTERNAL_IP --external-control $CALVIN_EXTERNAL_CONTROL_IP -p $CALVIN_PORT -c $CALVIN_CONTROL_PORT --loglevel=INFO &
+fi
+
 status=$?
 if [ $status -ne 0 ]; then
   echo "Failed to start csruntime: $status"
