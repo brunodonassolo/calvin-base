@@ -20,11 +20,15 @@ if [ -z "$CALVIN_IP" ];
 then
     CALVIN_IP=`ifconfig eth0 | grep 'inet addr' | cut -d: -f2 | awk '{print $1}'`
 fi
+if [ -z "$CALVIN_ATTRIBUTES" ];
+then
+    CALVIN_ATTRIBUTES='{}'
+fi
 if [ -z "$CALVIN_EXTERNAL_IP" -o -z "$CALVIN_EXTERNAL_CONTROL_IP" ];
 then
-    csruntime -n $CALVIN_IP -p $CALVIN_PORT -c $CALVIN_CONTROL_PORT --loglevel=INFO &
+    csruntime -n $CALVIN_IP -p $CALVIN_PORT -c $CALVIN_CONTROL_PORT --attr $CALVIN_ATTRIBUTES --loglevel=INFO &
 else
-    csruntime -n $CALVIN_IP --external $CALVIN_EXTERNAL_IP --external-control $CALVIN_EXTERNAL_CONTROL_IP -p $CALVIN_PORT -c $CALVIN_CONTROL_PORT --loglevel=INFO &
+    csruntime -n $CALVIN_IP --external $CALVIN_EXTERNAL_IP --external-control $CALVIN_EXTERNAL_CONTROL_IP -p $CALVIN_PORT -c $CALVIN_CONTROL_PORT --attr $CALVIN_ATTRIBUTES --loglevel=INFO &
 fi
 
 status=$?
