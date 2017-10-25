@@ -3,6 +3,7 @@ import argparse
 import docker
 import time
 import requests
+import socket
 
 INTERVAL=25 # range between valid values
 SLEEP=60 #monitor information each sleep seconds
@@ -81,7 +82,10 @@ if __name__ == "__main__":
 
     client = docker.APIClient(base_url='unix://var/run/docker.sock')
     ip_addr = client.inspect_container(args.container)['NetworkSettings']['IPAddress']
+    if not ip_addr:
+        ip_addr = socket.gethostbyname(socket.gethostname())
 
+    print "Container IP address: %s" % ip_addr
     data = client.stats(args.container, decode=True, stream=False)
     update_memory(args.container, data, ip_addr)
     update_cpu(args.container, data, ip_addr)

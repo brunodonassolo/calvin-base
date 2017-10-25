@@ -80,6 +80,8 @@ if __name__ == "__main__":
     
     client = docker.APIClient(base_url='unix://var/run/docker.sock')
     ip_addr = client.inspect_container(cfg['container'])['NetworkSettings']['IPAddress']
+    if not ip_addr:
+        ip_addr = socket.gethostbyname(socket.gethostname())
 
     print "Container IP address: %s" % ip_addr
     
