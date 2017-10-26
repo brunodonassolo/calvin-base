@@ -38,7 +38,7 @@ if __name__ == "__main__":
     print 'interface ' + args.intf + ' world bidirectional ethernet balanced rate 10000Mbit'
     node_id = get_node_id(ip_addr)
     for rt in args.runtimes:
-        print '\t class calvin' + node_id + rt
+        print '\t class calvin' + node_id + '_' + rt
         print '\t\tmatch tcp sports 5000'
         remote_ip = get_peer_node_ip(ip_addr = ip_addr, rt = rt)
         print '\t\tmatch input src ' + remote_ip
