@@ -18,7 +18,7 @@ def round_latency(lat):
 
 def update_latency(ip_addr, id1, id2):
     print "Updating latency between nodes %s and %s" % (id1, id2)
-    dst_ip = get_peer_node_ip(ip_addr, id2)
+    dst_ip,_ = get_peer_node_ip(ip_addr, id2)
     url = 'http://' + ip_addr + ':9115/probe?target=' + dst_ip + '&module=icmp'
     print '- Url used: %s' % url
     data = requests.get(url)
