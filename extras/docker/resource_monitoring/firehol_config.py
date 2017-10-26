@@ -22,8 +22,8 @@ def get_peer_node_ip(ip_addr, rt, port = 5001):
         print "Error getting IP address for runtime %s" % rt
         return
     uri = data.json()['uris'][0]
-    ip = re.search( r'[0-9]+(?:\.[0-9]+){3}', uri).group()
-    return ip
+    res = re.search( r'[0-9]+(?:\.[0-9]+){3}:([0-9]+)', uri)
+    return res.group(0), res.group(1)
     
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Generates a config for FireQOS based on runtimes.')
@@ -38,7 +38,7 @@ if __name__ == "__main__":
     print 'interface ' + args.intf + ' world bidirectional ethernet balanced rate 10000Mbit'
     node_id = get_node_id(ip_addr)
     for rt in args.runtimes:
+        remote_ip, remote_port = get_peer_node_ip(ip_addr = ip_addr, rt = rt)
         print '\t class calvin' + node_id + '_' + rt
-        print '\t\tmatch tcp sports 5000'
-        remote_ip = get_peer_node_ip(ip_addr = ip_addr, rt = rt)
+        print '\t\tmatch tcp sports ' + remote_port
         print '\t\tmatch input src ' + remote_ip
