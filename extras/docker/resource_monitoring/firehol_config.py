@@ -31,6 +31,7 @@ def get_peer_node_ip(ip_addr, rt, port = 5001):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Generates a config for FireQOS based on runtimes.')
     parser.add_argument('-a', '--addr', type=str, help='Calvin address', required=True)
+    parser.add_argument('-p', '--port', type=int, help='Calvin port', required=False, default=5001)
     parser.add_argument('-i', '--intf', type=str, help='Interface name', required=True)
     parser.add_argument('-r', '--runtimes', type=str, nargs='+', help='List of peers.', required=True)
     args = parser.parse_args()
@@ -39,9 +40,9 @@ if __name__ == "__main__":
 
     print 'server_netdata_ports="tcp/19999"'
     print 'interface ' + args.intf + ' world bidirectional ethernet balanced rate 10000Mbit'
-    node_id = get_node_id(ip_addr)
+    node_id = get_node_id(ip_addr, args.port)
     for rt in args.runtimes:
-        remote_ips = get_peer_node_ip(ip_addr = ip_addr, rt = rt)
+        remote_ips = get_peer_node_ip(ip_addr = ip_addr, rt = rt, port = args.port)
         print '\t class calvin' + node_id + '_' + rt
         for remote_ip in remote_ips:
             print '\t\tmatch host ' + remote_ip[0] + ' port ' + remote_ip[1]
