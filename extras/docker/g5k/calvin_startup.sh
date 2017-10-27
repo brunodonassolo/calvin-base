@@ -28,7 +28,7 @@ if [ -z "$CALVIN_EXTERNAL_IP" -o -z "$CALVIN_EXTERNAL_CONTROL_IP" ];
 then
     csruntime -n $CALVIN_IP -p $CALVIN_PORT -c $CALVIN_CONTROL_PORT --attr "$CALVIN_ATTRIBUTES" --loglevel=INFO &
 else
-    csruntime -n $CALVIN_IP --external $CALVIN_EXTERNAL_IP --external-control $CALVIN_EXTERNAL_CONTROL_IP -p $CALVIN_PORT -c $CALVIN_CONTROL_PORT --attr $CALVIN_ATTRIBUTES --loglevel=INFO &
+    csruntime -n $CALVIN_IP --external $CALVIN_EXTERNAL_IP --external-control $CALVIN_EXTERNAL_CONTROL_IP -p $CALVIN_PORT -c $CALVIN_CONTROL_PORT --attr "$CALVIN_ATTRIBUTES" --loglevel=INFO &
 fi
 
 status=$?
