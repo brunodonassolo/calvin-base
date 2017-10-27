@@ -25,7 +25,7 @@ def get_peer_node_ip(ip_addr, rt, port = 5001):
     ips = []
     for uri in data.json()['uris']:
         res = re.search( r'([0-9]+(?:\.[0-9]+){3}):([0-9]+)', uri)
-       ips.append((res.group(1), res.group(2)))
+        ips.append((res.group(1), res.group(2)))
     return ips
 
 if __name__ == "__main__":
