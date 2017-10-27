@@ -18,15 +18,22 @@ def round_latency(lat):
 
 def update_latency(ip_addr, id1, id2):
     print "Updating latency between nodes %s and %s" % (id1, id2)
-    dst_ip,_ = get_peer_node_ip(ip_addr, id2)
-    url = 'http://' + ip_addr + ':9115/probe?target=' + dst_ip + '&module=icmp'
-    print '- Url used: %s' % url
-    data = requests.get(url)
-    if not data.ok:
-        print "- Error getting latency between %s and %s" % (id1, id2)
-        return
+    dst_ips = get_peer_node_ip(ip_addr, id2)
 
-    lat = re.search(r'probe_duration_seconds (\d*\.\d+|\d+)', data.text).group(1)
+    lat = 0
+    for dst_ip in dst_ips:
+        url = 'http://' + ip_addr + ':9115/probe?target=' + dst_ip[0] + '&module=icmp'
+        print '- Url used: %s' % url
+        data = requests.get(url)
+        if not data.ok:
+            print "- Error getting latency between %s and %s" % (id1, id2)
+            continue
+
+        lat_tmp = re.search(r'probe_duration_seconds (\d*\.\d+|\d+)', data.text).group(1)
+        print '- Latency read: %s' % lat_tmp
+        if lat_tmp > lat:
+            lat = lat_tmp
+
     lat_rounded = round_latency(float(lat)*1000000)
     print '- New value: %s, read %s seconds' % (lat_rounded, lat)
 
@@ -45,8 +52,8 @@ def round_bandwidth(band):
 
 def update_bandwidth(ip_addr, id1, id2, band_total):
     print "Updating bandwidth between nodes %s and %s" % (id1, id2)
-    url_out = 'http://' + ip_addr + ':19999/api/v1/data?chart=tc.world_out&dimension=calvin' + id1 + id2 + '&points=1&after=-1'
-    url_in = 'http://' + ip_addr + ':19999/api/v1/data?chart=tc.world_in&dimension=calvin' + id1 + id2 + '&points=1&after=-1'
+    url_out = 'http://' + ip_addr + ':19999/api/v1/data?chart=tc.world_out&dimension=calvin' + id1 + '_' + id2 + '&points=1&after=-1'
+    url_in = 'http://' + ip_addr + ':19999/api/v1/data?chart=tc.world_in&dimension=calvin' + id1 + '_' + id2 + '&points=1&after=-1'
 
     data_out = requests.get(url_out)
     data_in = requests.get(url_in)
