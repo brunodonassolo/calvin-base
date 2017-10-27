@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Start the first process
-netdata
+netdata -p $NETDATA_PORT
 status=$?
 if [ $status -ne 0 ]; then
   echo "Failed to start netdata: $status"
@@ -9,7 +9,7 @@ if [ $status -ne 0 ]; then
 fi
 
 # Start the second process
-blackbox_exporter --config.file="/root/go/src/github.com/prometheus/blackbox_exporter/blackbox.yml"&
+blackbox_exporter --web.listen-address=":$BLACKBOX_PORT" --config.file="/root/go/src/github.com/prometheus/blackbox_exporter/blackbox.yml"&
 status=$?
 if [ $status -ne 0 ]; then
   echo "Failed to start blackbox_exporter: $status"
