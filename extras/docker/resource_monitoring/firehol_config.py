@@ -22,8 +22,8 @@ def get_peer_node_ip(ip_addr, rt, port = 5001):
         print "Error getting IP address for runtime %s" % rt
         return
     uri = data.json()['uris'][0]
-    res = re.search( r'[0-9]+(?:\.[0-9]+){3}:([0-9]+)', uri)
-    return res.group(0), res.group(1)
+    res = re.search( r'([0-9]+(?:\.[0-9]+){3}):([0-9]+)', uri)
+    return res.group(1), res.group(2)
     
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Generates a config for FireQOS based on runtimes.')
