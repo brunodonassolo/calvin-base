@@ -2,8 +2,6 @@ FROM alpine:3.2
 ARG branch=networkMonitor
 ARG port=5000
 ARG control_port=5001
-ARG netdata_port=19999
-ARG blackbox_port=9115
 
 #calvin
 RUN apk --update add python py-pip openssl ca-certificates \
@@ -31,7 +29,6 @@ RUN cd $HOME/go/src/github.com/prometheus/blackbox_exporter && make build
 ENV PATH=$PATH:/root/go/bin/
 
 WORKDIR /calvin-base/
-EXPOSE $port $control_port $netdata_port $blackbox_port
 
 COPY calvin_startup.sh calvin_startup.sh
 
