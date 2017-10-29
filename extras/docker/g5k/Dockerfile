@@ -1,7 +1,6 @@
 FROM alpine:3.2
 ARG branch=networkMonitor
 ARG port=5000
-ARG control_port=5001
 
 #calvin
 RUN apk --update add python py-pip openssl ca-certificates \
@@ -32,6 +31,4 @@ WORKDIR /calvin-base/
 
 COPY calvin_startup.sh calvin_startup.sh
 
-ENV CALVIN_PORT=$port
-ENV CALVIN_CONTROL_PORT=$control_port
 CMD ./calvin_startup.sh
