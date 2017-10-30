@@ -45,4 +45,5 @@ if __name__ == "__main__":
         remote_ips = get_peer_node_ip(ip_addr = ip_addr, rt = rt, port = args.port)
         print '\t class calvin' + node_id + '_' + rt
         for remote_ip in remote_ips:
-            print '\t\tmatch host ' + remote_ip[0] + ' port ' + remote_ip[1]
+#            print '\t\tmatch host ' + remote_ip[0] + ' port ' + remote_ip[1]
+            print '\t\tmatch host ' + remote_ip[0]
