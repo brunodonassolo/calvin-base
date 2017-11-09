@@ -8,7 +8,7 @@ RUN apk --update add python py-pip openssl ca-certificates \
       && pip install --upgrade pip \
       && git clone -b $branch https://github.com/brunodonassolo/calvin-base.git calvin-base \
       && cd /calvin-base \
-      && pip install --upgrade -r requirements.txt -r test-requirements.txt -e . \
+      && pip install --upgrade -r requirements.txt -r test-requirements.txt -r calvin/actorstore/systemactors/sensor/requirements.txt -e . \
       && apk del build-dependencies && rm -rf /var/cache/apk/*
 RUN apk --update add curl
 
