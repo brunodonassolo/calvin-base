@@ -1,50 +1,16 @@
 {
-    "actors": {
-        "access_control_demo_part5:bell": {
-            "actor_type": "media.MediaPlayer", 
-            "args": {
-                "media_file": "dingdong.ogg"
-            }, 
-            "signature": "09bd0a9af355aecb05c65508494ef3580ca8f4a2d0b026058effad3fbfc7bf9a"
-        }, 
-        "access_control_demo_part5:button": {
-            "actor_type": "io.GPIOReader", 
-            "args": {
-                "edge": "b", 
-                "gpio_pin": 23, 
-                "pull": "d"
-            }, 
-            "signature": "b8a738b359dd1aa1327b5e298cb13ef3eb267368d221e35ae28697c010a8c2ce"
-        }, 
-        "access_control_demo_part5:camera": {
-            "actor_type": "media.Camera", 
-            "args": {}, 
-            "signature": "9030eabce45c273b2f43402fa5dfd72e219937fb57978ddfabe944025b22d2fe"
-        }, 
-        "access_control_demo_part5:fd": {
-            "actor_type": "media.FaceDetect", 
-            "args": {}, 
-            "signature": "4ebe5bd5b0dbcdf9d4e5a0ebc631acfb2a7147af7e5355897178b13f1758a4d2"
-        }, 
-        "access_control_demo_part5:screen": {
-            "actor_type": "media.ImageRenderer", 
-            "args": {}, 
-            "signature": "e7a548b578fa70c317dfaf8ed2d2132bde8c1f568600a13b775c5aee25d336ec"
-        }
-    }, 
     "connections": {
         "access_control_demo_part5:button.state": [
             "access_control_demo_part5:camera.trigger"
         ], 
-        "access_control_demo_part5:camera.image": [
-            "access_control_demo_part5:fd.image", 
-            "access_control_demo_part5:screen.image"
-        ], 
-        "access_control_demo_part5:fd.faces": [
+        "access_control_demo_part5:fd.objects": [
             "access_control_demo_part5:bell.play"
+        ], 
+        "access_control_demo_part5:camera.b64image": [
+            "access_control_demo_part5:fd.b64image", 
+            "access_control_demo_part5:screen.b64image"
         ]
     }, 
-    "name": "access_control_demo_part5", 
     "port_properties": {
         "access_control_demo_part5:bell": [
             {
@@ -55,10 +21,26 @@
                 }
             }
         ], 
-        "access_control_demo_part5:button": [
+        "access_control_demo_part5:screen": [
+            {
+                "direction": "in", 
+                "port": "b64image", 
+                "properties": {
+                    "nbr_peers": 1
+                }
+            }
+        ], 
+        "access_control_demo_part5:fd": [
             {
                 "direction": "out", 
-                "port": "state", 
+                "port": "objects", 
+                "properties": {
+                    "nbr_peers": 1
+                }
+            }, 
+            {
+                "direction": "in", 
+                "port": "b64image", 
                 "properties": {
                     "nbr_peers": 1
                 }
@@ -74,37 +56,51 @@
             }, 
             {
                 "direction": "out", 
-                "port": "image", 
+                "port": "b64image", 
                 "properties": {
                     "nbr_peers": 2
                 }
             }
         ], 
-        "access_control_demo_part5:fd": [
-            {
-                "direction": "in", 
-                "port": "image", 
-                "properties": {
-                    "nbr_peers": 1
-                }
-            }, 
+        "access_control_demo_part5:button": [
             {
                 "direction": "out", 
-                "port": "faces", 
-                "properties": {
-                    "nbr_peers": 1
-                }
-            }
-        ], 
-        "access_control_demo_part5:screen": [
-            {
-                "direction": "in", 
-                "port": "image", 
+                "port": "state", 
                 "properties": {
                     "nbr_peers": 1
                 }
             }
         ]
     }, 
-    "valid": true
+    "valid": true, 
+    "actors": {
+        "access_control_demo_part5:bell": {
+            "args": {
+                "audiofile": "dingdong.ogg"
+            }, 
+            "actor_type": "media.PlayAudio", 
+            "signature": "eccae54926401a99a86bc2f10fe10c8b30c6064270bacdf6bedd685c6f703d51"
+        }, 
+        "access_control_demo_part5:screen": {
+            "args": {}, 
+            "actor_type": "media.ImageSink", 
+            "signature": "a4dda0c10a7073d7f27a96d152ed6371dc012d7db0e92c43570b8773ff9b9fc7"
+        }, 
+        "access_control_demo_part5:fd": {
+            "args": {}, 
+            "actor_type": "media.FaceCounter", 
+            "signature": "60138529e3273c3d42c83b4608a4abe119f637099fd2da1c5a0dcd70e6410b91"
+        }, 
+        "access_control_demo_part5:camera": {
+            "args": {}, 
+            "actor_type": "media.ImageSource", 
+            "signature": "24be25ab36ecd3f14d8ff9616f735cd4b72d826385715156fc2bee84179b87d9"
+        }, 
+        "access_control_demo_part5:button": {
+            "args": {}, 
+            "actor_type": "io.Button", 
+            "signature": "489cd10a57de72e45ea1202fff45e6ae1a742ba336715264f98af4aa8b1b55d6"
+        }
+    }, 
+    "name": "access_control_demo_part5"
 }

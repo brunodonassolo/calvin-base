@@ -32,8 +32,7 @@ class Distance(Actor):
     def init(self, period):
         self.period = period
         self.distance = calvinsys.open(self, "io.distance")
-        self.timer = calvinsys.open(self, "sys.timer.repeating")
-        calvinsys.write(self.timer, period)
+        self.timer = calvinsys.open(self, "sys.timer.repeating", period=period)
 
     @stateguard(lambda self: calvinsys.can_read(self.distance))
     @condition([], ['meters'])
@@ -47,6 +46,17 @@ class Distance(Actor):
         calvinsys.read(self.timer)
         calvinsys.write(self.distance, True)
 
-
     action_priority = (read_measurement, start_measurement)
-    requires =  ['io.distance', 'sys.timer.repeating']
+    requires = ['io.distance', 'sys.timer.repeating']
+
+
+    test_kwargs = {'period': 10}
+    test_calvinsys = {'io.distance': {'read': [10, 12, 0, 5],
+                                      'write': [True]},
+                      'sys.timer.repeating': {'read': ['dummy'],
+                                              'write': [10]}}
+    test_set = [
+        {
+            'outports': {'meters': [10, 12, 0, 5]}
+        }
+    ]

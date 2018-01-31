@@ -10,6 +10,7 @@ from calvin.runtime.north.plugins.port import DISCONNECT
 from calvin.utilities.security import security_enabled
 from routes import handler, register, uuid_re
 from authentication import authentication_decorator
+from calvin.requests import calvinresponse
 
 _log = get_logger(__name__)
 
@@ -56,6 +57,8 @@ def handle_new_actor(self, handle, connection, match, data, hdr):
     """
     POST /actor
     Create a new actor
+    NOTE: this should only be allowed for testing purposes as it allows bypassing application signature
+    verification.
     Body:
     {
         "actor_type:" <type of actor>,
@@ -66,8 +69,10 @@ def handle_new_actor(self, handle, connection, match, data, hdr):
     Response: {"actor_id": <actor-id>}
     """
     try:
-        actor_id = self.node.new(actor_type=data['actor_type'], args=data[
-                                 'args'], deploy_args=data['deploy_args'])
+        actor_id = self.node.new(actor_type=data['actor_type'], args=data['args'],
+                                 security=self.security,
+                                 access_decision=True,
+                                 deploy_args=data['deploy_args'])
         status = calvinresponse.OK
     except:
         actor_id = None
@@ -128,6 +133,19 @@ def handle_actor_report(self, handle, connection, match, data, hdr):
         status = calvinresponse.NOT_FOUND
     self.send_response(handle, connection, None if report is None else json.dumps(report, default=repr), status=status)
 
+@register
+def handle_actor_migrate_proto_cb(self, handle, connection, status, *args, **kwargs):
+    self.send_response(handle, connection, None, status=status.status)
+
+@register
+def handle_actor_migrate_lookup_peer_cb(self, key, value, handle, connection, actor_id, peer_node_id):
+    if calvinresponse.isnotfailresponse(value):
+        self.node.proto.actor_migrate_direct(value['node_id'],
+            CalvinCB(self.handle_actor_migrate_proto_cb, handle, connection),
+            actor_id,
+            peer_node_id)
+    else:
+        self.send_response(handle, connection, None, status=calvinresponse.NOT_FOUND)
 
 @handler(r"POST /actor/(ACTOR_" + uuid_re + "|" + uuid_re + ")/migrate\sHTTP/1")
 @authentication_decorator
@@ -153,13 +171,19 @@ def handle_actor_migrate(self, handle, connection, match, data, hdr):
     Response: none
     """
     status = calvinresponse.OK
+    actor_id = match.group(1)
     if 'peer_node_id' in data:
-        try:
-            self.node.am.migrate(match.group(1), data['peer_node_id'],
-                             callback=CalvinCB(self.actor_migrate_cb, handle, connection))
-        except:
-            _log.exception("Migration failed")
-            status = calvinresponse.INTERNAL_ERROR
+        if actor_id in self.node.am.list_actors():
+            try:
+                self.node.am.migrate(actor_id, data['peer_node_id'],
+                                 callback=CalvinCB(self.actor_migrate_cb, handle, connection))
+            except:
+                _log.exception("Migration failed")
+                status = calvinresponse.INTERNAL_ERROR
+        else:
+            self.node.storage.get_actor(actor_id,
+                CalvinCB(func=self.handle_actor_migrate_lookup_peer_cb, handle=handle, connection=connection,
+                    actor_id=actor_id, peer_node_id=data['peer_node_id']))
     elif 'requirements' in data:
         try:
             self.node.am.update_requirements(match.group(1), data['requirements'],
@@ -360,7 +384,6 @@ def handle_deploy(self, handle, connection, match, data, hdr):
         "script": <calvin script>  # alternativly "app_info"
         "app_info": <compiled script as app_info>  # alternativly "script"
         "sec_sign": {<cert hash>: <security signature of script>, ...} # optional and only with "script"
-        "sec_credentials": <security credentials of user> # optional
         "deploy_info":
            {"groups": {"<group 1 name>": ["<actor instance 1 name>", ...]},  # TODO not yet implemented
             "requirements": {
@@ -373,16 +396,7 @@ def handle_deploy(self, handle, connection, match, data, hdr):
                             }
            }
     }
-    Note that either a script or app_info must be supplied. Optionally security
-    verification of application script can be made. Also optionally user credentials
-    can be supplied, some runtimes are configured to require credentials. The
-    credentials takes for example the following form:
-        {"user": <username>,
-         "password": <password>,
-         "role": <role>,
-         "group": <group>,
-         ...
-        }
+    Note that either a script or app_info must be supplied.
 
     The matching rules are implemented as plug-ins, intended to be extended.
     The type "+" is "and"-ing rules together (actually the intersection of all
@@ -416,41 +430,25 @@ def handle_deploy(self, handle, connection, match, data, hdr):
     """
     try:
         _log.analyze(self.node.id, "+", data)
-        if 'app_info' not in data:
-            kwargs = {}
-            credentials = ""
-            # Supply security verification data when available
-            content = None
-            if "sec_credentials" in data:
-                credentials = data['sec_credentials']
-                content = {}
-                if not "sec_sign" in data:
-                    data['sec_sign'] = {}
-                content = {
-                        'file': data["script"],
-                        'sign': {h: s.decode('hex_codec') for h, s in data['sec_sign'].iteritems()}}
-            compiler.compile_script_check_security(
-                data["script"],
-                filename=data["name"],
-                security=self.security,
-                content=content,
-                node=self.node,
-                verify=(data["check"] if "check" in data else True),
-                cb=CalvinCB(self.handle_deploy_cont, handle=handle, connection=connection, data=data),
-                **kwargs
-            )
-        else:
-            # Supplying app_info is for backward compatibility hence abort if node configured security
-            # Main user is csruntime when deploying script at the same time and some tests used
-            # via calvin.Tools.deployer (the Deployer below is the new in appmanager)
-            # TODO rewrite these users to send the uncompiled script as cscontrol does.
-            if security_enabled():
-                _log.error("Can't combine compiled script with runtime having security")
-                self.send_response(handle, connection, None, status=calvinresponse.UNAUTHORIZED)
-                return
-            app_info = data['app_info']
-            issuetracker = IssueTracker()
-            self.handle_deploy_cont(app_info, issuetracker, handle, connection, data)
+        kwargs = {}
+        # Supply security verification data when available
+        content = {}
+        if not "sec_sign" in data:
+            data['sec_sign'] = {}
+        signed_data=data['app_info'] if 'app_info' in data else data['script']
+        content = {
+                'file': signed_data,
+                'sign': {h: s.decode('hex_codec') for h, s in data['sec_sign'].iteritems()}}
+        compiler.compile_script_check_security(
+            data,
+            filename=data["name"],
+            security=self.security,
+            content=content,
+            node=self.node,
+            verify=(data["check"] if "check" in data else True),
+            cb=CalvinCB(self.handle_deploy_cont, handle=handle, connection=connection, data=data),
+            **kwargs
+        )
     except Exception as e:
         _log.exception("Deployer failed, e={}".format(e))
         self.send_response(handle, connection, json.dumps({'exception': str(e)}),

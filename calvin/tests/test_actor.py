@@ -22,6 +22,7 @@ from calvin.runtime.north.actormanager import ActorManager
 from calvin.runtime.north.plugins.port.endpoint import LocalOutEndpoint, LocalInEndpoint
 from calvin.actor.actor import Actor
 from calvin.runtime.north.plugins.port import queue
+from calvin.runtime.north.calvinsys import get_calvinsys
 
 pytestmark = pytest.mark.unittest
 
@@ -39,6 +40,7 @@ def create_actor(node):
 
 @pytest.fixture
 def actor():
+    get_calvinsys()._node = Mock()
     return create_actor(DummyNode())
 
 
@@ -58,10 +60,8 @@ def test_did_connect(actor, inport_ret_val, outport_ret_val, expected):
     actor.did_connect(None)
     if expected:
         actor.fsm.transition_to.assert_called_with(Actor.STATUS.ENABLED)
-        assert actor._calvinsys.scheduler_wakeup.called
     else:
         assert not actor.fsm.transition_to.called
-        assert not actor._calvinsys.scheduler_wakeup.called
 
 
 @pytest.mark.parametrize("inport_ret_val,outport_ret_val,expected", [
@@ -121,6 +121,7 @@ def test_state(actor):
     correct_state = {
         'custom': {},
         'managed': {'dump': False, 'last': None},
+        'security': {'_subject_attributes': None},
         'private': {
         '_component_members': [actor.id],
         '_has_started': False,
@@ -129,7 +130,6 @@ def test_state(actor):
         '_id': actor.id,
         '_port_property_capabilities': None,
         '_migration_info': None,
-        '_subject_attributes': None,
         '_replication_data': {},
         'inports': {'token': {'properties': {'direction': 'in',
                                              'routing': 'default',

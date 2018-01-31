@@ -21,9 +21,9 @@ class Dispatch(Actor):
     """
     Dispatch tokens to all connected outports, aiming at keeping all queues equal, i.e. the token will end up in the smallest queue at all times.
     Inputs:
-      token : incoming token stream
+        token : incoming token stream
     Outputs:
-        token(routing="balanced") : outgoing token stream
+        token(routing="round-robin") : outgoing token stream
     """
 
     def init(self):
@@ -34,3 +34,10 @@ class Dispatch(Actor):
         return (data, )
 
     action_priority = (dispatch,)
+
+    test_set = [
+        {
+            'inports': {'token': ['test']},
+            'outports': {'token': ['test']}
+        }
+    ]

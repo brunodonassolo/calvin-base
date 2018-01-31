@@ -31,11 +31,11 @@ from calvin.utilities import confsort
 import OpenSSL
 from cryptography.x509 import load_pem_x509_certificate
 from cryptography.hazmat.backends import default_backend
-from calvin.utilities import calvinuuid
 from calvin.utilities import calvinconfig
 from calvin.utilities.calvinlogger import get_logger
 from calvin.utilities.utils import get_home
 from calvin.utilities import certificate
+from calvin.utilities.certificate import Certificate
 from calvin.utilities.calvin_callback import CalvinCB
 
 _log = get_logger(__name__)
@@ -100,7 +100,7 @@ class RuntimeCredentials():
 #                            'certificate': '$dir/mine/cert.pem',
                             'private_dir': '$dir/private/',
                             'new_certs_dir': '$dir/newcerts',
-                            'private_key': '$dir/private/ca.key',
+                            'private_key': '$dir/private/ca.key ',
                             'runtimes_dir': '$dir/runtimes',
                             'email_in_dn': 'no',
                             'x509_extensions': 'usr_cert',
@@ -137,7 +137,9 @@ class RuntimeCredentials():
         self.runtime_dir=None
         self.private_key=None
         self.cert=None
+        self.cert_str=None
         self.cert_name=None
+        self.cert_path=None
         self.configfile = None
         self.config=ConfigParser.SafeConfigParser()
         self.configuration=None
@@ -150,7 +152,8 @@ class RuntimeCredentials():
         #Create generic runtimes folder and trust store folders
         self.security_dir=security_dir
         self.truststore_for_transport=None
-        runtimes_dir = certificate.get_runtimes_credentials_path(security_dir=self.security_dir)
+        self.certificate = Certificate(security_dir=security_dir)
+        runtimes_dir = self.certificate.runtimes_dir
         if not os.path.isdir(runtimes_dir):
             try:
                 os.makedirs(runtimes_dir)
@@ -207,6 +210,7 @@ class RuntimeCredentials():
             self.runtime_dir=self.configuration['RT_default']['dir']
             self.private_key=self.configuration['RT_default']['private_key']
             self.cert=None
+            self.cert_str=None
         else:
             _log.debug("Runtime openssl.conf does not exist, let's create it")
             self.domain = self.get_domain(domain=domain)
@@ -222,15 +226,15 @@ class RuntimeCredentials():
                 _log.error("creation of new runtime credentials failed")
                 raise
         self.cert_name = self.get_own_cert_name()
-        if self.enrollment_password and self.domain:
-            _log.info("enrollment_password={}".format(self.enrollment_password))
-            #Loop through all configured CAs and create encrypted CSRs for them all
-            self.cert_enrollment_encrypt_csr(domain_name=self.domain)
+        self.cert_path = self.get_own_cert_path()
+        self.cert_str = self.get_own_cert_as_string()
+        self.cert = self.get_own_cert_as_openssl_object()
+        self.cert_dict={}
 
     def get_credentials_path(self):
         """Return the full path of the node's own certificate"""
         _log.debug("__init__::get_credentials_path, security_dir={}".format(self.security_dir))
-        return os.path.join(certificate.get_runtimes_credentials_path(security_dir=self.security_dir), self.node_name)
+        return os.path.join(self.certificate.runtimes_dir, self.node_name)
 
     def _new_opensslconf(self):
         """
@@ -359,8 +363,7 @@ class RuntimeCredentials():
                 return _ca_conf["domain_name"]
         except Exception as err:
             _log.debug("get_domain: err={}".format(err))
-            _log.warning("get_domain: Could not read security domain from config. [Security not enabled]")  
-              
+            _log.debug("get_domain: Could not read security domain from config. [Security not enabled]")  
         _log.debug("get_domain: Domain not found in Calvin config, let's use supplied domain")
         if domain:
             return domain
@@ -388,23 +391,21 @@ class RuntimeCredentials():
         private_key = self.get_private_key()
         return runtime_cert_chain + private_key
 
-    def get_encrypted_csr(self):
+    def get_csr_and_enrollment_password(self):
         import json
-        """Return the the encrypt csr for the runtime"""
-        _log.debug("get_encrypted_csr_path")
-        path = self.get_encrypted_csr_path()
+        """Return a JSON containing the csr and the enrollment password"""
+        _log.debug("get_csr_and_enrollment_password")
+        path = self.get_csr_path()
         try:
             with open(path, 'r') as fd:
-                result = json.load(fd)
+                csr =fd.read()
         except Exception as err:
             _log.error("Failed to read encrypted CSR, path={}, err={}".format(path, err))
             raise
-        return result
-
-    def get_encrypted_csr_path(self):
-        """Return the path to the csr for the runtime"""
-        _log.debug("get_encrypted_csr_path: my_node_name={}".format(self.node_name))
-        return os.path.join(self.runtime_dir, "{}.csr.encrypted".format(self.node_name))
+        if not self.enrollment_password:
+            console.error("No enrollemnt password configured")
+            raise Exception("No enrollemnt password configured")
+        return {"csr":csr, "enrollment_password":self.enrollment_password}
 
     def get_csr_path(self):
         """Return the path to the csr for the runtime"""
@@ -418,28 +419,33 @@ class RuntimeCredentials():
         if cert_name == self.node_id:
             _log.debug("Look for runtimes own certificate {} in {{mine}} folder, err={}".format(cert_name, err))
             try:
-                certpath = self.get_own_cert_path()
-                certificate.verify_certificate_from_path(TRUSTSTORE_TRANSPORT, certpath, security_dir=self.security_dir)
-                with open(certpath, 'rb') as fd:
-                    certstr=fd.read()
-                return certstr
+#                certpath = self.get_own_cert_path()
+#                self.certificate.truststore_transport.verify_certificate_from_path(certpath)
+#                with open(certpath, 'rb') as fd:
+#                    certstr=fd.read()
+                return self.cert_str
             except Exception as err:
                 _log.debug("Certificate {} is not in {{mine}} folder, return None, err={}".format(cert_name, err))
                 return None
         else:
-            try:
-                _log.debug("Look for certificate in others folder, cert_name={}".format(cert_name))
-                # Check if the certificate is in the 'others' folder for runtime my_node_name.
-                files = os.listdir(os.path.join(self.runtime_dir, "others"))
-                matching = [s for s in files if cert_name in s]
-                certpath = os.path.join(self.runtime_dir, "others", matching[0])
-                certificate.verify_certificate_from_path(TRUSTSTORE_TRANSPORT, certpath, security_dir=self.security_dir)
-                with open(certpath, 'rb') as fd:
-                    certstr=fd.read()
-                return certstr
-            except Exception as err:
-                _log.debug("Certificate {} is not in {{others}} folder, return None, err={}".format(cert_name, err))
-                return None
+            if cert_name in self.cert_dict:
+                return self.cert_dict[cert_name]
+            else:
+                try:
+                    _log.debug("Look for certificate in others folder, cert_name={}".format(cert_name))
+                    # Check if the certificate is in the 'others' folder for runtime my_node_name.
+                    files = os.listdir(os.path.join(self.runtime_dir, "others"))
+                    matching = [s for s in files if cert_name in s]
+                    certpath = os.path.join(self.runtime_dir, "others", matching[0])
+                    self.certificate.truststore_transport.verify_certificate_from_path(certpath)
+                    with open(certpath, 'rb') as fd:
+                        certstr=fd.read()
+                    #TODO: some cleaning of self.cert_dict is probably a good idea
+                    self.cert_dict[cert_name]=certstr
+                    return certstr
+                except Exception as err:
+                    _log.debug("Certificate {} is not in {{others}} folder, return None, err={}".format(cert_name, err))
+                    return None
 
     def get_certificate(self, cert_name, callback=None):
         """Return certificate with name cert_name from disk or storage"""
@@ -484,8 +490,7 @@ class RuntimeCredentials():
     def verify_certificate(self, cert_str, type, store_cert=False):
 #        _log.debug("verify_certificate:\n\tcert_str={}\n\ttype={}".format(cert_str, type))
         try:
-            cert = certificate.verify_certificate(type, cert_str, security_dir=self.security_dir)
-            return cert
+            return self.certificate.verify_certificate_str(type, cert_str)
         except Exception as err:
             _log.error("Failed to verify certificate, err={}".format(err))
             raise
@@ -645,15 +650,17 @@ class RuntimeCredentials():
         return cert.public_key()
 
 
-    def store_trusted_root_cert(self, cert_file, trusted_root):
+    def store_trusted_root_cert(self, cert_file, type):
         """
         Copy the certificate giving it the name that can be stored in
         trustStore for verification of signatures.
         file is the out file
 
         """
-        return certificate.store_trusted_root_cert(cert_file, trusted_root,
-                                                   security_dir=self.security_dir)
+        if type==certificate.TRUSTSTORE_TRANSPORT:
+            return self.certificate.truststore_transport.store_trusted_root_cert(cert_file)
+        elif type==certificate.TRUSTSTORE_SIGN:
+            return self.certificate.truststore_sign.store_trusted_root_cert(cert_file)
 
 
 
@@ -670,6 +677,7 @@ class RuntimeCredentials():
 #        self.configuration['RT_default']['certificate'] = path
 #        self.update_opensslconf()
         self.cert_name = self.get_own_cert_name()
+        self.cert_path = self.get_own_cert_path()
         return path
 
     def others_cert_stored(self, certstring):
@@ -702,6 +710,8 @@ class RuntimeCredentials():
 #        _log.debug("store_cert:\n\ttype={}\n\tcertstring={}\n\tcertpath={}\n\tforce=={}".format(type, certstring, certpath, force))
         if certpath:
             try:
+                if os.path.islink(certpath):
+                    certpath = os.readlink(certpath)
                 with open(certpath, 'rb') as f:
                     certstring = f.read()
             except Exception as exc:
@@ -741,62 +751,16 @@ class RuntimeCredentials():
             ca_cert_list_x509: list of CA certificate as OpenSSL certificate objects
             truststore: OpenSSL X509 store object with trusted CA certificates
         """
-        return certificate.get_truststore(type, security_dir=self.security_dir)
+        return self.certificate.get_truststore(type, security_dir=self.security_dir)
 #        ca_cert_list_str, ca_cert_list_x509, truststore = certificate.get_truststore(type, 
 #                                                    security_dir=self.security_dir)
 #        return ca_cert_list_str, ca_cert_list_x509, truststore
 
     def get_truststore_path(self, type):
-        return certificate.get_truststore_path(type, security_dir=self.security_dir)
-
-    def get_trusted_CA_cert(self, type, domain_name):
-        return certificate.get_trusted_CA_cert(type, domain_name, security_dir=self.security_dir)
-
+        return self.certificate.get_truststore_path(type)
 
     def remove_runtime(self):
         shutil.rmtree(self.runtime_dir,ignore_errors=True)
-
-
-    def cert_enrollment_encrypt_csr(self, csr_path=None, domain_name=None, ca_cert_str=None):
-        """
-        """
-        import json
-        import base64
-        from cryptography.hazmat.primitives import padding
-        from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
-        from cryptography.hazmat.backends import default_backend
-        _log.debug("cert_enrollment_encrypt_csr:\n\tcsr_path={}, domain_name={}".format(csr_path, domain_name))
-        try:
-            if domain_name:
-                ca_cert = self.get_trusted_CA_cert(certificate.TRUSTSTORE_TRANSPORT, domain_name)
-            elif ca_cert_str:
-                ca_cert = ca_cert_str
-            else:
-                raise Exception("Please supply either the CommonName of the CA, or the certificate of the CA")
-            if not ca_cert:
-                _log.error("Truststore empty, please configure runtime with  a trusted CA cert")
-                raise Exception("Truststore empty, please configure runtime with  a trusted CA cert")
-        except Exception as err:
-            _log.error("Failed to load CA cert from truststore, err={}".format(err))
-            raise
-        try:
-            csr_path = self.get_csr_path()
-            with open(csr_path, 'r') as csr_fd:
-                csr= csr_fd.read()
-        except Exception as err:
-            _log.exception("Failed to load unencrypted CSR, err={}".format(err))
-            raise
-
-        plaintext = {'csr':csr, 'challenge_password':self.enrollment_password}
-        encrypted_csr = certificate.encrypt_object_with_RSA(ca_cert, json.dumps(plaintext),unencrypted_data=self.node_name)
-        try:
-            encrypted_filepath = csr_path + ".encrypted"
-            with open(encrypted_filepath, 'w') as fd:
-                json.dump(encrypted_csr, fd)
-        except Exception as err:
-            _log.error("Failed to write encrypted CSR to file, err={}".format(err))
-            raise
-        return encrypted_csr
 
     def sign_data(self, data):
         from OpenSSL import crypto

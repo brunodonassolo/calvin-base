@@ -14,8 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from calvin.actor.actor import Actor, manage, condition
-
+from calvin.actor.actor import Actor, manage, condition, calvinlib
 
 
 class Mustache(Actor):
@@ -36,18 +35,26 @@ class Mustache(Actor):
     def init(self, fmt):
         self.fmt = fmt
         self.setup()
-        
+
     def setup(self):
-        self.use("calvinsys.native.python-mustache", shorthand="pystache")
-        
+        self.mustache = calvinlib.use("mustache")
+
     def did_migrate(self):
         self.setup()
 
     @condition(['dict'], ['text'])
     def action(self, d):
-        text = self['pystache'].render(self.fmt, d)
+        text = self.mustache.render(self.fmt, d)
         return (text, )
 
     action_priority = (action, )
-    requires = ["calvinsys.native.python-mustache"]
+    requires = ["mustache"]
 
+
+    test_kwargs = {'fmt': "City:{{city}} Country:{{country}} Weather:{{weather}} Temperature:{{temperature}} Humidity:{{humidity}} Pressure:{{pressure}}"}
+    test_set = [
+        {
+            'inports': {'dict': [{'city': u'Manchester', 'temperature': 7.84, 'country': u'GB', 'humidity': 87, 'pressure': 1033, 'weather': u'overcast clouds'}]},
+            'outports': {'text': ["City:Manchester Country:GB Weather:overcast clouds Temperature:7.84 Humidity:87 Pressure:1033"]}
+        }
+    ]

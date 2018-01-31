@@ -33,10 +33,9 @@ class DelayToken(Actor):
         self.timers = []
 
     def new_timer(self):
-        timer = calvinsys.open(self, "sys.timer.once")
-        calvinsys.write(timer, self.delay)
+        timer = calvinsys.open(self, "sys.timer.once", period=self.delay)
         return timer
-        
+
     @condition(['token'])
     def token_available(self, token):
         self.timers.append({'token': token, 'timer': self.new_timer()})
@@ -51,3 +50,14 @@ class DelayToken(Actor):
 
     action_priority = (timeout, token_available)
     requires = ['sys.timer.once']
+
+
+    test_kwargs = {'delay': 20}
+    test_calvinsys = {'sys.timer.once': {'read': ["dummy", "dummy", "dummy", "dummy"],
+                                         'write': [20, 20, 20, 20]}}
+    test_set = [
+        {
+            'inports': {'token': ["a", "b", 1, 1]},
+            'outports': {'token': ["a", "b", 1, 1]},
+        }
+    ]

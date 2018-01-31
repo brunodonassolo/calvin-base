@@ -42,7 +42,7 @@ class CertificateAuthority(object):
         domain = None
         try:
             _ca_conf = _conf.get("security","certificate_authority")
-            if "is_ca" in _ca_conf and _ca_conf["is_ca"]=="True":
+            if "is_ca" in _ca_conf and _ca_conf["is_ca"]==True:
                 _log.debug("CertificateAuthority::__init__  Runtime is a CA")
                 domain = _ca_conf["domain_name"]
                 security_dir = _conf.get("security","security_dir")
@@ -55,13 +55,12 @@ class CertificateAuthority(object):
             _log.info("Missing or incomplete security config, e={}".format(e))
             self.ca = None
 
-    def sign_csr_request(self, encr_csr):
+    def sign_csr(self, csr, enrollment_password):
         """Decrypt the CSR, verify challenge password and  the  in the data."""
-        _log.debug("sign_csr_request, data={}".format(encr_csr))
+        _log.debug("sign_csr_request, data={}".format(csr))
         #Decrypt encrypted CSR with CAs private key
-        csr = self.ca.decrypt_encrypted_csr(encrypted_enrollment_request=encr_csr)
-        csr_path = self.ca.store_csr_with_enrollment_password(csr)
-        cert_path = self.ca.sign_csr(csr_path)
+        csr_path = self.ca.store_csr(csr)
+        cert_path = self.ca.sign_csr(csr_path, enrollment_password=enrollment_password)
         try:
             with open(cert_path,'r') as fd:
                 cert_str = fd.read()

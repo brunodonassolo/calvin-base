@@ -20,7 +20,6 @@ from calvin.utilities.utils import enum
 from calvin.utilities.calvin_callback import CalvinCB, CalvinCBClass
 from calvin.utilities import calvinlogger
 from calvin.utilities import calvinconfig
-from calvin.utilities import proxyconfig
 import calvin.requests.calvinresponse as response
 
 _log = calvinlogger.get_logger(__name__)
@@ -185,8 +184,6 @@ class CalvinProto(CalvinCBClass):
             # Hence it is possible for others to register additional
             # functions that should be called. Either permanent here
             # or using the callback_register method.
-            'PROXY_CONFIG': [CalvinCB(self.proxy_config_handler)],
-            'SLEEP_REQUEST': [CalvinCB(self.proxy_sleep_request_handler)],
             'ACTOR_NEW': [CalvinCB(self.actor_new_handler)],
             'ACTOR_MIGRATE': [CalvinCB(self.actor_migrate_handler)],
             'APP_DESTROY': [CalvinCB(self.app_destroy_handler)],
@@ -235,7 +232,6 @@ class CalvinProto(CalvinCBClass):
         # If generic handling of command is not possible or the method
         # is accepted during quitting it is left out from dict.
         resp = {
-            'PROXY_CONFIG': response.INTERNAL_ERROR,
             'ACTOR_NEW': response.INTERNAL_ERROR,
             'ACTOR_MIGRATE': response.NOT_FOUND,
             'APP_DESTROY': response.NOT_FOUND,
@@ -257,10 +253,6 @@ class CalvinProto(CalvinCBClass):
         """ Called by transport when a full payload has been received
         """
         _log.analyze(self.rt_id, "RECV", payload)
-        link = self.network.link_get(payload['from_rt_uuid'])
-        if link is None:
-            # TODO: Create own exception here
-            raise Exception("ERROR_UNKNOWN_RUNTIME")
 
         if payload['to_rt_uuid'] == self.rt_id:
             if not ('cmd' in payload and payload['cmd'] in self.callback_valid_names()):
@@ -276,29 +268,6 @@ class CalvinProto(CalvinCBClass):
     #
     # Remote commands supported by protocol
     #
-
-    #### PROXY NODES ####
-
-    def proxy_config_handler(self, payload):
-        """ Configure a node using this node as a proxyconfig
-        """
-        proxyconfig.set_proxy_config(payload['from_rt_uuid'],
-            payload['capabilities'],
-            payload['port_property_capability'],
-            self.network.link_get(payload['from_rt_uuid']),
-            self.node.storage,
-            CalvinCB(self.node.network.link_request, payload['from_rt_uuid'],
-                callback=CalvinCB(send_message, msg = {'cmd': 'REPLY', 'msg_uuid': payload['msg_uuid'], 'time': time.time()})),
-            payload.get('attributes'))
-
-    def proxy_sleep_request_handler(self, payload):
-        """ Handle node requesting sleep mode
-        """
-        proxyconfig.handle_sleep_request(payload['from_rt_uuid'],
-            self.network.link_get(payload['from_rt_uuid']),
-            payload['seconds_to_sleep'],
-            CalvinCB(self.node.network.link_request, payload['from_rt_uuid'],
-                callback=CalvinCB(send_message, msg = {'cmd': 'REPLY', 'msg_uuid': payload['msg_uuid']})))
 
     #### ACTORS ####
 
@@ -336,9 +305,24 @@ class CalvinProto(CalvinCBClass):
                 'requirements': requirements, 'actor_id': actor_id, 'extend': extend, 'move': move},
             callback=callback))
 
+    def actor_migrate_direct(self, to_rt_uuid, callback, actor_id, peer_node_id):
+        """ Request actor on to_rt_uuid node to migrate to new peer_node_id
+            callback: called when finished with the status respons as argument
+            actor_id: actor_id to migrate
+            peer_node_id: node to migrate to
+        """
+        self.node.network.link_request(to_rt_uuid, CalvinCB(send_message,
+            msg = {'cmd': 'ACTOR_MIGRATE', 'actor_id': actor_id, 'peer_node_id': peer_node_id},
+            callback=callback))
+
     def actor_migrate_handler(self, payload):
         """ Peer request new actor with state and connections """
-        self.node.am.update_requirements(payload['actor_id'], payload['requirements'],
+        if 'peer_node_id' in payload:
+            self.node.am.migrate(payload['actor_id'], payload['peer_node_id'],
+                callback=CalvinCB(self.node.network.link_request, payload['from_rt_uuid'], callback=CalvinCB(send_message,
+                                           msg = {'cmd': 'REPLY', 'msg_uuid': payload['msg_uuid']})))
+        else:
+            self.node.am.update_requirements(payload['actor_id'], payload['requirements'],
                                          payload['extend'], payload['move'],
                                          callback=CalvinCB(self.node.network.link_request, payload['from_rt_uuid'], callback=CalvinCB(send_message,
                                                                     msg = {'cmd': 'REPLY', 'msg_uuid': payload['msg_uuid']})))
@@ -612,7 +596,7 @@ class CalvinProto(CalvinCBClass):
         A Policy Decision Point (PDP) is used to determine if access is permitted.
         """
         _log.debug("authentication_decision_handler:\n\tpayload={}".format(payload))
-        if ('authentication' in _sec_conf) and 'accept_external_requests' in _sec_conf['authentication']:
+        if ('authentication' in _sec_conf) and 'accept_external_requests' in _sec_conf['authentication'] and _sec_conf['authentication']["accept_external_requests"]:
             try:
                 self.node.authentication.decode_request(payload,
                                                         CalvinCB(self._authentication_decision_handler_jwt_decoded_cb,

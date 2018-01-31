@@ -32,18 +32,18 @@ class CountTimer(Actor):
         self.count = start
         self.sleep = sleep
         self.steps = steps + start
-        self.timer = calvinsys.open(self, 'sys.timer.once')
-        calvinsys.write(self.timer, self.sleep)
+        self.timer = calvinsys.open(self, 'sys.timer.once', period=self.sleep)
 
     # The counting action, first 3 use non periodic for testing purpose
-    @stateguard(lambda self: self.count < 3 and self.count < self.steps and calvinsys.can_read(self.timer))
+    @stateguard(lambda self: self.count < self.start + 3 and self.count < self.steps and calvinsys.can_read(self.timer))
     @condition(action_output=('integer',))
     def step_no_periodic(self):
         calvinsys.read(self.timer) # Ack
-        if self.count == 2:
+        if self.count == self.start + 2:
             # now continue with periodic timer events
             calvinsys.close(self.timer)
             self.timer = calvinsys.open(self, 'sys.timer.repeating')
+        calvinsys.can_write(self.timer) # Dummy read
         calvinsys.write(self.timer, self.sleep)
         self.count += 1
         return (self.count - 1, )
@@ -71,3 +71,13 @@ class CountTimer(Actor):
 
     action_priority = (step_no_periodic, step_periodic, stop)
     requires = ['sys.timer.once', 'sys.timer.repeating']
+
+
+    test_calvinsys = {'sys.timer.once': {'read': ["dummy", "dummy", "dummy"],
+                                         'write': [0.1, 0.1]},
+                      'sys.timer.repeating': {'read': ["dummy", "dummy", "dummy", "dummy", "dummy"]}}
+    test_set = [
+        {
+            'outports': {'integer': [1, 2, 3, 4, 5, 6, 7, 8]}
+        }
+    ]

@@ -23,7 +23,6 @@ from calvin.utilities.calvinlogger import get_logger
 from calvin.utilities.utils import enum
 from calvin.runtime.north.calvin_token import Token, ExceptionToken
 # from calvin.runtime.north import calvincontrol
-# from calvin.runtime.north import metering
 from calvin.runtime.north.replicationmanager import ReplicationData
 import calvin.requests.calvinresponse as response
 from calvin.runtime.south.plugins.async import async
@@ -254,8 +253,11 @@ class Actor(object):
     # Class variable controls action priority order
     action_priority = tuple()
 
+    # These are the security variables that will always be serialized, see serialize()/deserialize() below
+    _security_state_keys = ('_subject_attributes')
+
     # These are the instance variables that will always be serialized, see serialize()/deserialize() below
-    _private_state_keys = ('_id', '_name', '_has_started', '_deployment_requirements', '_signature', '_subject_attributes', '_migration_info', "_port_property_capabilities", "_replication_data")
+    _private_state_keys = ('_id', '_name', '_has_started', '_deployment_requirements', '_signature', '_migration_info', "_port_property_capabilities", "_replication_data")
 
     # Internal state (status)
     class FSM(object):
@@ -343,7 +345,6 @@ class Actor(object):
         self.calvinsys = None
         self._using = {}
         # self.control = calvincontrol.get_calvincontrol()
-        # self.metering = metering.get_metering()
         self._migration_info = None
         self._migrating_to = None  # During migration while on the previous node set to the next node id
         self._last_time_warning = 0.0
@@ -364,7 +365,6 @@ class Actor(object):
                              allow_invalid_transitions=allow_invalid_transitions,
                              disable_transition_checks=disable_transition_checks,
                              disable_state_checks=disable_state_checks)
-        # self.metering.add_actor_info(self)
 
     def set_authorization_checks(self, authorization_checks):
         self.authorization_checks = authorization_checks
@@ -453,8 +453,6 @@ class Actor(object):
         self.fsm.transition_to(Actor.STATUS.ENABLED)
         _log.debug("actor.did_connect ENABLED %s %s " % (self._name, self._id))
 
-        # Actor enabled, inform scheduler
-        self._calvinsys.scheduler_wakeup()
 
     @verify_status([STATUS.ENABLED, STATUS.PENDING, STATUS.DENIED, STATUS.MIGRATABLE])
     def did_disconnect(self, port):
@@ -498,6 +496,7 @@ class Actor(object):
     #
     # FIXME: The following methods (_authorized, _warn_slow_actor, _handle_exhaustion) were
     #        extracted from fire() to make the logic easier to follow
+    # FIXME: Responsibility of scheduler, not actor class
     #
     def _authorized(self):
         authorized = self.check_authorization_decision()
@@ -539,54 +538,17 @@ class Actor(object):
     def fire(self):
         """
         Fire an actor.
-        Returns True if any action fired
+        Returns tuple (did_fire, output_ok, exhausted)
         """
-        # FIXME: Move authorization decision to scheduler
         #
-        # First make sure we are allowed to run
+        # Go over the action priority list once
         #
-        if not self._authorized():
-            return False
-
-        start_time = time.time()
-        actor_did_fire = False
-        #
-        # Repeatedly go over the action priority list
-        #
-        done = False
-        while not done:
-            for action_method in self.__class__.action_priority:
-                did_fire, output_ok, exhausted = action_method(self)
-                actor_did_fire |= did_fire
-                # Action firing should fire the first action that can fire,
-                # hence when fired start from the beginning priority list
-                if did_fire:
-                    # # FIXME: Add hooks for metering and probing
-                    # self.metering.fired(self._id, action_method.__name__)
-                    # self.control.log_actor_firing( ... )
-                    break
-
-            #
-            # We end up here when an action fired or when all actions have failed to fire
-            #
+        for action_method in self.__class__.action_priority:
+            did_fire, output_ok, exhausted = action_method(self)
+            # Action firing should fire the first action that can fire
             if did_fire:
-                #
-                # Limit time given to actors even if it could continue a new round of firing
-                #
-                # FIXME: IMHO this decision should be made in the scheduler. No timing here.
-                time_spent = time.time() - start_time
-                done = time_spent > 0.020
-            else:
-                #
-                # We reached the end of the list without ANY firing during this round
-                # => handle exhaustion and return
-                #
-                # FIXME: Move exhaust handling to scheduler
-                self._handle_exhaustion(exhausted, output_ok)
-                done = True
-
-        return actor_did_fire
-
+                break
+        return did_fire, output_ok, exhausted
 
     def enabled(self):
         # We want to run even if not fully connected during exhaustion
@@ -673,9 +635,8 @@ class Actor(object):
 
     def _set_private_state(self, state):
         """Deserialize and apply state common to all actors"""
-
-        get_calvinsys().deserialize(actor=self, csobjects=state["_calvinsys"])
-
+        if "_calvinsys" in state:
+            get_calvinsys().deserialize(actor=self, csobjects=state["_calvinsys"])
         for port in state['inports']:
             # Uses setdefault to support shadow actor
             self.inports.setdefault(port, actorport.InPort(port, self))._set_state(state['inports'][port])
@@ -695,6 +656,20 @@ class Actor(object):
                     obj.set_state(state.pop(key))
                 else:
                     self.__dict__[key] = state.pop(key, None)
+
+    def _security_state(self):
+        """
+        Serialize security state.
+        Security state can only contain objects that can be JSON-serialized.
+        """
+        return {'_subject_attributes':self._subject_attributes}
+
+    def _set_security_state(self, state):
+        """
+        Deserialize and apply security state.
+        Security state can only contain objects that can be JSON-serialized.
+        """
+        pass
 
     def _managed_state(self):
         """
@@ -718,12 +693,14 @@ class Actor(object):
         state = {}
         state['private'] = self._private_state(remap)
         state['managed'] = self._managed_state()
+        state['security']= self._security_state()
         state['custom'] = self.state()
         return state
 
     def deserialize(self, state):
         """Restore an actor's state from the serialized state."""
         self._set_private_state(state['private'])
+        self._set_security_state(state['security'])
         self._set_managed_state(state['managed'])
         self.set_state(state['custom'])
 
@@ -839,6 +816,7 @@ class ShadowActor(Actor):
                  disable_state_checks=False, actor_id=None, security=None):
         self.inport_properties = {}
         self.outport_properties = {}
+        self.calvinsys_state = {}
         super(ShadowActor, self).__init__(actor_type, name, allow_invalid_transitions=allow_invalid_transitions,
                                             disable_transition_checks=disable_transition_checks,
                                             disable_state_checks=disable_state_checks, actor_id=actor_id,
@@ -881,3 +859,14 @@ class ShadowActor(Actor):
         else:
             _log.error("Shadow actor %s - %s miss signature" % (self._name, self._id))
             return self._deployment_requirements
+
+    def _set_private_state(self, state):
+        """Pop _calvinsys state and call super class"""
+        self.calvinsys_state = state.pop("_calvinsys")
+        super(ShadowActor, self)._set_private_state(state)
+
+    def _private_state(self, remap):
+        """Call super class and add stored calvinsys state"""
+        state = super(ShadowActor, self)._private_state(remap)
+        state["_calvinsys"] = self.calvinsys_state
+        return state

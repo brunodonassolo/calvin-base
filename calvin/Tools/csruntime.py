@@ -293,7 +293,7 @@ def runtime_certificate(rt_attributes):
             certpath, cert, certstr = runtime.get_own_cert()
             if not cert:
                 csr_path = os.path.join(runtime.runtime_dir, node_name + ".csr")
-                if is_ca == "True":
+                if is_ca:
                     _log.debug("No runtime certificate, but node is a CA, just sign csr, domain={}".format(domain_name))
                     ca = certificate_authority.CA(domain=domain_name,
                                                   security_dir=security_dir)
@@ -319,7 +319,6 @@ def runtime_certificate(rt_attributes):
                             cmd, headers = parse_http_response(response)
                             if 'location' in headers:
                                 ca_control_uri, ca_node_id = headers['location'].split('/node/')
-                                ca_control_uri = ca_control_uri.replace("http","https")
                                 ca_control_uris.append(ca_control_uri)
                                 _log.debug("CA control_uri={}, node_id={}".format(ca_control_uri, ca_node_id))
                     else:
@@ -332,15 +331,15 @@ def runtime_certificate(rt_attributes):
                     # Potential improvement would be to have domain name in response and only try
                     # appropriate CAs
                     i=0
+                    csr = json.dumps(runtime.get_csr_and_enrollment_password())
                     while not cert_available and i<len(ca_control_uris):
                         certstr=None
                         #Repeatedly (maximum 10 attempts) send CSR to CA until a certificate is returned (this to remove the requirement of the CA
                         #node to be be the first node to start)
-                        rsa_encrypted_csr = runtime.get_encrypted_csr()
                         j=0
                         while not certstr and j<10:
                             try:
-                                certstr = request_handler.sign_csr_request(ca_control_uris[i], rsa_encrypted_csr)['certificate']
+                                certstr = request_handler.sign_csr_request(ca_control_uris[i], csr)['certificate']
                             except requests.exceptions.RequestException as err:
                                 time_to_sleep = 1 + j*j*j
                                 _log.debug("RequestException, CSR not accepted or CA not up and running yet, sleep {} seconds and try again, err={}".format(time_to_sleep, err))
@@ -385,10 +384,14 @@ def main():
             return 1
 
     uris = args.uris
+    tls_enabled = _conf.get("security","control_interface_security")
     if args.host is None:
         control_uri = None
     else:
-        control_uri = "http://%s:%d" % (args.host, args.controlport)
+        if tls_enabled=="tls":
+            control_uri = "https://%s:%d" % (args.host, args.controlport)
+        else:
+            control_uri = "http://%s:%d" % (args.host, args.controlport)
         uris.append("calvinip://%s:%d" % (args.host, args.port))
 
     if not uris:

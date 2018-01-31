@@ -1,13 +1,13 @@
-button : io.GPIOReader(gpio_pin=23, edge="b", pull="d")
-bell: media.MediaPlayer(media_file="dingdong.ogg")
-camera : media.Camera()
-screen : media.ImageRenderer()
-fd : media.FaceDetect()
+button : io.Button()
+bell: media.PlayAudio(audiofile="dingdong.ogg")
+camera : media.ImageSource()
+screen : media.ImageSink()
+fd : media.FaceObjects()
 
 button.state > camera.trigger
-camera.image > fd.image
-camera.image > screen.image
-fd.faces > bell.play
+camera.b64image > fd.b64image
+camera.b64image > screen.b64image
+fd.objects > bell.play
 
 
 # Deployment

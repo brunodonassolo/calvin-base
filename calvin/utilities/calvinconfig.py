@@ -94,14 +94,14 @@ class CalvinConfig(object):
                 'storage_sql': {},  # For SQL, should have the kwargs to connect + db-name. Defaults to insecure local
                 'capabilities_blacklist': [],
                 'remote_coder_negotiator': 'static',
-                'static_coder': 'json',
-                'metering_timeout': 10.0,
-                'metering_aggregated_timeout': 3600.0,  # Larger or equal to metering_timeout
+                'static_coder': ['json'],
                 'display_plugin': 'stdout_impl',
                 'stdout_plugin': 'defaultimpl',
                 'transports': ['calvinip'],
                 'control_proxy': None,
-                'fcm_server_secret': None
+                'fcm_server_secret': None,
+                'compiled_actors_path': None,
+                "calvinsys_paths": ['calvin/runtime/south/calvinsys']
             },
             'testing': {
                 'comment': 'Test settings',
@@ -110,9 +110,16 @@ class CalvinConfig(object):
             'developer': {
                 'comment': 'Experimental settings',
             },
-            'security': {},
+            'security': {
+                'security_conf':{},
+                'certificate_authority':{}
+            },
             'calvinsys': {
                 "capabilities": {
+                    "sys.schedule": {
+                        "module": "sys.timer.Timer",
+                        "attributes": { "repeats": False, "period": 0}
+                    },
                     "sys.timer.once": {
                         "module": "sys.timer.Timer",
                         "attributes": {}
@@ -144,34 +151,83 @@ class CalvinConfig(object):
                     "log.error": {
                         "module": "term.Log",
                         "attributes": { "level": "error"}
+                    },
+                    "http.delete": {
+                        "module": "web.http.Command",
+                        "attributes": {
+                            "cmd": "DELETE"
+                        }
+                    },
+                    "http.get": {
+                        "module": "web.http.Command",
+                        "attributes": {
+                            "cmd": "GET"
+                        }
+                    },
+                    "http.post": {
+                        "module": "web.http.Command",
+                        "attributes": {
+                            "cmd": "POST"
+                        }
+                    },
+                    "http.put": {
+                        "module": "web.http.Command",
+                        "attributes": {
+                            "cmd": "PUT"
+                        }
+                    },
+                    "io.filereader": {
+                        "module": "io.filehandler.Descriptor",
+                        "attributes": {"basedir": ".", "mode": "r"}
+                    },
+                    "io.filewriter": {
+                        "module": "io.filehandler.Descriptor",
+                        "attributes": {"basedir": ".", "mode": "w"}
+                    },
+                    "io.filesize": {
+                        "module": "io.filehandler.GetSize",
+                        "attributes": {"basedir": "."}
+                    },
+                    "io.stdin": {
+                        "module": "io.filehandler.StdIn",
+                        "attributes": {}
                     }
                 }
-             },
-             'calvinlib': {
-                 "capabilities": {
-                     "math.arithmetic.compare": {
-                         "module": "mathlib.Arithmetic"
-                     },
-                     "math.arithmetic.operator": {
-                         "module": "mathlib.Arithmetic"
-                     },
-                     "math.arithmetic.eval": {
-                         "module": "mathlib.Arithmetic"
-                     },
-                     "math.random": {
-                         "module": "mathlib.Random"
-                     },
-                     "json": {
-                         "module": "jsonlib.Json"
-                     },
-                     "base64": {
-                         "module": "base64lib.Base64"
-                     },
-                     "copy": {
-                         "module": "datalib.Copy"
-                     }
-                 }
-             }
+            },
+            'calvinlib': {
+                "capabilities": {
+                    "math.arithmetic.compare": {
+                        "module": "mathlib.Arithmetic"
+                    },
+                    "math.arithmetic.operator": {
+                        "module": "mathlib.Arithmetic"
+                    },
+                    "math.arithmetic.eval": {
+                        "module": "mathlib.Arithmetic"
+                    },
+                    "math.random": {
+                        "module": "mathlib.Random"
+                    },
+                    "json": {
+                        "module": "jsonlib.Json"
+                    },
+                    "base64": {
+                        "module": "base64lib.Base64"
+                    },
+                    "copy": {
+                        "module": "datalib.Copy"
+                    },
+                    "mustache": {
+                        "module": "textformatlib.Pystache",
+                    },
+                    "time": {
+                        "module": "timelib.Time",
+                    },
+                    "regexp": {
+                        "module": "regexp.PyRegexp",
+                    }
+                }
+            }
         }
         return default
 
@@ -243,8 +299,8 @@ class CalvinConfig(object):
     def update(self, section, option, value):
         """Set value of option in named section"""
         _section = self.config[section.lower()]
-        _section[option.lower()].update(value)
-
+        # May or may not exist
+        _section.setdefault(option.lower(), {}).update(value)
 
     def set_config(self, config):
         """Set complete config"""

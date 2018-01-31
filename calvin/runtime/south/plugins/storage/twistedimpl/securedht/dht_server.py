@@ -192,7 +192,7 @@ class AutoDHTServer(StorageBase):
         is_ca=False
         try:
             _ca_conf = _conf.get("security", "certificate_authority")
-            if "is_ca" in _ca_conf and _ca_conf["is_ca"] == "True":
+            if "is_ca" in _ca_conf and _ca_conf["is_ca"] == True:
                 is_ca = True
         except:
             is_ca = False
@@ -298,11 +298,6 @@ class AutoDHTServer(StorageBase):
     def get_index(self, prefix, index, cb=None):
         istr = prefix + '/'+'/'.join(index)
         self.get_concat(istr, cb=cb, include_key=False)
-
-    def delete_index(self, prefix, indexes, cb=None):
-        indexstrs = [prefix + '/'+'/'.join(indexes[:l]) for l in range(1,len(indexes)+1)]
-        for i in indexstrs[:]:
-            self.delete(key=i, cb=CalvinCB(self._change_index_cb, org_cb=cb, index_items=indexstrs) if cb else None)
 
     def bootstrap(self, addrs, cb=None):
         return TwistedWaitObject(self.dht_server.bootstrap, addr=addrs, cb=cb)

@@ -57,16 +57,14 @@ DISCONNECT = '/disconnect'
 INDEX_PATH_RPL = '/index/{}?root_prefix_level={}'
 INDEX_PATH = '/index/{}'
 STORAGE_PATH = '/storage/{}'
-METER = '/meter'
-METER_PATH = '/meter/{}'
-METER_PATH_TIMED = '/meter/{}/timed'
-METER_PATH_AGGREGATED = '/meter/{}/aggregated'
-METER_PATH_METAINFO = '/meter/{}/metainfo'
 CSR_REQUEST = '/certificate_authority/certificate_signing_request'
 ENROLLMENT_PASSWORD = '/certificate_authority/certificate_enrollment_password/{}'
 AUTHENTICATION = '/authentication'
 AUTHENTICATION_USERS_DB = '/authentication/users_db'
 AUTHENTICATION_GROUPS_DB = '/authentication/groups_db'
+PROXY_PEER_ABOLISH = '/proxy/{}/migrate'
+
+
 def get_runtime(value):
     if isinstance(value, basestring):
         return RT(value)
@@ -226,7 +224,7 @@ class RequestHandler(object):
         r = self._post(rt, timeout, async, CONNECT, data)
         return self.check_response(r)
 
-    def disconnect(self, rt, actor_id=None, port_name=None, port_dir=None, port_id=None, terminate=None, 
+    def disconnect(self, rt, actor_id=None, port_name=None, port_dir=None, port_id=None, terminate=None,
                    timeout=DEFAULT_TIMEOUT, async=False):
         data = {
             'actor_id': actor_id,
@@ -320,12 +318,11 @@ class RequestHandler(object):
         r = self._delete(rt, timeout, async, APPLICATION_PATH.format(application_id))
         return self.check_response(r)
 
-    def deploy_application(self, rt, name, script, deploy_info=None, credentials=None, content=None,
+    def deploy_application(self, rt, name, script, deploy_info=None, content=None,
                            check=True, timeout=DEFAULT_TIMEOUT, async=False):
         data = {
             "name": name,
             "script": script,
-            "sec_credentials": credentials,
             "deploy_info": deploy_info,
             "check": check
         }
@@ -336,37 +333,15 @@ class RequestHandler(object):
         r = self._post(rt, timeout, async, DEPLOY, data)
         return self.check_response(r)
 
-    def deploy_app_info(self, rt, name, app_info, deploy_info=None, credentials=None, check=True,
+    def deploy_app_info(self, rt, name, app_info, deploy_info=None, check=True,
                         timeout=DEFAULT_TIMEOUT, async=False):
         data = {
             "name": name,
             "app_info": app_info,
-            "sec_credentials": credentials,
             "deploy_info": deploy_info,
             "check": check
         }
         r = self._post(rt, timeout, async, DEPLOY, data=data)
-        return self.check_response(r)
-
-    def register_metering(self, rt, user_id=None, timeout=DEFAULT_TIMEOUT, async=False):
-        data = {'user_id': user_id} if user_id else None
-        r = self._post(rt, timeout, async, METER, data=data)
-        return self.check_response(r)
-
-    def unregister_metering(self, rt, user_id, timeout=DEFAULT_TIMEOUT, async=False):
-        r = self._delete(rt, timeout, async, METER_PATH.format(user_id))
-        return self.check_response(r)
-
-    def get_timed_metering(self, rt, user_id, timeout=DEFAULT_TIMEOUT, async=False):
-        r = self._get(rt, timeout, async, METER_PATH_TIMED.format(user_id))
-        return self.check_response(r)
-
-    def get_aggregated_metering(self, rt, user_id, timeout=DEFAULT_TIMEOUT, async=False):
-        r = self._get(rt, timeout, async, METER_PATH_AGGREGATED.format(user_id))
-        return self.check_response(r)
-
-    def get_actorinfo_metering(self, rt, user_id, timeout=DEFAULT_TIMEOUT, async=False):
-        r = self._get(rt, timeout, async, METER_PATH_METAINFO.format(user_id))
         return self.check_response(r)
 
     def add_index(self, rt, index, value, root_prefix_level=None, timeout=DEFAULT_TIMEOUT, async=False):
@@ -468,3 +443,6 @@ class RequestHandler(object):
         r = self._put(rt, timeout, async, AUTHENTICATION_USERS_DB, data=data)
         return self.check_response(r)
 
+    def abolish_proxy_peer(self, rt, peer_id, timeout=DEFAULT_TIMEOUT, async=False):
+        r = self._delete(rt, timeout, async, PROXY_PEER_ABOLISH.format(peer_id))
+        return self.check_response(r)

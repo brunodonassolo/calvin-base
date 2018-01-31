@@ -15,6 +15,7 @@
 # limitations under the License.
 
 import importlib
+from functools import partial
 from jsonschema import validate
 
 from calvin.utilities import calvinconfig
@@ -24,12 +25,20 @@ _log = calvinlogger.get_logger(__name__)
 _conf = calvinconfig.get()
 _calvinsys = None
 
+TESTING = False
+
+
 def get_calvinsys():
     """ Returns the calvinsys singleton"""
     global _calvinsys
+    global TESTING
+    if _calvinsys is None and TESTING:
+        from calvin.actorstore.tests.test_actors import MockCalvinSys
+        _calvinsys = MockCalvinSys()
     if _calvinsys is None:
         _calvinsys = CalvinSys()
     return _calvinsys
+
 
 class CalvinSys(object):
 
@@ -68,9 +77,17 @@ class CalvinSys(object):
             raise Exception("No such capability '%s'", capability_name)
         pymodule = capability.get('module', None)
         if pymodule is None:
-            pymodule = importlib.import_module('calvin.runtime.south.calvinsys.' + capability['path'])
+            calvinsys_paths = _conf.get(None, 'calvinsys_paths') or []
+            failed_paths = []
+            for path in calvinsys_paths:
+                search_path = path.replace('/', '.') + '.' + capability['path']
+                try:
+                    pymodule = importlib.import_module(search_path)
+                except:
+                    failed_paths.append(search_path)
+                    pass
             if pymodule is None:
-                raise Exception("Failed to import module '%s'" % capability_name)
+                raise Exception("Failed to import module '{}'\nTried:{}".format(capability_name, failed_paths))
             capability['module'] = pymodule
         class_name = capability["path"].rsplit(".", 1)
         pyclass = getattr(pymodule, class_name[1])
@@ -88,11 +105,20 @@ class CalvinSys(object):
         obj.init(**data)
         return obj
 
+    def schedule_timer(self, timer, timeout):
+        self._node.sched.insert_task(partial(self._fire_timer, timer=timer), timeout)
+        
+    def _fire_timer(self, timer):
+        # Make sure timer is still valid.
+        valid_objs = (self._objects[key]['obj'] for key in self._objects)
+        if timer in valid_objs and timer._armed:
+            timer._fire()
+
     def scheduler_wakeup(self, actor):
         """
         Trigger scheduler
         """
-        self._node.sched.trigger_loop(actor_ids=[actor.id])
+        self._node.sched.schedule_calvinsys(actor_id=actor.id)
 
     def has_capability(self, requirement):
         """
@@ -161,7 +187,6 @@ class CalvinSys(object):
             for actor, refs in self._actors.iteritems():
                 if ref in refs:
                     refs.remove(ref)
-
 
     def open(self, capability_name, actor, **kwargs):
         """

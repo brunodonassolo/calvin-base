@@ -66,7 +66,7 @@ from calvin.tests.helpers import get_ip_addr
 ip_addr = get_ip_addr()
 hostname = socket.gethostname()
 
-rt=[]
+runtimes=[]
 request_handler=None
 storage_verified=False
 
@@ -79,7 +79,7 @@ class TestSecurity(unittest.TestCase):
         from calvin.Tools.csruntime import csruntime
         from conftest import _config_pytest
         import fileinput
-        global rt
+        global runtimes
         global request_handler
         try:
             shutil.rmtree(credentials_testdir)
@@ -110,7 +110,7 @@ class TestSecurity(unittest.TestCase):
         rt0_conf.set('global','storage_type','local')
         rt0_conf.set('security','certificate_authority',{
             'domain_name':domain_name,
-            'is_ca':'True'
+            'is_ca':True
             })
         rt0_conf.set("security", "security_conf", {
                         "comment": "Certificate Authority",
@@ -134,7 +134,7 @@ class TestSecurity(unittest.TestCase):
         rt_conf.set('global','storage_proxy',"calvinip://%s:5000" % ip_addr )
         rt_conf.set('security','certificate_authority',{
             'domain_name':domain_name,
-            'is_ca':'False'
+            'is_ca':False
         })
         rt_conf.set("security", "security_conf", {
                         "comment": "External authentication, external authorization",
@@ -168,12 +168,12 @@ class TestSecurity(unittest.TestCase):
 #                    })
 #        rt3_conf.save("/tmp/calvin5003.conf")
 
-        rt = helpers.start_all_runtimes(runtimes, hostname, request_handler)
+        helpers.start_all_runtimes(runtimes, hostname, request_handler)
         request.addfinalizer(self.teardown)
 
 
     def teardown(self):
-        helpers.teardown_slow(rt, request_handler, hostname)
+        helpers.teardown_slow(runtimes, request_handler, hostname)
 
 ###################################
 #   Signature related tests
@@ -182,21 +182,13 @@ class TestSecurity(unittest.TestCase):
     @pytest.mark.slow
     def testPositive_CorrectlySignedApp_CorrectlySignedActors(self):
         _log.analyze("TESTRUN", "+", {})
-        global storage_verified
-        if not storage_verified:
-            try:
-                storage_verified = helpers.security_verify_storage(rt, request_handler)
-            except Exception as err:
-                _log.error("Failed storage verification, err={}".format(err))
-                raise
-
         result = {}
         try:
             content = Security.verify_signature_get_files(os.path.join(application_store_path, "correctly_signed.calvin"))
             if not content:
                 raise Exception("Failed finding script, signature and cert, stopping here")
             request_handler.set_credentials({"user": "user1", "password": "pass1"})
-            result = request_handler.deploy_application(rt[1], "correctly_signed", content['file'], 
+            result = request_handler.deploy_application(runtimes[1]["RT"], "correctly_signed", content['file'], 
                         content=content,
                         check=True)
         except Exception as e:
@@ -207,7 +199,7 @@ class TestSecurity(unittest.TestCase):
 
         # Verify that actors exist like this
         try:
-            actors = helpers.fetch_and_log_runtime_actors(rt, request_handler)
+            actors = helpers.fetch_and_log_runtime_actors(runtimes, request_handler)
         except Exception as err:
             _log.error("Failed to get actors from runtimes, err={}".format(err))
             raise
@@ -215,23 +207,16 @@ class TestSecurity(unittest.TestCase):
         assert result['actor_map']['correctly_signed:sum'] in actors[1]
         assert result['actor_map']['correctly_signed:snk'] in actors[1]
         request_handler.set_credentials({"user": "user0", "password": "pass0"})
-        actual = request_handler.report(rt[1], result['actor_map']['correctly_signed:snk'])
+        actual = request_handler.report(runtimes[1]["RT"], result['actor_map']['correctly_signed:snk'])
         _log.info("actual={}".format(actual))
         assert len(actual) > 2
 
-        request_handler.delete_application(rt[1], result['application_id'])
+        request_handler.delete_application(runtimes[1]["RT"], result['application_id'])
 
 
     @pytest.mark.slow
     def testNegative_IncorrectlySignedApp(self):
         _log.analyze("TESTRUN", "+", {})
-        global storage_verified
-        if not storage_verified:
-            try:
-                storage_verified = helpers.security_verify_storage(rt, request_handler)
-            except Exception as err:
-                _log.error("Failed storage verification, err={}".format(err))
-                raise
 
         result = {}
         try:
@@ -239,7 +224,7 @@ class TestSecurity(unittest.TestCase):
             if not content:
                 raise Exception("Failed finding script, signature and cert, stopping here")
             request_handler.set_credentials({"user": "user1", "password": "pass1"})
-            result = request_handler.deploy_application(rt[1], "incorrectly_signed", content['file'], 
+            result = request_handler.deploy_application(runtimes[1]["RT"], "incorrectly_signed", content['file'], 
                         content=content,
                         check=True)
         except Exception as e:
@@ -253,13 +238,6 @@ class TestSecurity(unittest.TestCase):
     @pytest.mark.slow
     def testNegative_CorrectlySignedApp_IncorrectlySignedActor(self):
         _log.analyze("TESTRUN", "+", {})
-        global storage_verified
-        if not storage_verified:
-            try:
-                storage_verified = helpers.security_verify_storage(rt, request_handler)
-            except Exception as err:
-                _log.error("Failed storage verification, err={}".format(err))
-                raise
 
         result = {}
         try:
@@ -267,8 +245,8 @@ class TestSecurity(unittest.TestCase):
             if not content:
                 raise Exception("Failed finding script, signature and cert, stopping here")
             request_handler.set_credentials({"user": "user1", "password": "pass1"})
-            result = request_handler.deploy_application(rt[1], "correctlySignedApp_incorrectlySignedActor", content['file'], 
-                    credentials={domain_name:{"user": "user1", "password": "pass1"}}, content=content,
+            result = request_handler.deploy_application(runtimes[1]["RT"], "correctlySignedApp_incorrectlySignedActor", content['file'], 
+                        content=content,
                         check=True)
         except Exception as e:
             _log.debug(str(e))
@@ -279,7 +257,7 @@ class TestSecurity(unittest.TestCase):
 
         # Verify that actors exist like this
         try:
-            actors = helpers.fetch_and_log_runtime_actors(rt, request_handler)
+            actors = helpers.fetch_and_log_runtime_actors(runtimes, request_handler)
         except Exception as err:
             _log.error("Failed to get actors from runtimes, err={}".format(err))
             raise
@@ -287,11 +265,11 @@ class TestSecurity(unittest.TestCase):
         assert result['actor_map']['correctlySignedApp_incorrectlySignedActor:sum'] in actors[1]
         assert result['actor_map']['correctlySignedApp_incorrectlySignedActor:snk'] in actors[1]
 
-        actual = request_handler.report(rt[1], result['actor_map']['correctlySignedApp_incorrectlySignedActor:snk'])
+        actual = request_handler.report(runtimes[1]["RT"], result['actor_map']['correctlySignedApp_incorrectlySignedActor:snk'])
         _log.info("actual={}".format(actual))
         assert len(actual) == 0  # Means that the incorrectly signed actor was not accepted
 
-        request_handler.delete_application(rt[1], result['application_id'])
+        request_handler.delete_application(runtimes[1]["RT"], result['application_id'])
 
 
 ###################################
@@ -302,21 +280,13 @@ class TestSecurity(unittest.TestCase):
     @pytest.mark.slow
     def testPositive_Permit_UnsignedApp_SignedActors(self):
         _log.analyze("TESTRUN", "+", {})
-        global storage_verified
-        if not storage_verified:
-            try:
-                storage_verified = helpers.security_verify_storage(rt, request_handler)
-            except Exception as err:
-                _log.error("Failed storage verification, err={}".format(err))
-                raise
-
         result = {}
         try:
             content = Security.verify_signature_get_files(os.path.join(application_store_path, "unsignedApp_signedActors.calvin"))
             if not content:
                 raise Exception("Failed finding script, signature and cert, stopping here")
             request_handler.set_credentials({"user": "user2", "password": "pass2"})
-            result = request_handler.deploy_application(rt[1], "unsignedApp_signedActors", content['file'], 
+            result = request_handler.deploy_application(runtimes[1]["RT"], "unsignedApp_signedActors", content['file'], 
                         content=content,
                         check=True)
         except Exception as e:
@@ -327,7 +297,7 @@ class TestSecurity(unittest.TestCase):
 
         # Verify that actors exist like this
         try:
-            actors = helpers.fetch_and_log_runtime_actors(rt, request_handler)
+            actors = helpers.fetch_and_log_runtime_actors(runtimes, request_handler)
         except Exception as err:
             _log.error("Failed to get actors from runtimes, err={}".format(err))
             raise
@@ -335,29 +305,21 @@ class TestSecurity(unittest.TestCase):
         assert result['actor_map']['unsignedApp_signedActors:sum'] in actors[1]
         assert result['actor_map']['unsignedApp_signedActors:snk'] in actors[1]
 
-        actual = request_handler.report(rt[1], result['actor_map']['unsignedApp_signedActors:snk'])
+        actual = request_handler.report(runtimes[1]["RT"], result['actor_map']['unsignedApp_signedActors:snk'])
         assert len(actual) > 2
 
-        request_handler.delete_application(rt[1], result['application_id'])
+        request_handler.delete_application(runtimes[1]["RT"], result['application_id'])
 
     @pytest.mark.slow
     def testPositive_Permit_UnsignedApp_Unsigned_Actor(self):
         _log.analyze("TESTRUN", "+", {})
-        global storage_verified
-        if not storage_verified:
-            try:
-                storage_verified = helpers.security_verify_storage(rt, request_handler)
-            except Exception as err:
-                _log.error("Failed storage verification, err={}".format(err))
-                raise
-
         result = {}
         try:
             content = Security.verify_signature_get_files(os.path.join(application_store_path, "unsignedApp_unsignedActors.calvin"))
             if not content:
                 raise Exception("Failed finding script, signature and cert, stopping here")
             request_handler.set_credentials({"user": "user3", "password": "pass3"})
-            result = request_handler.deploy_application(rt[1], "unsignedApp_unsignedActors", content['file'], 
+            result = request_handler.deploy_application(runtimes[1]["RT"], "unsignedApp_unsignedActors", content['file'], 
                         content=content,
                         check=True)
         except Exception as e:
@@ -368,7 +330,7 @@ class TestSecurity(unittest.TestCase):
 
         # Verify that actors exist like this
         try:
-            actors = helpers.fetch_and_log_runtime_actors(rt, request_handler)
+            actors = helpers.fetch_and_log_runtime_actors(runtimes, request_handler)
         except Exception as err:
             _log.error("Failed to get actors from runtimes, err={}".format(err))
             raise
@@ -376,29 +338,21 @@ class TestSecurity(unittest.TestCase):
         assert result['actor_map']['unsignedApp_unsignedActors:sum'] in actors[1]
         assert result['actor_map']['unsignedApp_unsignedActors:snk'] in actors[1]
 
-        actual = request_handler.report(rt[1], result['actor_map']['unsignedApp_unsignedActors:snk'])
+        actual = request_handler.report(runtimes[1]["RT"], result['actor_map']['unsignedApp_unsignedActors:snk'])
         assert len(actual) > 2
 
-        request_handler.delete_application(rt[1], result['application_id'])
+        request_handler.delete_application(runtimes[1]["RT"], result['application_id'])
 
     @pytest.mark.slow
     def testNegative_Deny_SignedApp_SignedActor_UnallowedRequirement(self):
         _log.analyze("TESTRUN", "+", {})
-        global storage_verified
-        if not storage_verified:
-            try:
-                storage_verified = helpers.security_verify_storage(rt, request_handler)
-            except Exception as err:
-                _log.error("Failed storage verification, err={}".format(err))
-                raise
-
         result = {}
         try:
             content = Security.verify_signature_get_files(os.path.join(application_store_path, "correctly_signed.calvin"))
             if not content:
                 raise Exception("Failed finding script, signature and cert, stopping here")
             request_handler.set_credentials({"user": "user1", "password": "pass1"})
-            result = request_handler.deploy_application(rt[2], "correctly_signed", content['file'], 
+            result = request_handler.deploy_application(runtimes[2]["RT"], "correctly_signed", content['file'], 
                         content=content,
                         check=True)
         except Exception as e:
@@ -410,7 +364,7 @@ class TestSecurity(unittest.TestCase):
 
         # Verify that actors exist like this
         try:
-            actors = helpers.fetch_and_log_runtime_actors(rt, request_handler)
+            actors = helpers.fetch_and_log_runtime_actors(runtimes, request_handler)
         except Exception as err:
             _log.error("Failed to get actors from runtimes, err={}".format(err))
             raise
@@ -418,30 +372,22 @@ class TestSecurity(unittest.TestCase):
         assert result['actor_map']['correctly_signed:sum'] in actors[2]
         assert result['actor_map']['correctly_signed:snk'] in actors[2]
 
-        actual = request_handler.report(rt[2], result['actor_map']['correctly_signed:snk'])
+        actual = request_handler.report(runtimes[2]["RT"], result['actor_map']['correctly_signed:snk'])
         _log.debug("actual={}".format(actual))
         assert len(actual) == 0  # Means that the actor with unallowed requirements was not accepted
 
-        request_handler.delete_application(rt[2], result['application_id'])
+        request_handler.delete_application(runtimes[2]["RT"], result['application_id'])
 
     @pytest.mark.slow
     def testPositive_Local_Authorization(self):
         _log.analyze("TESTRUN", "+", {})
-        global storage_verified
-        if not storage_verified:
-            try:
-                storage_verified = helpers.security_verify_storage(rt, request_handler)
-            except Exception as err:
-                _log.error("Failed storage verification, err={}".format(err))
-                raise
-
         result = {}
         try:
             content = Security.verify_signature_get_files(os.path.join(application_store_path, "unsignedApp_signedActors.calvin"))
             if not content:
                 raise Exception("Failed finding script, signature and cert, stopping here")
             request_handler.set_credentials({"user": "user2", "password": "pass2"})
-            result = request_handler.deploy_application(rt[0], "unsignedApp_signedActors", content['file'], 
+            result = request_handler.deploy_application(runtimes[0]["RT"], "unsignedApp_signedActors", content['file'], 
                         content=content,
                         check=True)
         except Exception as e:
@@ -452,7 +398,7 @@ class TestSecurity(unittest.TestCase):
 
         # Verify that actors exist like this
         try:
-            actors = helpers.fetch_and_log_runtime_actors(rt, request_handler)
+            actors = helpers.fetch_and_log_runtime_actors(runtimes, request_handler)
         except Exception as err:
             _log.error("Failed to get actors from runtimes, err={}".format(err))
             raise
@@ -460,29 +406,21 @@ class TestSecurity(unittest.TestCase):
         assert result['actor_map']['unsignedApp_signedActors:sum'] in actors[0]
         assert result['actor_map']['unsignedApp_signedActors:snk'] in actors[0]
 
-        actual = request_handler.report(rt[0], result['actor_map']['unsignedApp_signedActors:snk'])
+        actual = request_handler.report(runtimes[0]["RT"], result['actor_map']['unsignedApp_signedActors:snk'])
         assert len(actual) > 2
 
-        request_handler.delete_application(rt[0], result['application_id'])
+        request_handler.delete_application(runtimes[0]["RT"], result['application_id'])
 
     @pytest.mark.slow
     def testPositive_External_Authorization(self):
         _log.analyze("TESTRUN", "+", {})
-        global storage_verified
-        if not storage_verified:
-            try:
-                storage_verified = helpers.security_verify_storage(rt, request_handler)
-            except Exception as err:
-                _log.error("Failed storage verification, err={}".format(err))
-                raise
-
         result = {}
         try:
             content = Security.verify_signature_get_files(os.path.join(application_store_path, "unsignedApp_signedActors.calvin"))
             if not content:
                 raise Exception("Failed finding script, signature and cert, stopping here")
             request_handler.set_credentials({"user": "user2", "password": "pass2"})
-            result = request_handler.deploy_application(rt[1], "unsignedApp_signedActors", content['file'], 
+            result = request_handler.deploy_application(runtimes[1]["RT"], "unsignedApp_signedActors", content['file'], 
                         content=content,
                         check=True)
         except Exception as e:
@@ -493,7 +431,7 @@ class TestSecurity(unittest.TestCase):
 
         # Verify that actors exist like this
         try:
-            actors = helpers.fetch_and_log_runtime_actors(rt, request_handler)
+            actors = helpers.fetch_and_log_runtime_actors(runtimes, request_handler)
         except Exception as err:
             _log.error("Failed to get actors from runtimes, err={}".format(err))
             raise
@@ -501,29 +439,21 @@ class TestSecurity(unittest.TestCase):
         assert result['actor_map']['unsignedApp_signedActors:sum'] in actors[1]
         assert result['actor_map']['unsignedApp_signedActors:snk'] in actors[1]
 
-        actual = request_handler.report(rt[1], result['actor_map']['unsignedApp_signedActors:snk'])
+        actual = request_handler.report(runtimes[1]["RT"], result['actor_map']['unsignedApp_signedActors:snk'])
         assert len(actual) > 2
 
-        request_handler.delete_application(rt[1], result['application_id'])
+        request_handler.delete_application(runtimes[1]["RT"], result['application_id'])
 
     @pytest.mark.slow
     def testPositive_Migration_When_Denied(self):
         _log.analyze("TESTRUN", "+", {})
-        global storage_verified
-        if not storage_verified:
-            try:
-                storage_verified = helpers.security_verify_storage(rt, request_handler)
-            except Exception as err:
-                _log.error("Failed storage verification, err={}".format(err))
-                raise
-
         result = {}
         try:
             content = Security.verify_signature_get_files(os.path.join(application_store_path, "correctly_signed.calvin"))
             if not content:
                 raise Exception("Failed finding script, signature and cert, stopping here")
             request_handler.set_credentials({"user": "user4", "password": "pass4"})
-            result = request_handler.deploy_application(rt[1], "correctly_signed", content['file'], 
+            result = request_handler.deploy_application(runtimes[1]["RT"], "correctly_signed", content['file'], 
                         content=content,
                         check=True)
         except Exception as e:
@@ -532,9 +462,9 @@ class TestSecurity(unittest.TestCase):
             _log.exception("Test deploy failed")
             raise Exception("Failed deployment of app correctly_signed, no use to verify if requirements fulfilled")
 
-        # Verify that actors exist like this (all of them should have migrated to rt[2])
+        # Verify that actors exist like this (all of them should have migrated to runtimes[2]["RT"])
         try:
-            actors = helpers.fetch_and_log_runtime_actors(rt, request_handler)
+            actors = helpers.fetch_and_log_runtime_actors(runtimes, request_handler)
         except Exception as err:
             _log.error("Failed to get actors from runtimes, err={}".format(err))
             raise
@@ -542,10 +472,10 @@ class TestSecurity(unittest.TestCase):
         assert result['actor_map']['correctly_signed:sum'] in actors[2]
         assert result['actor_map']['correctly_signed:snk'] in actors[2]
 
-        actual = request_handler.report(rt[2], result['actor_map']['correctly_signed:snk'])
+        actual = request_handler.report(runtimes[2]["RT"], result['actor_map']['correctly_signed:snk'])
         assert len(actual) > 2
 
-        request_handler.delete_application(rt[1], result['application_id'])
+        request_handler.delete_application(runtimes[1]["RT"], result['application_id'])
 
 ###################################
 #   Control interface authorization 
@@ -555,21 +485,13 @@ class TestSecurity(unittest.TestCase):
     @pytest.mark.slow
     def testNegative_Control_Interface_Authorization(self):
         _log.analyze("TESTRUN", "+", {})
-        global storage_verified
-        if not storage_verified:
-            try:
-                storage_verified = helpers.security_verify_storage(rt, request_handler)
-            except Exception as err:
-                _log.error("Failed storage verification, err={}".format(err))
-                raise
-
         result = {}
         try:
             content = Security.verify_signature_get_files(os.path.join(application_store_path, "correctly_signed.calvin"))
             if not content:
                 raise Exception("Failed finding script, signature and cert, stopping here")
             request_handler.set_credentials({"user": "user6", "password": "pass6"})
-            result = request_handler.deploy_application(rt[1], "correctly_signed", content['file'],
+            result = request_handler.deploy_application(runtimes[1]["RT"], "correctly_signed", content['file'],
                         content=content,
                         check=True)
         except Exception as e:
@@ -583,19 +505,11 @@ class TestSecurity(unittest.TestCase):
     @pytest.mark.slow
     def testPositive_Add_User(self):
         _log.analyze("TESTRUN", "+", {})
-        global storage_verified
-        if not storage_verified:
-            try:
-                storage_verified = helpers.security_verify_storage(rt, request_handler)
-            except Exception as err:
-                _log.error("Failed storage verification, err={}".format(err))
-                raise
-
         result = {}
         users_db=None
         try:
             request_handler.set_credentials({"user": "user0", "password": "pass0"})
-            users_db = request_handler.get_users_db(rt[0])
+            users_db = request_handler.get_users_db(runtimes[0]["RT"])
         except Exception as e:
             if e.message.startswith("401"):
                 _log.exception("Failed to get users_db, err={}".format(e))
@@ -614,14 +528,14 @@ class TestSecurity(unittest.TestCase):
             raise Exception("users_db not in result or users_db not in result[users_db]")
         #PUT the update database to the authentication server
         try:
-            result = request_handler.post_users_db(rt[0], users_db)
+            result = request_handler.post_users_db(runtimes[0]["RT"], users_db)
         except Exception as e:
             if e.message.startswith("401"):
                 _log.exception("Failed to get users_db, err={}".format(e))
                 raise
         #Read the users database back again and check if Greta has been added
         try:
-            users_db2 = request_handler.get_users_db(rt[0])
+            users_db2 = request_handler.get_users_db(runtimes[0]["RT"])
         except Exception as e:
             if e.message.startswith("401"):
                 _log.exception("Failed to get users_db, err={}".format(e))
@@ -637,21 +551,13 @@ class TestSecurity(unittest.TestCase):
     @pytest.mark.slow
     def testNegative_UnallowedUser(self):
         _log.analyze("TESTRUN", "+", {})
-        global storage_verified
-        if not storage_verified:
-            try:
-                storage_verified = helpers.security_verify_storage(rt, request_handler)
-            except Exception as err:
-                _log.error("Failed storage verification, err={}".format(err))
-                raise
-
         result = {}
         try:
             content = Security.verify_signature_get_files(os.path.join(application_store_path, "correctly_signed.calvin"))
             if not content:
                 raise Exception("Failed finding script, signature and cert, stopping here")
             request_handler.set_credentials({"user": "user_not_allowed", "password": "pass1"})
-            result = request_handler.deploy_application(rt[1], "correctly_signed", content['file'], 
+            result = request_handler.deploy_application(runtimes[1]["RT"], "correctly_signed", content['file'], 
                         content=content,
                         check=True)
         except Exception as e:
@@ -665,21 +571,13 @@ class TestSecurity(unittest.TestCase):
     @pytest.mark.slow
     def testNegative_IncorrectPassword(self):
         _log.analyze("TESTRUN", "+", {})
-        global storage_verified
-        if not storage_verified:
-            try:
-                storage_verified = helpers.security_verify_storage(rt, request_handler)
-            except Exception as err:
-                _log.error("Failed storage verification, err={}".format(err))
-                raise
-
         result = {}
         try:
             content = Security.verify_signature_get_files(os.path.join(application_store_path, "correctly_signed.calvin"))
             if not content:
                 raise Exception("Failed finding script, signature and cert, stopping here")
             request_handler.set_credentials({"user": "user1", "password": "incorrect_password"})
-            result = request_handler.deploy_application(rt[1], "correctly_signed", content['file'], 
+            result = request_handler.deploy_application(runtimes[1]["RT"], "correctly_signed", content['file'], 
                         content=content,
                         check=True)
         except Exception as e:
@@ -693,21 +591,13 @@ class TestSecurity(unittest.TestCase):
     @pytest.mark.slow
     def testPositive_Local_Authentication(self):
         _log.analyze("TESTRUN", "+", {})
-        global storage_verified
-        if not storage_verified:
-            try:
-                storage_verified = helpers.security_verify_storage(rt, request_handler)
-            except Exception as err:
-                _log.error("Failed storage verification, err={}".format(err))
-                raise
-
         result = {}
         try:
             content = Security.verify_signature_get_files(os.path.join(application_store_path, "correctly_signed.calvin"))
             if not content:
                 raise Exception("Failed finding script, signature and cert, stopping here")
             request_handler.set_credentials({"user": "user5", "password": "pass5"})
-            result = request_handler.deploy_application(rt[0], "correctly_signed", content['file'], 
+            result = request_handler.deploy_application(runtimes[0]["RT"], "correctly_signed", content['file'], 
                         content=content,
                         check=True)
         except Exception as e:
@@ -720,7 +610,7 @@ class TestSecurity(unittest.TestCase):
 
         # Verify that actors exist like this
         try:
-            actors = helpers.fetch_and_log_runtime_actors(rt, request_handler)
+            actors = helpers.fetch_and_log_runtime_actors(runtimes, request_handler)
         except Exception as err:
             _log.error("Failed to get actors from runtimes, err={}".format(err))
             raise
@@ -729,29 +619,21 @@ class TestSecurity(unittest.TestCase):
         assert result['actor_map']['correctly_signed:snk'] in actors[0]
 
         time.sleep(0.1)
-        actual = request_handler.report(rt[0], result['actor_map']['correctly_signed:snk'])
+        actual = request_handler.report(runtimes[0]["RT"], result['actor_map']['correctly_signed:snk'])
         assert len(actual) > 2
 
-        request_handler.delete_application(rt[0], result['application_id']) 
+        request_handler.delete_application(runtimes[0]["RT"], result['application_id']) 
 
     @pytest.mark.slow
     def testPositive_External_Authentication(self):
         _log.analyze("TESTRUN", "+", {})
-        global storage_verified
-        if not storage_verified:
-            try:
-                storage_verified = helpers.security_verify_storage(rt, request_handler)
-            except Exception as err:
-                _log.error("Failed storage verification, err={}".format(err))
-                raise
-
         result = {}
         try:
             content = Security.verify_signature_get_files(os.path.join(application_store_path, "correctly_signed.calvin"))
             if not content:
                 raise Exception("Failed finding script, signature and cert, stopping here")
             request_handler.set_credentials({"user": "user5", "password": "pass5"})
-            result = request_handler.deploy_application(rt[1], "correctly_signed", content['file'], 
+            result = request_handler.deploy_application(runtimes[1]["RT"], "correctly_signed", content['file'], 
                         content=content,
                         check=True)
         except Exception as e:
@@ -764,7 +646,7 @@ class TestSecurity(unittest.TestCase):
 
         # Verify that actors exist like this
         try:
-            actors = helpers.fetch_and_log_runtime_actors(rt, request_handler)
+            actors = helpers.fetch_and_log_runtime_actors(runtimes, request_handler)
         except Exception as err:
             _log.error("Failed to get actors from runtimes, err={}".format(err))
             raise
@@ -773,10 +655,10 @@ class TestSecurity(unittest.TestCase):
         assert result['actor_map']['correctly_signed:snk'] in actors[1]
 
         time.sleep(0.1)
-        actual = request_handler.report(rt[1], result['actor_map']['correctly_signed:snk'])
+        actual = request_handler.report(runtimes[1]["RT"], result['actor_map']['correctly_signed:snk'])
         assert len(actual) > 2
 
-        request_handler.delete_application(rt[1], result['application_id']) 
+        request_handler.delete_application(runtimes[1]["RT"], result['application_id']) 
 
 #    @pytest.mark.xfail
 #    @pytest.mark.slow
@@ -785,22 +667,13 @@ class TestSecurity(unittest.TestCase):
 #        global rt
 #        global request_handler
 #        global security_testdir
-#        global storage_verified
-#
-#        if not storage_verified:
-#            try:
-#                storage_verified = helpers.security_verify_storage(rt, request_handler)
-#            except Exception as err:
-#                _log.error("Failed storage verification, err={}".format(err))
-#                raise
-#
 #        result = {}
 #        try:
 #            content = Security.verify_signature_get_files(os.path.join(application_store_path, "correctly_signed.calvin"))
 #            if not content:
 #                raise Exception("Failed finding script, signature and cert, stopping here")
 #            request_handler.set_credentials({"user": "user5", "password": "pass5"})
-#            result = request_handler.deploy_application(rt[3], "correctly_signed", content['file'], 
+#            result = request_handler.deploy_application(runtimes[3]["RT"], "correctly_signed", content['file'], 
 #                        content=content,
 #                        check=True)
 #        except Exception as e:
@@ -813,7 +686,7 @@ class TestSecurity(unittest.TestCase):
 #
 #        # Verify that actors exist like this
 #        try:
-#            actors = helpers.fetch_and_log_runtime_actors(rt, request_handler)
+#            actors = helpers.fetch_and_log_runtime_actors(runtimes, request_handler)
 #        except Exception as err:
 #            _log.error("Failed to get actors from runtimes, err={}".format(err))
 #            raise
@@ -822,7 +695,7 @@ class TestSecurity(unittest.TestCase):
 #        assert result['actor_map']['correctly_signed:sum'] in actors[3]
 #        assert result['actor_map']['correctly_signed:snk'] in actors[3]
 #
-#        actual = request_handler.report(rt[3], result['actor_map']['correctly_signed:snk'])
+#        actual = request_handler.report(runtimes[3]["RT"], result['actor_map']['correctly_signed:snk'])
 #        assert len(actual) > 2
 #
-#        request_handler.delete_application(rt[3], result['application_id'])
+#        request_handler.delete_application(runtimes[3]["RT"], result['application_id'])

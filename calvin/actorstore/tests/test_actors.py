@@ -21,9 +21,88 @@ import traceback
 from calvin.actorstore.store import ActorStore
 from calvin.runtime.north.calvin_token import Token
 from calvin.runtime.north.plugins.port.endpoint import Endpoint
-from calvin.runtime.north import metering
+from calvin.runtime.north import scheduler
 from calvin.runtime.north.plugins.port import queue
+from calvin.utilities import calvinlogger
+from calvin.runtime.north.calvinsys import CalvinSys
 
+_log = calvinlogger.get_logger(__name__)
+
+
+class MockCalvinSys(CalvinSys):
+
+    def init(self, capabilities):
+        for key, value in capabilities.iteritems():
+            module = value['module']
+            value['path'] = module
+            value['module'] = None
+            _log.info("Capability '%s' registered with module '%s'" % (key, module))
+        self.capabilities = capabilities
+        self.reg_sysobj = {}
+
+    def open(self, capability_name, actor, **kwargs):
+        calvinsys = actor.test_calvinsys.get(capability_name, {})
+        attr_data = dict({'calvinsys': calvinsys}, **kwargs)
+        ref = super(MockCalvinSys, self).open(capability_name, actor, **attr_data)
+        if actor not in self.reg_sysobj:
+            self.reg_sysobj[actor] = []
+        self.reg_sysobj[actor].append(ref)
+        return ref
+
+    def can_write(self, ref):
+        obj = self._get_capability_object(ref)
+        data = obj.can_write()
+        return data
+
+    def write(self, ref, data):
+        obj = self._get_capability_object(ref)
+        obj.write(data)
+
+    def can_read(self, ref):
+        obj = self._get_capability_object(ref)
+        data = obj.can_read()
+        return data
+
+    def read(self, ref):
+        obj = self._get_capability_object(ref)
+        data = obj.read()
+        return data
+
+    def read_called(self, actor):
+        for ref in self.reg_sysobj.get(actor, []):
+            obj = self._get_capability_object(ref)
+            try:
+                if obj.read_called:
+                    return True
+            except AttributeError:
+                pass
+            except Exception as e:
+                raise e
+        return False
+
+    def write_called(self, actor):
+        for ref in self.reg_sysobj.get(actor, []):
+            obj = self._get_capability_object(ref)
+            try:
+                if obj.write_called:
+                    return True
+            except AttributeError:
+                pass
+            except Exception as e:
+                raise e
+        return False
+
+    def verify_read_write_during_init(self, aut, actor_name):
+        if self.read_called(aut):
+            _log.error("Actor: %s calling calvinsys.read() from init()." % (actor_name))
+        if self.write_called(aut):
+            _log.error("Actor: %s calling calvinsys.write() from init()." % (actor_name))
+
+    def init_done(self, actor_name):
+        for ref in self.reg_sysobj.get(actor_name, []):
+            obj = self._get_capability_object(ref)
+            if obj:
+                obj.start_verifying_calvinsys()
 
 def fwrite(port, value):
     if isinstance(value, Token):
@@ -98,51 +177,6 @@ class DummyOutEndpoint(Endpoint):
     def is_connected(self):
         return True
 
-
-class FDMock(object):
-    def __init__(self, fname, mode):
-        self.fp = open(fname, mode)
-        if 'r' in mode:
-            self.buffer = self.fp.read()
-        else:
-            self.buffer = ""
-
-    def close(self):
-        self.fp.close()
-
-    def eof(self):
-        return len(self.buffer) == 0
-
-    def has_data(self):
-        return len(self.buffer) > 0
-
-    def read(self):
-        data = self.buffer
-        self.buffer = ""
-        return data
-
-    def write(self, data):
-        self.buffer += data
-        self.fp.write(data)
-
-    def read_line(self):
-        if '\n' in self.buffer:
-            line, self.buffer = self.buffer.split("\n", 1)
-        else:
-            line = self.buffer
-            self.buffer = ""
-        return line
-
-    def write_line(self, data):
-        self.buffer += data + "\n"
-        self.fp.write(data + "\n")
-
-
-class StdInMock(FDMock):
-    def __init__(self):
-        self.buffer = "stdin\nstdin_second_line"
-
-
 class TimerMock(object):
 
     def __init__(self):
@@ -172,37 +206,40 @@ class CalvinSysTimerMock(object):
         return TimerMock()
 
 
-class CalvinSysFileMock(object):
-    def open(self, fname, mode):
-        return FDMock(fname, mode)
-
-    def open_stdin(self):
-        return StdInMock()
-
-    def close(self, fdmock):
-        fdmock.close()
+class DeprecatedCavinSysMock(object):
+    def __getattr__(self, name):
+        def method(*args, **kwargs):
+            raise AssertionError("Not testable, method %s not mocked in deprecated calvinsys" % name)
+        return method
 
 
-
-def load_simple_requirement(req):
-    # For 'simple' requirements with no external dependencies,
-    import importlib
-    loaded = importlib.import_module("calvin." + req)
-    return loaded.register()
+# def load_simple_requirement(req):
+#     # For 'simple' requirements with no external dependencies,
+#     import importlib
+#     loaded = importlib.import_module("calvin." + req)
+#     return loaded.register()
 
 requirements = \
     {
-        'calvinsys.io.filehandler': CalvinSysFileMock(),
-        'calvinsys.events.timer': CalvinSysTimerMock()
+        'calvinsys.network.httpclienthandler': DeprecatedCavinSysMock(),
+        'calvinsys.network.mqtthandlerreg_sysobjects': DeprecatedCavinSysMock(),
+        'calvinsys.opcua.client': DeprecatedCavinSysMock(),
+        'calvinsys.network.mqtthandler': DeprecatedCavinSysMock(),
+        'calvinsys.network.serverhandler': DeprecatedCavinSysMock(),
+        'calvinsys.network.socketclienthandler': DeprecatedCavinSysMock(),
+        'calvinsys.events.timer': DeprecatedCavinSysMock(),
+        'calvinsys.sensors.rotary_encoder': DeprecatedCavinSysMock(),
+        'calvinsys.sensors.rfid': DeprecatedCavinSysMock(),
     }
 
 class CalvinSysMock(dict):
     def use_requirement(self, actor, requirement):
-        print actor
+        _log.warning("Use of deprecated CalvinSysAPI for requirement %s by %s" % (requirement, actor.__class__))
         if requirement in requirements:
             return requirements[requirement]
         elif requirement.startswith("calvinsys.native"):
-            return load_simple_requirement(requirement)
+            raise Exception("Previously deprecated '%s' no longer exists" % (requirement,))
+            # return load_simple_requirement(requirement)
         else:
             raise Exception("Test framework does not know how to handle requirement '%s'" % (requirement,))
 
@@ -213,35 +250,271 @@ def setup_calvinlib():
     from calvin.runtime.north.calvinlib import get_calvinlib
     lib = get_calvinlib()
     lib.init(capabilities={
-                     "math.arithmetic.compare": {
-                         "module": "mathlib.Arithmetic"
-                     },
-                     "math.arithmetic.operator": {
-                         "module": "mathlib.Arithmetic"
-                     },
-                     "math.arithmetic.eval": {
-                         "module": "mathlib.Arithmetic"
-                     },
-                     "math.random": {
-                         "module": "mathlib.Random",
-                         "attributes": {"seed": 10}
-                     },
-                     "json": {
-                         "module": "jsonlib.Json"
-                     },
-                     "base64": {
-                         "module": "base64lib.Base64"
-                     },
-                     "copy": {
-                         "module": "datalib.Copy"
-                     }
-                 })
+        "math.arithmetic.compare": {
+            "module": "mathlib.Arithmetic"
+        },
+        "math.arithmetic.operator": {
+            "module": "mathlib.Arithmetic"
+        },
+        "math.arithmetic.eval": {
+            "module": "mathlib.Arithmetic"
+        },
+        "math.random": {
+            "module": "mathlib.Random",
+            "attributes": {"seed": 10}
+        },
+        "json": {
+            "module": "jsonlib.Json"
+        },
+        "base64": {
+            "module": "base64lib.Base64"
+        },
+        "copy": {
+            "module": "datalib.Copy"
+        },
+        "mustache": {
+            "module": "textformatlib.Pystache"
+        },
+        "time": {
+            "module": "timelib.Time"
+        },
+        "regexp": {
+            "module": "regexp.PyRegexp",
+        }
+    })
+
+
+def setup_calvinsys():
+    import calvin.runtime.north.calvinsys as calvinsys
+    calvinsys.TESTING = True
+    from calvin.runtime.north.calvinsys import get_calvinsys
+    sys = get_calvinsys()
+    sys.init(capabilities={
+        "io.button": {
+            "module": "mock.MockInput",
+            "attributes": {"data": [1, 0, 1, 0]}
+        },
+        "io.digitalin": {
+            "module": "mock.MockInput",
+            "attributes": {"data": [1, 0, 1, 0]}
+        },
+        "io.knob": {
+            "module": "mock.MockInput",
+            "attributes": {"data": [-1, 1, 0, 1]}
+        },
+        "io.hallswitch": {
+            "module": "mock.MockInput",
+            "attributes": {"data": [False, True, False, True]}
+        },
+        "io.switch": {
+            "module": "mock.MockInput",
+            "attributes": {"data": [0, 1, 0, 1]}
+        },
+        "io.tiltswitch": {
+            "module": "mock.MockInput",
+            "attributes": {"data": [1, 0, 1, 0]}
+        },
+        "io.lightbreaker": {
+            "module": "mock.MockInput",
+            "attributes": {"data": [False, True, False, True]}
+        },
+        "io.pickupgesture": {
+            "module": "mock.MockInput",
+            "attributes": {"data": [False, True, False, True]}
+        },
+
+
+        "io.buzzer": {
+            "module": "mock.MockOutput",
+            "attributes": {}
+        },
+        "io.digitalout": {
+            "module": "mock.MockOutput",
+            "attributes": {}
+        },
+        "io.light": {
+            "module": "mock.MockOutput",
+            "attributes": {}
+        },
+        "io.stdout": {
+            "module": "mock.MockOutput",
+            "attributes": {}
+        },
+        "io.pwm": {
+            "module": "mock.MockOutput",
+            "attributes": {}
+        },
+        "io.servomotor": {
+            "module": "mock.MockOutput",
+            "attributes": {}
+        },
+        "log.info": {
+            "module": "mock.MockOutput",
+            "attributes": {}
+        },
+        "log.warning": {
+            "module": "mock.MockOutput",
+            "attributes": {}
+        },
+        "log.error": {
+            "module": "mock.MockOutput",
+            "attributes": {}
+        },
+        "web.twitter.post": {
+            "module": "mock.MockOutput",
+            "attributes": {}
+        },
+        "notify.bell": {
+            "module": "mock.MockOutput",
+            "attributes": {}
+        },
+        "image.render": {
+            "module": "mock.MockOutput",
+            "attributes": {}
+        },
+        "web.pushbullet.channel.post": {
+            "module": "mock.MockOutput",
+            "attributes": {}
+        },
+        "web.websocket.broadcast": {
+            "module": "mock.MockOutput",
+            "attributes": {}
+       },
+
+
+        "sys.schedule": {
+            "module": "mock.MockInputOutput",
+            "attributes": {'data': ["dummy"]}
+        },
+        "sys.timer.once": {
+            "module": "mock.MockInputOutput",
+            "attributes": {'data': ["dummy"]}
+        },
+        "sys.timer.repeating": {
+            "module": "mock.MockInputOutput",
+            "attributes": {'data': ["dummy"]}
+        },
+        "sys.attribute.public": {
+            "module": "mock.MockInputOutput",
+            "attributes": {'data': ["dummy"]}
+        },
+        "sys.attribute.indexed": {
+            "module": "mock.MockInputOutput",
+            "attributes": {'data': ["dummy"]}
+        },
+        "image.facedetection": {
+            "module": "mock.MockInputOutput",
+            "attributes": {'data': ["dummy"]}
+        },
+        "image.facefinding": {
+            "module": "mock.MockInputOutput",
+            "attributes": {'data': ["dummy"]}
+        },
+        "image.source": {
+            "module": "mock.MockInputOutput",
+            "attributes": {'data': ["dummy"]}
+        },
+        "image.objectdetection": {
+            "module": "mock.MockInputOutput",
+            "attributes": {'data': ["dummy"]}
+        },
+        "image.objectfinding": {
+            "module": "mock.MockInputOutput",
+            "attributes": {'data': ["dummy"]}
+        },
+        "io.distance": {
+            "module": "mock.MockInputOutput",
+            "attributes": {"data": ["dummy"]}
+        },
+        "io.temperature": {
+            "module": "mock.MockInputOutput",
+            "attributes": {"data": ["dummy"]}
+        },
+        "io.accelerometer": {
+            "module": "mock.MockInputOutput",
+            "attributes": {"data": ["dummy"]}
+        },
+        "io.gyroscope": {
+            "module": "mock.MockInputOutput",
+            "attributes": {"data": ["dummy"]}
+        },
+        "io.soilmoisture": {
+            "module": "mock.MockInputOutput",
+            "attributes": {"data": ["dummy"]}
+        },
+        "io.humidity": {
+            "module": "mock.MockInputOutput",
+            "attributes": {"data": ["dummy"]}
+        },
+        "io.stepcounter": {
+            "module": "mock.MockInputOutput",
+            "attributes": {"data": ["dummy"]}
+        },
+        "io.filesize": {
+            "module": "mock.MockInput",
+            "attributes": {"data": [44]}
+        },
+        "io.filereader": {
+            "module": "mock.MockInput",
+            "attributes": {"data": ["the quick brown fox jumped over the lazy dog"]}
+        },
+        "io.filewriter": {
+            "module": "mock.MockOutput",
+            "attributes": {}
+        },
+        "io.stdin": {
+            "module": "mock.MockInput",
+            "attributes": {"data": ["the quick brown fox jumped over the lazy dog"]}
+        },
+        "weather": {
+            "module": "mock.MockInputOutput",
+            "attributes": {"data": ["dummy"]}
+        },
+        "weather.local": {
+            "module": "mock.MockInputOutput",
+            "attributes": {"data": ["dummy"]}
+        },
+        "chart.dynamic.meter": {
+            "module": "mock.MockInputOutput",
+            "attributes": {"data": ["dummy"]}
+        },
+        "chart.static.vbar": {
+            "module": "mock.MockInputOutput",
+            "attributes": {"data": ["dummy"]}
+        },
+        "chart.dynamic.vbar": {
+            "module": "mock.MockInputOutput",
+            "attributes": {"data": ["dummy"]}
+        },
+        "chart.static.hbar": {
+            "module": "mock.MockInputOutput",
+            "attributes": {"data": ["dummy"]}
+        },
+        "chart.dynamic.hbar": {
+            "module": "mock.MockInputOutput",
+            "attributes": {"data": ["dummy"]}
+        },
+        "chart.dynamic.line": {
+            "module": "mock.MockInputOutput",
+            "attributes": {"data": ["dummy"]}
+        }
+    })
+    return sys
+
 
 def teardown_calvinlib():
     import calvin.runtime.north.calvinlib as calvinlib
     calvinlib.TESTING=False
     del calvinlib._calvinlib
     calvinlib._calvinlib=None
+
+
+def teardown_calvinsys():
+    import calvin.runtime.north.calvinsys as calvinsys
+    calvinsys.TESTING = False
+    del calvinsys._calvinsys
+    calvinsys._calvinsys = None
+
 
 class ActorTester(object):
 
@@ -251,8 +524,8 @@ class ActorTester(object):
         self.illegal_actors = {}
         self.components = {}
         self.id = "ActorTester"
-        self.metering = metering.set_metering(metering.Metering(self))
         setup_calvinlib()
+        self.test_sys = setup_calvinsys()
 
     def collect_actors(self, actor):
         actors = [m + '.' + a for m in self.store.modules() for a in self.store.actors(m)]
@@ -267,12 +540,15 @@ class ActorTester(object):
             actor = actorclass(actorname, disable_state_checks=True)
             if not hasattr(actor, 'test_set'):
                 self.actors[actorname] = 'no_test'
+                _log.warning("%s not tested, no test_set defined." % actorname)
                 return
+            # For backward compability of use_requirement
             actor._calvinsys = CalvinSysMock()
-            actor._calvinsys['file'] = CalvinSysFileMock()
-            actor._calvinsys['timer'] = CalvinSysTimerMock()
+
             actor.init(*actorclass.test_args, **actorclass.test_kwargs)
             actor.setup_complete()
+        except AssertionError as e:
+            raise e
         except Exception as e:
             self.illegal_actors[actorname] = "Failed to instantiate"
             sys.stderr.write("Actor %s: %s" % (actorname, e))
@@ -291,30 +567,44 @@ class ActorTester(object):
         self.actors[actorname] = actor
 
     def instantiate_actors(self):
+        test_fail = {}
         for a in self.actor_names:
             found, primitive, actorclass, signer = self.store.lookup(a)
             if found and primitive:
-                self.instantiate_actor(actorclass, a)
+                try:
+                    self.instantiate_actor(actorclass, a)
+                except AssertionError as e:
+                    test_fail[a] = e.message
+                except Exception as e:
+                    raise e
             elif found and not primitive:
                 self.components[a] = "TODO: Cannot test components (%s)" % (a,)
             else:
                 self.illegal_actors[a] = "Unknown actor - probably parsing issues"
 
+        return test_fail
+
     def load_actor(self, path):
+        test_fail = {}
         actorclass, _ = self.store.load_from_path(path)
         if actorclass:
-            self.instantiate_actor(actorclass, path)
+            try:
+                self.instantiate_actor(actorclass, path)
+            except AssertionError as e:
+                test_fail[path] = e.message
+            except Exception as e:
+                raise e
         else:
             self.illegal_actors[path] = "Unknown actor - probably parsing issues"
+        return test_fail
 
     def test_actor(self, actor, aut):
         for idx in range(len(aut.test_set)):
             test_index = idx + 1
             test = aut.test_set[idx]
-
             setups = test.get('setup', [])
-            inputs = test.get('in', {})
-            outputs = test.get('out', {})
+            inputs = test.get('inports', {})
+            outputs = test.get('outports', {})
             postconds = test.get('postcond', [])
 
             for f in setups:
@@ -327,7 +617,11 @@ class ActorTester(object):
             for port, values in inputs.iteritems():
                 pwrite(aut, port, values)
 
-            aut.fire()
+            self.test_sys.verify_read_write_during_init(aut, actor)
+            self.test_sys.init_done(actor)
+
+            sched = scheduler.BaseScheduler(None, None)
+            sched._fire_actor(aut)
 
             for port, values in outputs.iteritems():
                 try:
@@ -361,7 +655,6 @@ class ActorTester(object):
                 test_pass.append(actor)
             except AssertionError as e:
                 test_fail[actor] = e.message
-                # raise e
             except Exception as e:
                 self.illegal_actors[actor] = str(e) + '\n' + ''.join(
                     traceback.format_exception(sys.exc_type, sys.exc_value, sys.exc_traceback))
@@ -414,11 +707,14 @@ def show_results(results):
 def test_actors(actor="", show=False, path=None):
     t = ActorTester()
     if path:
-        t.load_actor(path)
+        failures = t.load_actor(path)
     else:
         t.collect_actors(actor)
-        t.instantiate_actors()
+        failures = t.instantiate_actors()
     results = t.test_actors()
+    for actor, error in failures.iteritems():
+        # Could be updated to support a list of errors, only one at a time for now.
+        results['fail'][actor] = error
 
     if not any(results.values()):
         if actor:
@@ -436,8 +732,9 @@ def test_actors(actor="", show=False, path=None):
         raise Exception("%d actor(s) had errors" % (len(results['errors']), ))
     if results['fail']:
         raise Exception("%d actor(s) failed tests" % (len(results['fail']),))
-        
+
     teardown_calvinlib()
+    teardown_calvinsys()
 
 
 if __name__ == '__main__':

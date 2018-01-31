@@ -19,7 +19,7 @@ def retry(retries, function, criterion, error_msg):
     """
         Executes 'result = function()' until 'criterion(result)' evaluates to a true value.
         Raises 'Exception(error_msg)' if criterion is not fulfilled after 'retries' attempts
-    
+
     """
     delay = 0.1
     retry = 0
@@ -31,14 +31,13 @@ def retry(retries, function, criterion, error_msg):
                 if criterion(result):
                     if retry > 0:
                         _log.info("Criterion %s(%s) satisfied after %d retries" %
-                                    (str(criterion), str(function), retry,))
+                            (str(criterion), str(function), retry,))
                     return result
             except Exception as e:
                 _log.error("Erroneous criteria '%r" % (e, ))
                 raise e
         except Exception as e:
             _log.exception("Encountered exception when retrying '%s'" % (e,))
-            #_log.info("Encountered exception when retrying '%s'" % (e,))
         delay = min(2, delay * 1.5); retry += 1
         time.sleep(delay)
         try:
@@ -87,7 +86,7 @@ def actual_tokens_multiple(request_handler, rt, actor_ids, size=5, retries=10):
 
 def destroy_app(deployer, retries=10):
     """
-    Tries to destroy the app connected with deployer. 
+    Tries to destroy the app connected with deployer.
     """
     return delete_app(deployer.request_handler, deployer.runtime, deployer.app_id, retries=retries)
 
@@ -98,7 +97,7 @@ def deploy_app(request_handler, deployer, runtimes, retries=10):
     presence in registry (for all runtimes).
     """
     deployer.deploy()
-    
+
     def check_application():
         for rt in runtimes:
             try:
@@ -111,28 +110,40 @@ def deploy_app(request_handler, deployer, runtimes, retries=10):
 
     return retry(retries, check_application, lambda r: r, "Application not found on all peers")
 
-def deploy_signed_application(request_handler, rt, name, content, retries=10):
+def deploy_signed_application(request_handler, runtimes, name, application_path, retries=10):
     """
     Deploys app associated w/ deployer and then tries to verify its
     presence in registry (for all runtimes).
     """
     from functools import partial
-    return retry(retries, partial(request_handler.deploy_application, rt, name, content['file'], content=content, check=True), lambda _: True, "Failed to deploy application")
+    from calvin.utilities.security import Security
+    content = Security.verify_signature_get_files(application_path)
+    if not content:
+        raise Exception("Failed finding script, signature and cert, stopping here")
+    return retry(retries, partial(request_handler.deploy_application, runtimes, name, script=content['file'], content=content, check=True), lambda _: True, "Failed to deploy application")
 
-def deploy_signed_application_that_should_fail(request_handler, rt, name, content, retries=10):
+def deploy_signed_application_that_should_fail(request_handler, runtimes, name, application_path, retries=20):
     """
     Deploys app associated w/ deployer and then tries to verify its
     presence in registry (for all runtimes).
     """
+    from calvin.utilities.security import Security
     delay = 0.1
     retry = 0
     result = None
     while retry < retries:
         try:
-            result = request_handler.deploy_application(rt, name, content['file'], content=content, check=True)
+            content = Security.verify_signature_get_files(application_path)
+            if not content:
+                raise Exception("Failed finding script, signature and cert, stopping here")
+            result = request_handler.deploy_application(runtimes, name, script=content['file'], content=content, check=True)
         except Exception as e:
-            if e.message.startswith("401"):
-                return
+            try:
+                if e.message.startswith("401"):
+                    return
+            except Exception as e:
+                _log.error("Failed for other reasons, continue, e={}".format(e))
+                continue
         delay = min(2, delay * 1.5); retry += 1
         time.sleep(delay)
         _log.info("Deployment failed, but not due to security reasons, %d retries" % (retry))
@@ -182,7 +193,7 @@ def delete_app(request_handler, runtime, app_id, check_actor_ids=None, retries=1
 
     retry(retries, partial(verify_app_gone, request_handler, runtime, app_id), lambda r: r, "Application not deleted")
     if check_actor_ids:
-        retry(retries, partial(verify_actors_gone, request_handler, runtime, check_actor_ids), 
+        retry(retries, partial(verify_actors_gone, request_handler, runtime, check_actor_ids),
               lambda r: r, "Application actors not deleted")
 
 
@@ -209,26 +220,25 @@ def deploy_script(request_handler, name, script, runtime, retries=10):
 
 def flatten_zip(lz):
     return [] if not lz else [ lz[0][0], lz[0][1] ] + flatten_zip(lz[1:])
-    
+
 
 # Helper for 'std.CountTimer' actor
 def expected_counter(n):
     return [i for i in range(1, n + 1)]
 
-# Helper for 'std.Sum' 
+# Helper for 'std.Sum'
 def expected_sum(n):
     def cumsum(l):
         s = 0
         for n in l:
             s = s + n
             yield s
-        
+
     return list(cumsum(range(1, n + 1)))
 
 def expected_tokens(request_handler, rt, actor_id, t_type):
-    
-    tokens = request_handler.report(rt, actor_id)
 
+    tokens = request_handler.report(rt, actor_id)
     if t_type == 'seq':
         return expected_counter(tokens)
 
@@ -240,23 +250,23 @@ def expected_tokens(request_handler, rt, actor_id, t_type):
 
 def setup_distributed(control_uri, purpose, request_handler):
     from functools import partial
-    
+
     remote_node_count = 3
     test_peers = None
     runtimes = []
-    
+
     runtime = RT(control_uri)
     index = {"node_name": {"organization": "com.ericsson", "purpose": purpose}}
     index_string = format_index_string(index)
-    
+
     get_index = partial(request_handler.get_index, runtime, index_string)
-    
+
     def criteria(peers):
         return peers and peers.get("result", None) and len(peers["result"]) >= remote_node_count
-    
+
     test_peers = retry(10, get_index, criteria, "Not all nodes found")
     test_peers = test_peers["result"]
-    
+
     for peer_id in test_peers:
         peer = request_handler.get_node(runtime, peer_id)
         if not peer:
@@ -268,8 +278,8 @@ def setup_distributed(control_uri, purpose, request_handler):
         runtimes.append(rt)
 
     return runtimes
-    
-def setup_local(ip_addr, request_handler, nbr, proxy_storage):  
+
+def setup_local(ip_addr, request_handler, nbr, proxy_storage):
     def check_storage(rt, n, index):
         index_string = format_index_string(index)
         retries = 0
@@ -311,7 +321,7 @@ def setup_local(ip_addr, request_handler, nbr, proxy_storage):
     attr_rest['indexed_public']['node_name']['group'] = u'rest'
 
     _log.info("starting runtime %s %s" % host)
-    
+
     if proxy_storage:
         import calvin.runtime.north.storage
         calvin.runtime.north.storage._conf.set('global', 'storage_type', 'local')
@@ -338,12 +348,15 @@ def setup_local(ip_addr, request_handler, nbr, proxy_storage):
         _log.info("started runtime %s %s" % host)
         runtimes += [rt]
 
-    for host in hosts:
-        check_storage(RT(host[1]), nbr, attr['indexed_public'])
-        
-    for host in hosts:
-        request_handler.peer_setup(RT(host[1]), [h[0] for h in hosts if h != host])
-    
+    if len(hosts) > 1:
+        for host in hosts:
+            _log.info("Checking storage for {}".format(host))
+            check_storage(RT(host[1]), nbr, attr['indexed_public'])
+
+        for host in hosts:
+            _log.info("Peer setup for {}".format(host))
+            request_handler.peer_setup(RT(host[1]), [h[0] for h in hosts if h != host])
+
     return runtimes
 
 def setup_bluetooth(bt_master_controluri, request_handler):
@@ -447,7 +460,7 @@ def setup_test_type(request_handler, nbr=3, proxy_storage=False):
         runtimes = setup_local(ip_addr, request_handler, nbr, proxy_storage)
 
     return test_type, runtimes
-    
+
 
 def teardown_test_type(test_type, runtimes, request_handler):
     from functools import partial
@@ -458,7 +471,7 @@ def teardown_test_type(test_type, runtimes, request_handler):
             except Exception:
                 return True
         return False
-        
+
     if test_type == "local":
         for peer in runtimes:
             request_handler.quit(peer)
@@ -467,6 +480,12 @@ def teardown_test_type(test_type, runtimes, request_handler):
         for p in multiprocessing.active_children():
             p.terminate()
             time.sleep(1)
+
+def sign_appInfo_for_security_tests(credentials_testdir):
+    from calvin.utilities import code_signer
+    cs = code_signer.CS(organization="com.ericsson", commonName="signer", security_dir=credentials_testdir)
+    cs.sign_file(actor_Alternate2_path)
+
 
 def sign_files_for_security_tests(credentials_testdir):
     from calvin.utilities import code_signer
@@ -477,7 +496,7 @@ def sign_files_for_security_tests(credentials_testdir):
         # Read in the file
         filedata = None
         with open(file_path, 'r') as file :
-              filedata = file.read()
+            filedata = file.read()
 
         # Replace the target string
         filedata = filedata.replace(text_to_be_replaced, text_to_insert)
@@ -485,6 +504,18 @@ def sign_files_for_security_tests(credentials_testdir):
         # Write the file out again
         with open(file_path, 'w') as file:
             file.write(filedata)
+
+    def _copy_and_sign_actor(prefix, file_name):
+        #Create signed version of the actor
+        directory = os.path.join(actor_store_path, prefix)
+        if not os.path.isdir(directory):
+            os.makedirs(directory)
+            shutil.copy(os.path.join(orig_actor_store_path, prefix, "__init__.py"), os.path.join(actor_store_path, prefix, "__init__.py"))
+        orig_actor_path = os.path.join(orig_actor_store_path, prefix, file_name)
+        new_actor_path = os.path.join(actor_store_path, prefix, file_name)
+        shutil.copy(orig_actor_path, new_actor_path)
+        cs.sign_file(new_actor_path)
+        return new_actor_path
 
     homefolder = get_home()
     runtimesdir = os.path.join(credentials_testdir,"runtimes")
@@ -496,11 +527,6 @@ def sign_files_for_security_tests(credentials_testdir):
     application_store_path = os.path.join(credentials_testdir, "scripts")
     print "Create test folders"
     try:
-        os.makedirs(actor_store_path)
-        os.makedirs(os.path.join(actor_store_path,"test"))
-        shutil.copy(os.path.join(orig_actor_store_path,"test","__init__.py"), os.path.join(actor_store_path,"test","__init__.py"))
-        os.makedirs(os.path.join(actor_store_path,"std"))
-        shutil.copy(os.path.join(orig_actor_store_path,"std","__init__.py"), os.path.join(actor_store_path,"std","__init__.py"))
         shutil.copytree(orig_application_store_path, application_store_path)
     except Exception as err:
         _log.error("Failed to create test folder structure, err={}".format(err))
@@ -508,48 +534,67 @@ def sign_files_for_security_tests(credentials_testdir):
         raise
 
     print "Trying to create a new test application/actor signer."
-    cs = code_signer.CS(organization="testsigner", commonName="signer", security_dir=credentials_testdir)
+    cs = code_signer.CS(organization="com.ericsson", commonName="signer", security_dir=credentials_testdir)
 
-    #Create signed version of CountTimer actor
-    orig_actor_CountTimer_path = os.path.join(orig_actor_store_path,"std","CountTimer.py")
-    actor_CountTimer_path = os.path.join(actor_store_path,"std","CountTimer.py")
-    shutil.copy(orig_actor_CountTimer_path, actor_CountTimer_path)
-    cs.sign_file(actor_CountTimer_path)
+    _copy_and_sign_actor("flow", "Alternate.py")
+    _copy_and_sign_actor("flow", "Alternate2.py")
+    _copy_and_sign_actor("flow", "Collect.py")
+    _copy_and_sign_actor("flow", "CollectCompleteDict.py")
+    _copy_and_sign_actor("flow", "Dealternate.py")
+    _copy_and_sign_actor("flow", "Deselect.py")
+    _copy_and_sign_actor("flow", "Dispatch.py")
+    _copy_and_sign_actor("flow", "DispatchDict.py")
+    _copy_and_sign_actor("flow", "Join.py")
+    _copy_and_sign_actor("flow", "Void.py")
+    _copy_and_sign_actor("flow", "Select.py")
+    _copy_and_sign_actor("flow", "Terminator.py")
+
+    _copy_and_sign_actor("io", "FileReader.py")
+
+    _copy_and_sign_actor("misc", "ExplicitStateExample.py")
+
+    _copy_and_sign_actor("std","Counter.py")
+    _copy_and_sign_actor("std","Constant.py")
+    _copy_and_sign_actor("std","Constantify.py")
+    _copy_and_sign_actor("std","Compare.py")
+    _copy_and_sign_actor("std","Identity.py")
+    _copy_and_sign_actor("std","Stringify.py")
+    _copy_and_sign_actor("std","Trigger.py")
+    actor_CountTimer_path = _copy_and_sign_actor("std","CountTimer.py")
+    actor_Sum_path = _copy_and_sign_actor("std","Sum.py")
+
+    _copy_and_sign_actor("test","FiniteCounter.py")
+    _copy_and_sign_actor("test","TestProcess.py")
+    actor_Sink_path = _copy_and_sign_actor("test","Sink.py")
+
+    _copy_and_sign_actor("text","LineJoin.py")
+    _copy_and_sign_actor("text","PrefixString.py")
+    _copy_and_sign_actor("text","RegexMatch.py")
+
+    _copy_and_sign_actor("exception","ExceptionHandler.py")
 
     #Create unsigned version of CountTimer actor
-    actor_CountTimerUnsigned_path = actor_CountTimer_path.replace(".py", "Unsigned.py") 
+    actor_CountTimerUnsigned_path = actor_CountTimer_path.replace(".py", "Unsigned.py")
     shutil.copy(actor_CountTimer_path, actor_CountTimerUnsigned_path)
     replace_text_in_file(actor_CountTimerUnsigned_path, "CountTimer", "CountTimerUnsigned")
 
-    #Create signed version of Sum actor
-    orig_actor_Sum_path = os.path.join(orig_actor_store_path,"std","Sum.py")
-    actor_Sum_path = os.path.join(actor_store_path,"std","Sum.py")
-    shutil.copy(orig_actor_Sum_path, actor_Sum_path)
-    cs.sign_file(actor_Sum_path)
-
     #Create unsigned version of Sum actor
-    actor_SumUnsigned_path = actor_Sum_path.replace(".py", "Unsigned.py") 
+    actor_SumUnsigned_path = actor_Sum_path.replace(".py", "Unsigned.py")
     shutil.copy(actor_Sum_path, actor_SumUnsigned_path)
     replace_text_in_file(actor_SumUnsigned_path, "Sum", "SumUnsigned")
 
     #Create incorrectly signed version of Sum actor
-    actor_SumFake_path = actor_Sum_path.replace(".py", "Fake.py") 
+    actor_SumFake_path = actor_Sum_path.replace(".py", "Fake.py")
     shutil.copy(actor_Sum_path, actor_SumFake_path)
     #Change the class name to SumFake
     replace_text_in_file(actor_SumFake_path, "Sum", "SumFake")
     cs.sign_file(actor_SumFake_path)
     #Now append to the signed file so the signature verification fails
     with open(actor_SumFake_path, "a") as fd:
-            fd.write(" ")
-
-    #Create signed version of Sink actor
-    orig_actor_Sink_path = os.path.join(orig_actor_store_path,"test","Sink.py")
-    actor_Sink_path = os.path.join(actor_store_path,"test","Sink.py")
-    shutil.copy(orig_actor_Sink_path, actor_Sink_path)
-    cs.sign_file(actor_Sink_path)
+        fd.write(" ")
 
     #Create unsigned version of Sink actor
-    actor_SinkUnsigned_path = actor_Sink_path.replace(".py", "Unsigned.py") 
+    actor_SinkUnsigned_path = actor_Sink_path.replace(".py", "Unsigned.py")
     shutil.copy(actor_Sink_path, actor_SinkUnsigned_path)
     replace_text_in_file(actor_SinkUnsigned_path, "Sink", "SinkUnsigned")
 
@@ -559,57 +604,56 @@ def sign_files_for_security_tests(credentials_testdir):
     cs.sign_file(os.path.join(application_store_path, "incorrectly_signed.calvin"))
     #Now append to the signed file so the signature verification fails
     with open(os.path.join(application_store_path, "incorrectly_signed.calvin"), "a") as fd:
-            fd.write(" ")
+        fd.write(" ")
 
     print "Export Code Signers certificate to the truststore for code signing"
     out_file = cs.export_cs_cert(runtimes_truststore_signing_path)
     certificate.c_rehash(type=certificate.TRUSTSTORE_SIGN, security_dir=credentials_testdir)
     return actor_store_path, application_store_path
 
-def fetch_and_log_runtime_actors(rt, request_handler):
+def fetch_and_log_runtime_actors(runtimes, request_handler):
     from functools import partial
     # Verify that actors exist like this
     actors=[]
     #Use admins credentials to access the control interface
     request_handler.set_credentials({"user": "user0", "password": "pass0"})
-    for runtime in rt:
-        actors_rt = retry(20, partial(request_handler.get_actors, runtime), lambda _: True, "Failed to get actors")
+    for runtime in runtimes:
+        actors_rt = retry(20, partial(request_handler.get_actors, runtime["RT"]), lambda _: True, "Failed to get actors")
         actors.append(actors_rt)
-    for i in range(len(rt)):
+    for i in range(len(runtimes)):
         _log.info("\n\trt{} actors={}".format(i, actors[i]))
     return actors
 
-def security_verify_storage(rt, request_handler):
+def security_verify_storage(runtimes, request_handler):
     from functools import partial
-    _log.info("Let's verify storage, rt={}".format(rt))
-    rt_id=[None]*len(rt)
+    rt_id=[None]*len(runtimes)
     # Wait for control API to be up and running
-    for j in range(len(rt)):
-        rt_id[j] = retry(30, partial(request_handler.get_node_id, rt[j]), lambda _: True, "Failed to get node id")
+    for j in range(len(runtimes)):
+        rt_id[j] = retry(30, partial(request_handler.get_node_id, runtimes[j]['RT']), lambda _: True, "Failed to get node id")
     _log.info("RUNTIMES:{}".format(rt_id))
     # Wait for storage to be connected
-    index = "node/capabilities/json" 
+    index = "node/capabilities/json"
     failed = True
     def test():
-        count=[0]*len(rt)
-        caps =[0]*len(rt)
+        count=[0]*len(runtimes)
+        caps =[0]*len(runtimes)
         #Loop through all runtimes to ask them which runtimes nodes they know with json-capabilities
-        for j in range(len(rt)):
-            caps[j] = retry(30, partial(request_handler.get_index, rt[j], index), lambda _: True, "Failed to get index")['result']
+        for j in range(len(runtimes)):
+            caps[j] = retry(30, partial(request_handler.get_index, runtimes[j]['RT'], index), lambda _: True, "Failed to get index")['result']
             #Add the known nodes to statistics of how many nodes store keys from that node
-            for k in range(len(rt)):
+            for k in range(len(runtimes)):
                 count[k] = count[k] + caps[j].count(rt_id[k])
         _log.info("rt_ids={}\n\tcount={}".format(rt_id, count))
         return count
 
-    criterion = lambda count: (x >=min(5, len(rt)) for x in count)
+    criterion = lambda count: (x >=min(5, len(runtimes)) for x in count)
     retry(30, test, criterion, "Storage has not spread as it should")
     #Loop through all runtimes and make sure they can lookup all other runtimes
-    for runtime1 in rt:
-        for runtime2 in rt:
-            node_name = runtime2.attributes['indexed_public']['node_name']
-            index = format_index_string(['node_name', node_name])
-            retry(10, partial(request_handler.get_index, runtime1, index), lambda _: True, "Failed to get index")
+#    for runtime1 in rt:
+#        for runtime2 in rt:
+#            node_name = runtime2.attributes['indexed_public']['node_name']
+#            index = format_index_string(['node_name', node_name])
+#            retry(10, partial(request_handler.get_index, runtime1, index), lambda _: True, "Failed to get index")
     return True
 
 def create_CA(domain_name, credentials_testdir, NBR_OF_RUNTIMES):
@@ -654,32 +698,30 @@ def _create_CA_and_rehash(domain_name, credentials_testdir, NBR_OF_RUNTIMES):
 
 def _get_node_names(runtimes):
     from calvin.utilities.attribute_resolver import AttributeResolver
-    from calvin.utilities import calvinuuid
     from copy import deepcopy
     for i in range(len(runtimes)):
         rt_attribute = deepcopy(runtimes[i]["attributes"])
         attributes=AttributeResolver(rt_attribute)
         runtimes[i]["node_name"] = attributes.get_node_name_as_str()
-        runtimes[i]["id"]= calvinuuid.uuid("")
 
 
-def get_enrollment_passwords(runtimes, method="ca", rt=None, request_handler=None, ca=None):
+def get_enrollment_passwords(runtimes, method="ca", request_handler=None, ca=None):
     from functools import partial
     #Set/get enrollment for the other runtimes:
     for i in range(len(runtimes)):
         node_name = runtimes[i]["node_name"]
         if method=="ca" and ca:
             runtimes[i]["enrollment_password"] = ca.cert_enrollment_add_new_runtime(node_name)
-        elif method=="controlapi_get" and rt:
+        elif method=="controlapi_get" and runtimes:
             enrollment_password = retry(10,
-                                        partial(request_handler.get_enrollment_password, rt[0], node_name),
+                                        partial(request_handler.get_enrollment_password, runtimes[0]["RT"], node_name),
                                         lambda _: True, "Failed to get enrollment password")
             runtimes[i]["enrollment_password"] = enrollment_password
         elif method=="controlapi_set":
             enrollment_password = "abrakadabra123456789"
             runtimes[i]["enrollment_password"] = enrollment_password
             retry(  10,
-                    partial(request_handler.set_enrollment_password, rt[0], node_name, enrollment_password),
+                    partial(request_handler.set_enrollment_password, runtimes[0]["RT"], node_name, enrollment_password),
                     lambda _: True, "Failed to get enrollment password")
             runtimes[i]["enrollment_password"] = enrollment_password
         else:
@@ -687,7 +729,9 @@ def get_enrollment_passwords(runtimes, method="ca", rt=None, request_handler=Non
 
 def _generate_certiticates(ca, runtimes, domain_name, credentials_testdir):
     from calvin.utilities import runtime_credentials
+    from calvin.utilities import calvinuuid
     for i in range(len(runtimes)):
+        runtimes[i]["id"]= calvinuuid.uuid("")
         node_name = runtimes[i]["node_name"]
         runtime=runtime_credentials.RuntimeCredentials(node_name,
                                                        domain=domain_name,
@@ -695,20 +739,17 @@ def _generate_certiticates(ca, runtimes, domain_name, credentials_testdir):
                                                        security_dir=credentials_testdir,
                                                        nodeid=runtimes[i]["id"],
                                                        enrollment_password=runtimes[i]["enrollment_password"])
-        runtimes[i]["credentials"]= runtime
-        csr_path = os.path.join(runtime.runtime_dir, node_name + ".csr")
-        #Decrypt encrypted CSR with CAs private key
-        rsa_encrypted_csr = runtime.get_encrypted_csr()
-        csr = ca.decrypt_encrypted_csr(encrypted_enrollment_request=rsa_encrypted_csr)
-        csr_path = ca.store_csr_with_enrollment_password(csr)
+        runtimes[i]["credentials"] = runtime
+        csr_path = runtime.get_csr_path()
+        #CAs generated certificate for runtime
         cert_path = ca.sign_csr(csr_path)
         runtime.store_own_cert(certpath=cert_path)
 
 
 def _runtime_attributes(domain_name, runtimes):
     #Define the runtime attributes
-    org_name='org.testexample'
-    domain_name="test_security_domain"
+    org_name='com.ericsson'
+    domain_name="com.ericsson"
     for i in range(len(runtimes)):
         print i," "
         purpose = 'CA-authserver-authzserver' if i==0 else ""
@@ -731,7 +772,7 @@ def wait_for_runtime(request_handler, rt):
     from functools import partial
     rt_id = retry(100, partial(request_handler.get_node_id, rt), lambda _: True, "Failed to get node id")
 
-def start_runtime0(runtimes, rt, hostname, request_handler, tls=False, enroll_passwords=False):
+def start_runtime0(runtimes, hostname, request_handler, tls=False, enroll_passwords=False):
     from calvin.Tools.csruntime import csruntime
     from conftest import _config_pytest
     #Start runtime 0 as it takes alot of time to start, and needs to be up before the others start
@@ -752,14 +793,16 @@ def start_runtime0(runtimes, rt, hostname, request_handler, tls=False, enroll_pa
     csruntime(hostname, port=5000, controlport=5020, attr=runtimes[0]["attributes"],
                loglevel=_config_pytest.getoption("loglevel"), logfile=logfile, outfile=outfile,
                configfile="/tmp/calvin5000.conf")
-    uri = "https://{}:5020".format(hostname) if tls==True else "http://{}:5020".format(hostname)
-    rt.append(RT(uri))
-    rt[0].attributes=runtimes[0]["attributes"]
+    uri = "calvinip://{}:5000".format(hostname)
+    curi = "https://{}:5020".format(hostname) if tls==True else "http://{}:5020".format(hostname)
+    runtimes[0]['RT'] = RT(curi)
+    runtimes[0]['RT'].uris=[uri]
+    runtimes[0]['RT'].attributes=runtimes[0]["attributes"]
 
     #Wait for runtime 0 to be up and running
-    wait_for_runtime(request_handler, rt[0])
+    wait_for_runtime(request_handler, runtimes[0]["RT"])
 
-def start_other_runtimes(runtimes, rt, hostname, request_handler, tls=False):
+def start_other_runtimes(runtimes, hostname, request_handler, tls=False):
     from calvin.Tools.csruntime import csruntime
     from conftest import _config_pytest
     #Start the other runtimes
@@ -786,49 +829,55 @@ def start_other_runtimes(runtimes, rt, hostname, request_handler, tls=False):
                   logfile=logfile,
                   outfile=outfile,
                   configfile="/tmp/calvin500{}.conf".format(i))
-        uri = "https://{}:502{}".format(hostname, i) if tls==True else "http://{}:502{}".format(hostname, i)
-        rt.append(RT(uri))
-        rt[i].attributes=runtimes[i]["attributes"]
+        uri = "calvinip://{}:500{}".format(hostname, i)
+        curi = "https://{}:502{}".format(hostname, i) if tls==True else "http://{}:502{}".format(hostname, i)
+        requests_rt = RT(curi)
+        runtimes[i]['RT'] = RT(curi)
+        runtimes[i]['RT'].uris = [uri]
+        runtimes[i]['RT'].attributes=runtimes[i]["attributes"]
         time.sleep(0.1)
+    time.sleep(1)
+    try:
+        security_verify_storage(runtimes, request_handler)
+    except Exception as err:
+        _log.error("Failed storage verification, err={}".format(err))
+        raise
 
 def start_all_runtimes(runtimes, hostname, request_handler, tls=False):
-    rt=[]
-    start_runtime0(runtimes, rt, hostname, request_handler, tls=tls)
-    start_other_runtimes(runtimes, rt, hostname, request_handler, tls=tls)
-    return rt
+    start_runtime0(runtimes, hostname, request_handler, tls=tls)
+    start_other_runtimes(runtimes, hostname, request_handler, tls=tls)
 
-def teardown_slow(rt, request_handler, hostname):
+def teardown_slow(runtimes, request_handler, hostname):
     request_handler.set_credentials({"user": "user0", "password": "pass0"})
-    for i in range(1, len(rt)):
+    for i in range(1, len(runtimes)):
         _log.info("kill runtime {}".format(i))
         try:
-            request_handler.quit(rt[i])
+            request_handler.quit(runtimes[i]["RT"])
         except Exception:
             _log.error("Failed quit for node {}".format(i))
     # Kill Auth/Authz node last since the other nodes need it for authorization
     # of the kill requests
     time.sleep(2)
     try:
-        request_handler.quit(rt[0])
+        request_handler.quit(runtimes[0]["RT"])
     except Exception:
         _log.error("Failed quit for node 0")
     time.sleep(0.2)
     for p in multiprocessing.active_children():
         p.terminate()
     # They will die eventually (about 5 seconds) in most cases, but this makes sure without wasting time
-    for i in range(len(rt)):
+    for i in range(len(runtimes)):
         os.system("pkill -9 -f 'csruntime -n {} -p 500{}'" .format(hostname,i))
     time.sleep(0.2)
 
-def teardown(rt, request_handler, hostname):
+def teardown(runtimes, request_handler, hostname):
     request_handler.set_credentials({"user": "user0", "password": "pass0"})
-    for runtime in rt:
-        request_handler.quit(runtime)
+    for runtime in runtimes:
+        request_handler.quit(runtime["RT"])
     time.sleep(0.2)
     for p in multiprocessing.active_children():
         p.terminate()
     # They will die eventually (about 5 seconds) in most cases, but this makes sure without wasting time
-    for i in range(len(rt)):
+    for i in range(len(runtimes)):
         os.system("pkill -9 -f 'csruntime -n {} -p 500{}'" .format(hostname,i))
     time.sleep(0.2)
-

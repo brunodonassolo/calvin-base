@@ -32,14 +32,12 @@ from calvin.runtime.north import appmanager
 from calvin.runtime.north import scheduler
 from calvin.runtime.north import storage
 from calvin.runtime.north import calvincontrol
-from calvin.runtime.north import metering
 from calvin.runtime.north.certificate_authority import certificate_authority
 from calvin.runtime.north.authentication import authentication
 from calvin.runtime.north.authorization import authorization
 from calvin.runtime.north.calvin_network import CalvinNetwork
 from calvin.runtime.north.calvin_proto import CalvinProto
 from calvin.runtime.north.portmanager import PortManager
-from calvin.runtime.south.monitor import Event_Monitor
 from calvin.runtime.south.plugins.async import async
 from calvin.utilities.attribute_resolver import AttributeResolver
 from calvin.utilities.calvin_callback import CalvinCB
@@ -51,6 +49,7 @@ from calvin.utilities.calvinlogger import get_logger, set_file
 from calvin.utilities import calvinconfig
 from calvin.runtime.north.resource_monitor.cpu import CpuMonitor
 from calvin.runtime.north.resource_monitor.memory import MemMonitor
+from calvin.runtime.north.proxyhandler import ProxyHandler
 
 _log = get_logger(__name__)
 _conf = calvinconfig.get()
@@ -110,14 +109,16 @@ class Node(object):
         self.certificate_authority = certificate_authority.CertificateAuthority(self)
         self.authentication = authentication.Authentication(self)
         self.authorization = authorization.Authorization(self)
-        self.metering = metering.set_metering(metering.Metering(self))
-        self.monitor = Event_Monitor()
         self.am = actormanager.ActorManager(self)
         self.rm = replicationmanager.ReplicationManager(self)
         self.control = calvincontrol.get_calvincontrol()
 
-        _scheduler = scheduler.DebugScheduler if _log.getEffectiveLevel() <= logging.DEBUG else scheduler.Scheduler
-        self.sched = _scheduler(self, self.am, self.monitor)
+        # _scheduler = scheduler.DebugScheduler if _log.getEffectiveLevel() <= logging.DEBUG else scheduler.Scheduler
+        # _scheduler = scheduler.NonPreemptiveScheduler
+        # _scheduler = scheduler.RoundRobinScheduler
+        _scheduler = scheduler.SimpleScheduler
+        # _scheduler = scheduler.BaselineScheduler
+        self.sched = _scheduler(self, self.am)
         self.async_msg_ids = {}
         self._calvinsys = CalvinSys(self)
         calvinsys = get_calvinsys()
@@ -137,6 +138,8 @@ class Node(object):
 
         self.cpu_monitor = CpuMonitor(self.id, self.storage)
         self.mem_monitor = MemMonitor(self.id, self.storage)
+
+        self.proxy_handler = ProxyHandler(self)
 
         # The initialization that requires the main loop operating is deferred to start function
         async.DelayedCall(0, self.start)
@@ -195,13 +198,15 @@ class Node(object):
         _log.debug("\n%s# NODE: %s \n# %s %s %s \n%s" %
                    ('#' * 40, self.id, preamble if preamble else "*", args, kwargs, '#' * 40))
 
-    def new(self, actor_type, args, deploy_args=None, state=None, prev_connections=None, connection_list=None):
+    def new(self, actor_type, args, deploy_args=None, state=None, prev_connections=None, connection_list=None, security=None, access_decision=None):
         # TODO requirements should be input to am.new
         # TODO: make it possible to use security/credentials here.
         actor_def, signer = self.am.lookup_and_verify(actor_type)
         actor_id = self.am.new(actor_type, args, state, prev_connections, connection_list,
                                signature=deploy_args['signature'] if deploy_args and 'signature' in deploy_args else None,
-                               actor_def=actor_def)
+                               actor_def=actor_def,
+                               security=security,
+                               access_decision=access_decision)
         if deploy_args:
             app_id = deploy_args['app_id']
             if 'app_name' not in deploy_args:

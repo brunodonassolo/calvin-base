@@ -1,9 +1,9 @@
-button : io.GPIOReader(gpio_pin=23, edge="b", pull="d")
-camera : media.Camera()
-screen : media.ImageRenderer()
+button : io.Button()
+camera : media.ImageSource()
+screen : media.ImageSink()
 
 button.state > camera.trigger
-camera.image > screen.image
+camera.b64image > screen.b64image
 
 
 # Deployment

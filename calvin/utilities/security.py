@@ -36,6 +36,7 @@ try:
 except:
     HAS_JWT = False
 from calvin.utilities import certificate
+from calvin.utilities.certificate import Certificate
 from calvin.utilities.calvinlogger import get_logger
 from calvin.utilities import calvinconfig
 from calvin.utilities.utils import get_home
@@ -77,7 +78,7 @@ def security_enabled():
 
 def encode_jwt(payload, node):
     """Encode JSON Web Token"""
-    _log.debug("encode_jwt:\n\tpayload={}".format(payload))
+#    _log.debug("encode_jwt:\n\tpayload={}".format(payload))
     if node.runtime_credentials:
         private_key = node.runtime_credentials.get_private_key()
     else:
@@ -87,7 +88,7 @@ def encode_jwt(payload, node):
 
 def decode_jwt(token, sender_cert_name, node, actor_id=None, callback=None):
     """Decode JSON Web Token"""
-    _log.debug("decode_jwt:\n\ttoken={}\n\tsender_cert_name={}\n\tnode={}\n\tactor_id={}\n\tcallback={}".format(token, sender_cert_name, node, actor_id, callback))
+#    _log.debug("decode_jwt:\n\ttoken={}\n\tsender_cert_name={}\n\tnode={}\n\tactor_id={}\n\tcallback={}".format(token, sender_cert_name, node, actor_id, callback))
     # Get authorization server certificate from disk.
     try:
         node.runtime_credentials.get_certificate(cert_name=sender_cert_name,
@@ -103,7 +104,7 @@ def decode_jwt(token, sender_cert_name, node, actor_id=None, callback=None):
 
 def _decode_jwt_cb(certstring, token, node, actor_id=None, callback=None):
     """Decode JSON Web Token"""
-    _log.debug("_decode_jwt_cb\n\tsender certstring={}\n\ttoken={}\n\tnode={}\n\tactor_id={}\n\tcallback={}".format(certstring, token, node, actor_id, callback))
+#    _log.debug("_decode_jwt_cb\n\tsender certstring={}\n\ttoken={}\n\tnode={}\n\tactor_id={}\n\tcallback={}".format(certstring, token, node, actor_id, callback))
     sender_public_key = certificate.get_public_key_from_certstr(certstring)
     sender_node_id = certificate.cert_DN_Qualifier(certstring=certstring)
     # The signature is verified using the Elliptic Curve public key of the sender.
@@ -123,11 +124,7 @@ class Security(object):
         self.sec_conf = _conf.get("security","security_conf")
         self.node = node
         self.subject_attributes = {}
-        try:
-            self.truststore_for_signing = certificate.get_truststore_path(certificate.TRUSTSTORE_SIGN)
-        except Exception as err:
-            _log.error("Failed to determine trust store path" % err)
-            raise Exception("Failed to load trust store path ")
+#        self.certificate = node.runtime_credentials.certificate
 
     def __str__(self):
         return "Subject: %s:" % self.subject_attributes
@@ -599,17 +596,16 @@ class Security(object):
             try:
                 # Check if the certificate is stored in the truststore (name is <cert_hash>.0)
                 #TODO: remove signature_trust_store dependency
-                trusted_cert_path = os.path.join(self.truststore_for_signing, cert_hash + ".0")
+                truststore_path = self.node.runtime_credentials.certificate.get_truststore_path(certificate.TRUSTSTORE_SIGN)
+                trusted_cert_path = os.path.join(truststore_path, cert_hash + ".0")
                 with open(trusted_cert_path, 'rt') as f:
                     certstr=f.read()
-                    trusted_cert = OpenSSL.crypto.load_certificate(OpenSSL.crypto.FILETYPE_PEM, certstr)
                     try:
 #                        # Verify signature
-                        certificate.verify_signature(certificate.TRUSTSTORE_SIGN,
-                                                     content['file'],
-                                                     signature, certstr,
-                                                     security_dir=certificate.get_security_credentials_path())
-                        signer = [trusted_cert.get_issuer().CN]  # The Common Name field for the issuer
+                        cert = self.node.runtime_credentials.certificate.truststore_sign.verify_signature(content['file'],
+                                                          signature,
+                                                          certstr )
+                        signer = [cert.get_issuer().CN]  # The Common Name field for the issuer
                         return (True, signer)
                     except Exception as e:
                         _log.error("OpenSSL verification error, err={}".format(e), exc_info=True)

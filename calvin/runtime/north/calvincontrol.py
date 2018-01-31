@@ -16,7 +16,6 @@
 
 import json
 from random import randint
-from calvin.runtime.north import metering
 from calvin.utilities.calvinlogger import get_logger
 from calvin.utilities.calvin_callback import CalvinCB
 from calvin.runtime.south.plugins.async import server_connection
@@ -34,9 +33,9 @@ from control_apis import runtime_api
 from control_apis import application_api
 from control_apis import documentation_api
 from control_apis import logging_api
-from control_apis import metering_api
 from control_apis import registry_api
 from control_apis import uicalvinsys_api
+from control_apis import proxyhandler_api
 
 _log = get_logger(__name__)
 
@@ -65,15 +64,14 @@ class CalvinControl(object):
         self.host = None
         self.tunnel_server = None
         self.tunnel_client = None
-        self.metering = None
         self.security = None
+        self.token_dict = None
         self.routes = routes.install_handlers(self)
 
     def start(self, node, uri, tunnel=False, external_uri=None):
         """ If not tunnel, start listening on uri and handle http requests.
             If tunnel, setup a tunnel to uri and handle requests.
         """
-        self.metering = metering.get_metering()
         self.node = node
         self.security = Security(self.node)
         schema, _ = uri.split(':', 1)

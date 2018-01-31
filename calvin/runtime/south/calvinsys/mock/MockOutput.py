@@ -16,6 +16,7 @@
 
 from calvin.runtime.south.calvinsys import base_calvinsys_object
 
+
 class MockOutput(base_calvinsys_object.BaseCalvinsysObject):
     """
     MockOutput - Mocked output device printing data to stdout.
@@ -31,17 +32,35 @@ class MockOutput(base_calvinsys_object.BaseCalvinsysObject):
     }
 
     write_schema = {
-        "description": "Any data"
+        "description": "Compares data to expected data specified in actor test, also verifies that can_write has been called."
     }
 
     def init(self, **kwargs):
-        pass
+        self.write_called = False
+        self._write_allowed = True
+        self._expected_data = []
+
+        calvinsys = kwargs.get('calvinsys', '')
+        if 'write' in calvinsys:
+            self._expected_data = calvinsys['write']
 
     def can_write(self):
+        self._write_allowed = True
         return True
 
     def write(self, data):
-        print data
+        self.write_called = True
+        if not self._write_allowed:
+            raise AssertionError("write() called without preceding can_write()")
+        self._write_allowed = False
+
+        if self._expected_data:
+            expected = self._expected_data.pop(0)
+            if expected != data:
+                raise AssertionError("Expected data '%s' does not match '%s'" % (expected, data))
 
     def close(self):
-        pass
+        self._expected_data = []
+
+    def start_verifying_calvinsys(self):
+        self._write_allowed = False

@@ -14,14 +14,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from calvin.actor.actor import Actor, manage, condition, stateguard
+from calvin.actor.actor import Actor, manage, condition, stateguard, calvinsys
 
 
 class Watchdog(Actor):
     """
     Data on inport is passed on to outport unchanged. If nothing has arrived on the inport after `timeout` seconds, then true is sent on the timeout port.
     If parameter `immediate` is false, then the timer will not start until at least one token has arrived, otherwise it will start upon instantiation.
-    
+
     Inputs:
         data : anything
     Outputs:
@@ -29,51 +29,42 @@ class Watchdog(Actor):
         timeout: true iff timeout seconds has passed without tokens on inport
     """
 
-    @manage(['timeout', 'immediate'])
+    @manage(['timeout'])
     def init(self, timeout, immediate):
         self.timeout = timeout
-        self.immediate = immediate
         self.timer = None
-        self.started = False
-        self.setup()
+        if immediate:
+            self._start_timer()
 
-    def setup(self):
-        self.use('calvinsys.events.timer', shorthand='timer')
-        if self.immediate :
-            self.start()
-
-    def start(self):
-        self.timer = self['timer'].once(self.timeout)
-        self.started = True
-
-    def will_migrate(self):
+    def _start_timer(self):
         if self.timer:
-            self.timer.cancel()
+            calvinsys.close(self.timer)
+        self.timer = calvinsys.open(self, "sys.timer.once", period=self.timeout)
 
-    def did_migrate(self):
-        self.setup()
-        if self.started:
-            self.start()
-
-    @stateguard(lambda actor: not actor.started)
-    @condition([], [])
-    def start_timer(self):
-        self.start()
-        return ()
+    @stateguard(lambda actor: actor.timer and calvinsys.can_read(actor.timer))
+    @condition([], ['timeout'])
+    def timeout(self):
+        _ = calvinsys.read(self.timer) # Ack (not strictly necessary since _start_timer will close timer)
+        self._start_timer()
+        return (True, )
 
     @condition(['data'], ['data'])
     def passthrough(self, data):
-        self.timer.cancel()
         # reset timeout
-        self.timer = self['timer'].once(self.timeout)
+        self._start_timer()
         return (data, )
 
-    @stateguard(lambda actor: actor.timer and actor.timer.triggered)
-    @condition([], ['timeout'])
-    def timeout(self):
-        self.timer.ack()
-        self.timer = self['timer'].once(self.timeout)
-        return (True, )
+    action_priority = (timeout, passthrough)
+    requires = ['sys.timer.once']
 
-    action_priority = (start_timer, passthrough, timeout)
-    requires = ['calvinsys.events.timer']
+
+#    TBD: Reenable test after updating to use new calvinsys API
+#    test_kwargs = {'timeout': 10, 'immediate': True}
+#    test_set = [
+#        {
+#            'inports': {'data': ["data_to_forward"]},
+#            'outports': {'data': ["data_to_forward"],
+#                         'timeout': [False]}
+#        }
+#    ]
+
