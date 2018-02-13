@@ -33,7 +33,7 @@ class ResourceMonitorHelper(object):
             new_data = AttributeResolver({"indexed_public": {prefix_index: str(new_value)}})
             _log.debug("After possible removal, adding new node " + str(ident) + " for " + prefix_index + ": " + str(new_value))
             for index in new_data.get_indexed_public():
-                self.storage.add_index(index=index, value=self.node_id, root_prefix_level=2, cb=None)
+                self.storage.add_index(index=index, value=ident, root_prefix_level=2, cb=None)
 
     def set(self, ident, prefix, prefix_index, value, cb=None):
         """

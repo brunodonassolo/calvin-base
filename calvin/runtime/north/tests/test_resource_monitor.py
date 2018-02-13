@@ -167,7 +167,7 @@ class TestCpuMonitor(object):
             # verify index ok and present until level i
             for j in range(0, values.index(i)):
                 self.done = False
-                self.storage.get_index(index=self.CPUTOTAL_INDEX_BASE + map(str, values[:j+1], root_prefix_level=2, cb=CalvinCB(self.cb2))
+                self.storage.get_index(index=self.CPUTOTAL_INDEX_BASE + map(str, values[:j+1]), root_prefix_level=2, cb=CalvinCB(self.cb2))
                 yield wait_for(self._test_done)
                 assert self.node.id in self.get_ans
 
@@ -341,6 +341,10 @@ class TestLinkMonitor(object):
         self.get_ans = value
         self.done = True
 
+    def cb2(self, value):
+        self.get_ans = value
+        self.done = True
+
     @pytest.inlineCallbacks
     def test_bandwidth_invalid(self):
         """
@@ -375,7 +379,7 @@ class TestLinkMonitor(object):
             # verify index ok and present until level i
             for j in range(0, values.index(i)):
                 self.done = False
-                self.storage.get_index(index=self.BANDWIDTH_INDEX_BASE + map(str, values[:j+1]), cb=CalvinCB(self.cb))
+                self.storage.get_index(index=self.BANDWIDTH_INDEX_BASE + map(str, values[:j+1]), root_prefix_level=2, cb=CalvinCB(self.cb2))
                 yield wait_for(self._test_done)
                 assert self.link_id in self.get_ans
 
@@ -396,10 +400,9 @@ class TestLinkMonitor(object):
 
         # node id must not be present at level 100M, only at 1M
         self.done = False
-        self.storage.get_index(index=self.BANDWIDTH_INDEX_BASE + ['1M', '100M'], cb=CalvinCB(self.cb))
+        self.storage.get_index(index=self.BANDWIDTH_INDEX_BASE + ['1M', '100M'], root_prefix_level=2, cb=CalvinCB(self.cb2))
         yield wait_for(self._test_done)
-        print self.get_ans
-        assert self.get_ans is None
+        assert self.get_ans == []
 
     @pytest.inlineCallbacks
     def test_latency_invalid(self):
@@ -435,7 +438,7 @@ class TestLinkMonitor(object):
             # verify index ok and present until level i
             for j in range(0, values.index(i)):
                 self.done = False
-                self.storage.get_index(index=self.LATENCY_INDEX_BASE + map(str, values[:j+1]), cb=CalvinCB(self.cb))
+                self.storage.get_index(index=self.LATENCY_INDEX_BASE + map(str, values[:j+1]), root_prefix_level=2, cb=CalvinCB(self.cb2))
                 yield wait_for(self._test_done)
                 assert self.link_id in self.get_ans
 
@@ -456,10 +459,9 @@ class TestLinkMonitor(object):
 
         # node id must not be present at level 100ms, only at 1ms
         self.done = False
-        self.storage.get_index(index=self.LATENCY_INDEX_BASE + ['1s', '100ms'], cb=CalvinCB(self.cb))
+        self.storage.get_index(index=self.LATENCY_INDEX_BASE + ['1s', '100ms'], root_prefix_level=2, cb=CalvinCB(self.cb2))
         yield wait_for(self._test_done)
-        print self.get_ans
-        assert self.get_ans is None
+        assert self.get_ans == []
 
     @pytest.inlineCallbacks
     def test_stop_node(self):
@@ -472,7 +474,7 @@ class TestLinkMonitor(object):
         assert self.get_ans == True
 
         self.done = False
-        self.storage.get_index(index=self.BANDWIDTH_INDEX_BASE + ['1M', '100M'], cb=CalvinCB(self.cb))
+        self.storage.get_index(index=self.BANDWIDTH_INDEX_BASE + ['1M', '100M'], root_prefix_level=2, cb=CalvinCB(self.cb2))
         yield wait_for(self._test_done)
         assert self.link_id in self.get_ans
 
@@ -482,7 +484,7 @@ class TestLinkMonitor(object):
         assert self.get_ans == True
 
         self.done = False
-        self.storage.get_index(index=self.LATENCY_INDEX_BASE + ['1s', '100ms'], cb=CalvinCB(self.cb))
+        self.storage.get_index(index=self.LATENCY_INDEX_BASE + ['1s', '100ms'], root_prefix_level=2, cb=CalvinCB(self.cb2))
         yield wait_for(self._test_done)
         assert self.link_id in self.get_ans
 
@@ -494,28 +496,28 @@ class TestLinkMonitor(object):
         self.done = False
         self.storage.get(prefix="linkBandwidth-", key=self.link_id, cb=CalvinCB(self.cb))
         yield wait_for(self._test_done)
-        assert self.get_ans is False
+        assert isinstance(self.get_ans, calvinresponse.CalvinResponse) and self.get_ans == calvinresponse.NOT_FOUND
 
         # link id must not be present at level 100M
         self.done = False
-        self.storage.get_index(index=self.BANDWIDTH_INDEX_BASE + ['1M', '100M'], cb=CalvinCB(self.cb))
+        self.storage.get_index(index=self.BANDWIDTH_INDEX_BASE + ['1M', '100M'], root_prefix_level=2, cb=CalvinCB(self.cb2))
         yield wait_for(self._test_done)
-        assert self.get_ans is None
+        assert self.get_ans == []
 
         # no link in total indexes
         self.done = False
-        self.storage.get_index(index=self.BANDWIDTH_INDEX_BASE + ['1M'], cb=CalvinCB(self.cb))
+        self.storage.get_index(index=self.BANDWIDTH_INDEX_BASE + ['1M'], root_prefix_level=2, cb=CalvinCB(self.cb2))
         yield wait_for(self._test_done)
-        assert self.get_ans is None
+        assert self.get_ans == []
 
         # linkLatency- must not exist
         self.done = False
         self.storage.get(prefix="linkLatency-", key=self.link_id, cb=CalvinCB(self.cb))
         yield wait_for(self._test_done)
-        assert self.get_ans is False
+        assert isinstance(self.get_ans, calvinresponse.CalvinResponse) and self.get_ans == calvinresponse.NOT_FOUND
 
         # link id must not be present at level 100M
         self.done = False
-        self.storage.get_index(index=self.LATENCY_INDEX_BASE + ['1us', '100us'], cb=CalvinCB(self.cb))
+        self.storage.get_index(index=self.LATENCY_INDEX_BASE + ['1us', '100us'], root_prefix_level=2, cb=CalvinCB(self.cb2))
         yield wait_for(self._test_done)
-        assert self.get_ans is None
+        assert self.get_ans == []

@@ -139,7 +139,7 @@ class LinkMonitor(object):
         self.storage.delete('linkBandwidth-', key, cb=None)
         self.storage.delete('linkLatency-', key, cb=None)
 
-    def _delete_links_cb(self, key, value):
+    def _delete_links_cb(self, value):
         """
         Callback for delete_links
         Do step: Gets all runtimes that could use these links
