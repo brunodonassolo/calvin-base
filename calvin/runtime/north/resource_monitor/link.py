@@ -4,6 +4,7 @@ from calvin.runtime.south.plugins.async import async
 from calvin.runtime.north.resource_monitor.helper import ResourceMonitorHelper
 from calvin.utilities.calvinlogger import get_logger
 from calvin.utilities.calvin_callback import CalvinCB
+from calvin.requests import calvinresponse
 
 _log = get_logger(__name__)
 
@@ -19,7 +20,7 @@ class LinkMonitor(object):
         if not value:
             _log.error("LinkMonitor (%s, %s): Link not found for key: %s. Value %s not updated" % (link_prefix, link_prefix_index, key, str(link_value)))
             if org_cb:
-                async.DelayedCall(0, org_cb, link_value, False)
+                async.DelayedCall(0, CalvinCB(org_cb, link_value, False))
             return
 
         _log.debug("LinkMonitor (%s, %s): Link found (%s) for key: %s. Value %s will be updated" % (link_prefix, link_prefix_index, value, key, str(link_value)))
@@ -59,17 +60,32 @@ class LinkMonitor(object):
         """
         self.storage.get("phyLink-", phys_link, cb=cb)
 
-    def _verify_links_initialization(self, key, value):
-        if not value:
-            self._create_links()
-            async.DelayedCall(10, self._get_links, self.node_id, self._verify_links_initialization)
-            _log.debug("Links not initialized yet for node %s, trying again later..." % (key))
+    def _verify_links_init_step1(self, value):
+        """
+        This callback recovers the list of availables runtimes
+        and gets the number of links already create for this runtime
+        """
+        self._get_links(self.node_id, cb=CalvinCB(self._verify_links_init_step2, n_runtimes = value))
+
+    def _verify_links_init_step2(self, value, n_runtimes):
+        """
+        In step2, we verify whether we already create all links between runtimes.
+        Each runtime will have n-1 links.
+        """
+        if not value or len(value) < len(n_runtimes) - 1:
+            self._create_links(n_runtimes)
+            from calvin.utilities.attribute_resolver import format_index_string
+            index_str = format_index_string(("node_name", {}))
+            async.DelayedCall(10, self.storage.get_index, index=index_str, cb = self._verify_links_init_step1)
+            _log.debug("Links not initialized yet for node %s, trying again later... Expected: %d, created: %d" % (self.node_id, len(n_runtimes) - 1, len(value)))
         else:
-            _log.debug("Links already initialized for node %s: %s" % (key, str(value)))
+            _log.debug("Links already initialized for node %s: %s" % (self.node_id, str(value)))
 
     def start(self):
         # Start links if needed
-        self._get_links(self.node_id, cb=CalvinCB(self._verify_links_initialization))
+        from calvin.utilities.attribute_resolver import format_index_string
+        index_str = format_index_string(("node_name", {}))
+        self.storage.get_index(index_str, cb=CalvinCB(func=self._verify_links_init_step1))
 
     def stop(self):
         """
@@ -83,38 +99,38 @@ class LinkMonitor(object):
         """
         self._get_links(self.node_id, cb=CalvinCB(self._delete_links_cb))
 
-    def _create_links_cb(self, key, value, runtime1):
+    def _create_links_cb(self, key, value, rt):
+        """
+        Creates link between this node and runtime rt if it doesn't exist
+        Returns the link_id used for tests (test_resource_monitor.py)
+        """
+        if value:
+            _log.debug("Link (%s) already created between runtimes %s:" % (str(value),str(key)))
+            return
+        data = { "runtime1" : self.node_id,
+                "runtime2" : rt}
+        from calvin.utilities import calvinuuid
+        link_id = calvinuuid.uuid("Link")
+        self.storage.set(prefix="phyLink-", key=link_id, value=data, cb = None)
+        # search link id by its origin/dst runtimes
+        self.storage.set(prefix="rt-link-", key=self.node_id + rt, value=link_id, cb=None)
+        self.storage.set(prefix="rt-link-", key=rt + self.node_id, value=link_id, cb=None)
+        # get all links of 1 runtime, so adds link_id index to both runtimes
+        self.storage.add_index(['phyLinks', self.node_id], link_id, root_prefix_level=2, cb=None)
+        self.storage.add_index(['phyLinks', rt], link_id, root_prefix_level=2, cb=None)
+        return link_id
+
+    def _create_links(self, runtimes):
         """
         Create 1 link to each pair of runtimes
         Adds this link to storage: phyLink-ID : { "runtime1_id", "runtime2_id" }
         Also, associate the link with both runtimes to find it easier (on node removal)
         """
-        from calvin.utilities import calvinuuid
-        links_id = []
-        for rt in value:
-            if (rt == runtime1):
-                _log.debug("Skipping same runtime:" + str(runtime1))
+        for rt in runtimes:
+            if (rt == self.node_id):
+                _log.debug("Skipping same runtime:" + str(self.node_id))
                 continue
-            data = { "runtime1" : runtime1,
-                     "runtime2" : rt}
-            link_id = calvinuuid.uuid("Link")
-            links_id.append(link_id)
-            self.storage.set(prefix="phyLink-", key=link_id, value=data, cb = None)
-            # search link id by its origin/dst runtimes
-            self.storage.set(prefix="rt-link-", key=runtime1 + rt, value=link_id, cb=None)
-            self.storage.set(prefix="rt-link-", key=rt + runtime1, value=link_id, cb=None)
-            # get all links of 1 runtime, so adds link_id index to both runtimes
-            self.storage.add_index(['phyLinks', runtime1], link_id, root_prefix_level=2, cb=None)
-            self.storage.add_index(['phyLinks', rt], link_id, root_prefix_level=2, cb=None)
-        return links_id
-
-    def _create_links(self):
-        """
-        Create links between node_id and all nodes available
-        """
-        from calvin.utilities.attribute_resolver import format_index_string
-        index_str = format_index_string(("node_name", {}))
-        self.storage.get_index(index_str, CalvinCB(func=self._create_links_cb, runtime1=self.node_id))
+            self.storage.get("rt-link-", key= self.node_id + rt, cb=CalvinCB(func=self._create_links_cb, rt = rt))
 
     def _get_links(self, node_id, cb):
         """

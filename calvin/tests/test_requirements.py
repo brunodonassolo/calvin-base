@@ -113,12 +113,16 @@ class TestDeployScript(unittest.TestCase):
         global rt2
         global rt3
         global test_script_dir
+        import calvin.runtime.north.storage
+        calvin.runtime.north.storage._conf.set('global', 'storage_type', 'local')
         rt1, _ = dispatch_node(["calvinip://%s:5000" % (ip_addr,)], "http://%s:5003" % ip_addr,
              attributes={'indexed_public':
                   {'owner':{'organization': 'org.testexample', 'personOrGroup': 'testOwner1'},
                    'node_name': {'organization': 'org.testexample', 'name': 'testNode1'},
                    'address': {'country': 'SE', 'locality': 'testCity', 'street': 'testStreet', 'streetNumber': 1}}})
         helpers.wait_for_runtime(request_handler, rt1)
+        calvin.runtime.north.storage._conf.set('global', 'storage_type', 'proxy')
+        calvin.runtime.north.storage._conf.set('global', 'storage_proxy', "calvinip://%s:5000" % (ip_addr,))
         rt2, _ = dispatch_node(["calvinip://%s:5001" % (ip_addr,)], "http://%s:5004" % ip_addr,
              attributes={'indexed_public':
                   {'owner':{'organization': 'org.testexample', 'personOrGroup': 'testOwner1'},

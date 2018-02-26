@@ -327,7 +327,7 @@ class TestLinkMonitor(object):
         self.link = LinkMonitor(self.node.id, self.storage)
         self.done = False
         self.storage.add_node(self.node)
-        self.link_id = self.link._create_links_cb(key=None, runtime1=self.node.id, value=[self.node2.id])[0]
+        self.link_id = self.link._create_links_cb(key=None, value=None, rt=self.node2.id)
         yield threads.defer_to_thread(time.sleep, .01)
 
     @pytest.inlineCallbacks
