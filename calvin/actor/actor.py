@@ -17,13 +17,14 @@
 import wrapt
 import functools
 import time
+import copy
 from calvin.utilities import calvinuuid
 from calvin.actor import actorport
 from calvin.utilities.calvinlogger import get_logger
 from calvin.utilities.utils import enum
 from calvin.runtime.north.calvin_token import Token, ExceptionToken
 # from calvin.runtime.north import calvincontrol
-from calvin.runtime.north.replicationmanager import ReplicationData
+from calvin.runtime.north.replicationmanager import ReplicationId
 import calvin.requests.calvinresponse as response
 from calvin.runtime.south.plugins.async import async
 from calvin.runtime.north.plugins.authorization_checks import check_authorization_plugin_list
@@ -257,7 +258,8 @@ class Actor(object):
     _security_state_keys = ('_subject_attributes')
 
     # These are the instance variables that will always be serialized, see serialize()/deserialize() below
-    _private_state_keys = ('_id', '_name', '_has_started', '_deployment_requirements', '_signature', '_migration_info', "_port_property_capabilities", "_replication_data")
+    _private_state_keys = ('_id', '_name', '_has_started', '_deployment_requirements',
+                           '_signature', '_migration_info', "_port_property_capabilities", "_replication_id")
 
     # Internal state (status)
     class FSM(object):
@@ -341,18 +343,17 @@ class Actor(object):
         self._component_members = set([self._id])  # We are only part of component if this is extended
         self._managed = set()
         self._has_started = False
-        self._calvinsys = None
-        self.calvinsys = None
-        self._using = {}
         # self.control = calvincontrol.get_calvincontrol()
         self._migration_info = None
         self._migrating_to = None  # During migration while on the previous node set to the next node id
+        self._migration_connected = True  # False while setup the migrated actor, to prevent further migrations
         self._last_time_warning = 0.0
         self.sec = security
         self._subject_attributes = self.sec.get_subject_attributes() if self.sec is not None else None
         self.authorization_checks = None
-        self._replication_data = ReplicationData(initialize=False)
+        self._replication_id = ReplicationId()
         self._exhaust_cb = None
+        self._pressure_event = 0  # Time of last pressure event time (not in state only local)
 
         self.inports = {p: actorport.InPort(p, self, pp) for p, pp in self.inport_properties.items()}
         self.outports = {p: actorport.OutPort(p, self, pp) for p, pp in self.outport_properties.items()}
@@ -403,17 +404,9 @@ class Actor(object):
             self.will_end()
         get_calvinsys().close_all(self)
 
-    def will_replicate(self, state):
-        """Override in actor subclass if actions need to be taken before replication."""
+    def did_replicate(self, index):
+        """Override in actor subclass if actions need to be taken after replication."""
         pass
-
-    def __getitem__(self, attr):
-        if attr in self._using:
-            return self._using[attr]
-        raise KeyError(attr)
-
-    def use(self, requirement, shorthand):
-        self._using[shorthand] = self._calvinsys.use_requirement(self, requirement)
 
     def __str__(self):
         ip = ""
@@ -484,14 +477,37 @@ class Actor(object):
         self._exhaust_cb = callback
 
     def get_pressure(self):
+        _log.debug("get_pressure %s" % self._replication_id.measure_pressure())
+        if not self._replication_id.measure_pressure():
+            return None
+        t = time.time()
         pressure = {}
         for port in self.inports.values():
             for e in port.endpoints:
                 PRESSURE_LENGTH = len(e.pressure)
-                pressure[(port.id, e.peer_id)] = (
-                    e.pressure_last, e.pressure_count, [e.pressure[t % PRESSURE_LENGTH] for t in range(
-                                        max(0, e.pressure_count - PRESSURE_LENGTH), e.pressure_count)])
-        return pressure
+                pressure[port.id + "," + e.peer_id] = {'last': e.pressure_last, 'count': e.pressure_count,
+                    'pressure': [e.pressure[i % PRESSURE_LENGTH] for i in range(
+                                        max(0, e.pressure_count - PRESSURE_LENGTH), e.pressure_count)]}
+        pressure_event = False
+        for p in pressure.values():
+            if len(p['pressure']) < 2:
+                continue
+            if ((p['pressure'][-1][1] - p['pressure'][-2][1]) < 10 and
+                 p['pressure'][-1][1] > self._pressure_event):
+                # Less than 10 sec between queue full and not reported, maybe scale out
+                self._pressure_event = max(p['pressure'][-1][1], self._pressure_event)
+                pressure_event = True
+                break
+            if (p['pressure'][-1][1] < (t - 30) and
+                p['last'] > p['pressure'][-1][0] + 3 and
+                p['pressure'][-1][1] > self._pressure_event):
+                # More than 30 sec since queue full, received at least 3 tokens and not reported, maybe scale in
+                self._pressure_event = max(p['pressure'][-1][1], self._pressure_event)
+                pressure_event = True
+                break
+        pressure['time'] = t
+        _log.debug("get_pressure pressure_event:%s, pressure: %s" % (pressure_event, pressure))
+        return pressure if pressure_event else None
 
     #
     # FIXME: The following methods (_authorized, _warn_slow_actor, _handle_exhaustion) were
@@ -608,23 +624,22 @@ class Actor(object):
         """Deserialize and set custom state, implement in subclass if necessary"""
         pass
 
-    def _private_state(self, remap):
+    def _private_state(self):
         """Serialize state common to all actors"""
         state = {}
         state['inports'] = {
-            port: self.inports[port]._state(remap=remap) for port in self.inports}
+            port: self.inports[port]._state() for port in self.inports}
         state['outports'] = {
-            port: self.outports[port]._state(remap=remap) for port in self.outports}
+            port: self.outports[port]._state() for port in self.outports}
         state['_component_members'] = list(self._component_members)
+        # Place requires in state, in the event we become a ShadowActor
+        state['_requires'] = self.requires if hasattr(self, 'requires') else []
 
         # FIXME: The objects in _private_state_keys are well known, they are private after all,
         #        and we shouldn't need this generic handler.
         for key in self._private_state_keys:
             obj = self.__dict__[key]
             if _implements_state(obj):
-                try:
-                    state[key] = obj.state(remap)
-                except:
                     state[key] = obj.state()
             else:
                 state[key] = obj
@@ -649,13 +664,20 @@ class Actor(object):
         #        and we shouldn't need this generic handler.
         for key in self._private_state_keys:
             if key not in self.__dict__:
-                self.__dict__[key] = state.pop(key, None)
+                self.__dict__[key] = state.get(key, None)
             else:
                 obj = self.__dict__[key]
                 if _implements_state(obj):
-                    obj.set_state(state.pop(key))
+                    obj.set_state(state.get(key))
                 else:
-                    self.__dict__[key] = state.pop(key, None)
+                    self.__dict__[key] = state.get(key, None)
+
+    def _replication_state(self):
+        return None
+
+    def _set_replication_state(self, state):
+        """Deserialize and apply state related to a replicating actor """
+        pass
 
     def _security_state(self):
         """
@@ -688,10 +710,13 @@ class Actor(object):
         for key, val in state.iteritems():
             self.__dict__[key] = val
 
-    def serialize(self, remap=None):
+    def serialize(self):
         """Returns the serialized state of an actor."""
         state = {}
-        state['private'] = self._private_state(remap)
+        state['private'] = self._private_state()
+        rstate = self._replication_state()
+        if rstate is not None:
+            state['replication'] = rstate
         state['managed'] = self._managed_state()
         state['security']= self._security_state()
         state['custom'] = self.state()
@@ -700,6 +725,7 @@ class Actor(object):
     def deserialize(self, state):
         """Restore an actor's state from the serialized state."""
         self._set_private_state(state['private'])
+        self._set_replication_state(state.get('replication', None))
         self._set_security_state(state['security'])
         self._set_managed_state(state['managed'])
         self.set_state(state['custom'])
@@ -743,7 +769,7 @@ class Actor(object):
                 'kwargs': {'port_property': self._port_property_capabilities},
                 'type': '+'
             }]
-        if hasattr(self, 'requires'):
+        if hasattr(self, 'requires') and self.requires:
             capability_require = [{
                 'op': 'actor_reqs_match',
                 'kwargs': {'requires': self.requires},
@@ -751,16 +777,9 @@ class Actor(object):
             }]
         else:
             capability_require = []
-        if self._replication_data.id is None:
-            replica_nodes = []
-        else:
-            # exclude node with replicas
-            replica_nodes = [{
-                'op': 'replica_nodes',
-                'kwargs': {},
-                'type': '-'
-            }]
-        return self._deployment_requirements + capability_require + capability_port + replica_nodes
+
+        return (self._deployment_requirements + capability_require + 
+                capability_port + self._replication_id._placement_req)
 
     def _derive_port_property_capabilities(self):
         port_property_capabilities = set([])
@@ -795,11 +814,11 @@ class Actor(object):
             self.fsm.transition_to(Actor.STATUS.MIGRATABLE)
             _log.info("Migrate actor %s to node %s" % (self._name, self._migration_info["node_id"]))
             # Inform the scheduler that the actor is ready to migrate.
-            self._calvinsys.scheduler_maintenance_wakeup()
+            get_calvinsys().scheduler_maintenance_wakeup()
         else:
             _log.info("No possible migration destination found for actor %s" % self._name)
             # Try to enable/migrate actor again after a delay.
-            self._calvinsys.scheduler_maintenance_wakeup(delay=True)
+            get_calvinsys().scheduler_maintenance_wakeup(delay=True)
 
     @verify_status([STATUS.MIGRATABLE, STATUS.READY])
     def remove_migration_info(self, status):
@@ -809,6 +828,9 @@ class Actor(object):
             #        Need to make the actor runnable again before transition to DENIED.
             #self.fsm.transition_to(Actor.STATUS.DENIED)
 
+    def is_shadow(self):
+        return False
+
 
 class ShadowActor(Actor):
     """A shadow actor try to behave as another actor but don't have any implementation"""
@@ -817,6 +839,8 @@ class ShadowActor(Actor):
         self.inport_properties = {}
         self.outport_properties = {}
         self.calvinsys_state = {}
+        self.requires = None
+        self._replication_state_data = None
         super(ShadowActor, self).__init__(actor_type, name, allow_invalid_transitions=allow_invalid_transitions,
                                             disable_transition_checks=disable_transition_checks,
                                             disable_state_checks=disable_state_checks, actor_id=actor_id,
@@ -825,6 +849,9 @@ class ShadowActor(Actor):
     @manage(['_shadow_args'])
     def init(self, **args):
         self._shadow_args = args
+
+    def is_shadow(self):
+        return True
 
     def create_shadow_port(self, port_name, port_dir, port_id=None):
         # TODO check if we should create port against meta info
@@ -850,23 +877,37 @@ class ShadowActor(Actor):
         return
 
     def requirements_get(self):
-        # If missing signature we can't add requirement for finding actor's requires.
-        if self._signature:
-            return self._deployment_requirements + [{'op': 'shadow_actor_reqs_match',
-                                                 'kwargs': {'signature': self._signature,
-                                                            'shadow_params': self._shadow_args.keys()},
-                                                 'type': '+'}]
-        else:
-            _log.error("Shadow actor %s - %s miss signature" % (self._name, self._id))
-            return self._deployment_requirements
+        # Get standard actor requirements first
+        reqs = super(ShadowActor, self).requirements_get()
+        if self._signature and hasattr(self, '_shadow_args') and self.requires is None:
+            # Fresh ShadowActor, needs to find placement based on signature
+            # Since actor requires is not known locally
+            reqs += [{'op': 'shadow_actor_reqs_match',
+                     'kwargs': {'signature': self._signature,
+                                'shadow_params': self._shadow_args.keys()},
+                     'type': '+'}]
+        return reqs
 
     def _set_private_state(self, state):
-        """Pop _calvinsys state and call super class"""
+        """Pop _calvinsys state, set requires and call super class"""
         self.calvinsys_state = state.pop("_calvinsys")
+        # Done only in ShadowActor since requires is normally part of the real Actor sub-class
+        self.requires = state['_requires']
         super(ShadowActor, self)._set_private_state(state)
 
-    def _private_state(self, remap):
+    def _private_state(self):
         """Call super class and add stored calvinsys state"""
-        state = super(ShadowActor, self)._private_state(remap)
+        state = super(ShadowActor, self)._private_state()
         state["_calvinsys"] = self.calvinsys_state
         return state
+
+    def _set_replication_state(self, state):
+        """ Save the replication state, besides ports since they are already handled on the shadow instance """
+        super(ShadowActor, self)._set_replication_state(state)
+        # Need copy since remove the ports, which is needed for connect
+        self._replication_state_data = copy.copy(state)
+        if state is None:
+            return
+
+    def _replication_state(self):
+        return self._replication_state_data

@@ -26,11 +26,13 @@ class ReqMatch(object):
     """ ReqMatch Do requirement matching for an actor.
         node: the node
         callback: takes arguments possible_placements (set) and status (CalvinResponse)
+        replace_infinite: when the possible placement would be InfinteElement replace it with all known node ids
     """
-    def __init__(self, node, callback=None):
+    def __init__(self, node, callback=None, replace_infinite=False):
         super(ReqMatch, self).__init__()
         self.node = node
         self.callback = callback
+        self.replace_infinite = replace_infinite
 
     def match_for_actor(self, actor_id):
         """ Helper function for matching locally found actors """
@@ -45,6 +47,25 @@ class ReqMatch(object):
                     requirements=actor.requirements_get(),
                     actor_id=actor_id,
                     component_ids=actor.component_members())
+
+    def match_actor_registry(self, actor_id):
+        """ Helper function to first fetch requirements from registry """
+        # TODO no component level handling currently
+        def _got_requirements(key, value):
+            if response.isnotfailresponse(value):
+                try:
+                    self.match(value, actor_id)
+                except:
+                    if callable(self.callback):
+                        self.callback(status=response.CalvinResponse(response.BAD_REQUEST), possible_placements=set([]))
+            else:
+                if callable(self.callback):
+                    self.callback(status=value, possible_placements=set([]))
+        if actor_id in self.node.am.actors:
+            # Don't waste time if local
+            return self.match_for_actor(actor_id)
+        else:
+            self.node.storage.get_actor_requirements(actor_id, cb=_got_requirements)
 
     def match(self, requirements, actor_id=None, component_ids=None):
         """ Match the list of requirements either from a local actor or on behalf of
@@ -146,6 +167,14 @@ class ReqMatch(object):
             # All possible actor placements derived
             _log.analyze(self.node.id, "+ ALL", {})
             self.done = True
+            if self.replace_infinite:
+                # Replace Infinte Element with all known real ids
+                if any([isinstance(node_id, dynops.InfiniteElement) for node_id in self.possible_placements]):
+                    try:
+                        replace_ids = self.node.network._links.keys() + [self.node.id]
+                    except:
+                        replace_ids = [self.node.id]
+                    self.possible_placements = set(replace_ids)
             if callable(self.callback):
                 status = response.CalvinResponse(True if self.possible_placements else False)
                 self.callback(possible_placements=self.possible_placements, status=status)

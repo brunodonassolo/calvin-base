@@ -48,6 +48,7 @@ class BaseScheduler(object):
         # FIXME: later
         self._replication_interval = 2
         self._maintenance_delay = _conf.get(None, "maintenance_delay") or 300
+        self._pressure_event_actor_ids = set([])
 
     # System entry point
     def run(self):
@@ -98,6 +99,20 @@ class BaseScheduler(object):
     def unregister_endpoint(self, endpoint):
         pass
 
+    def replication_direct(self, replication_id=None, delay=0):
+        """ Schedule an (early) replication management for at least replication_id.
+            Delay can be used for scaling that know when in future e.g. scaling-in
+            should be evaluated.
+        """
+        # TODO make use of replication_id when we have that granularity in the scheduler
+        self.insert_task(self._check_replication, delay)
+
+    def trigger_pressure_event(self, actor_id=None):
+        """ Schedule an pressure event for actor_id """
+        _log.debug("trigger_pressure_event %s" % actor_id)
+        self._pressure_event_actor_ids.add(actor_id)
+        self.insert_task(self._check_pressure, 0)
+
     ######################################################################
     # Stuff that needs to be implemented in a subclass
     ######################################################################
@@ -120,8 +135,20 @@ class BaseScheduler(object):
     def _check_replication(self):
         # Control replication
         self.node.rm.replication_loop()
+        # Need to only insert task if none before replication interval, otherwise build up more and more tasks
+        tt = time.time() + self._replication_interval
+        if not any([t[0] < tt for t in self._tasks if t[1] == self._check_replication]):
+            self.insert_task(self._check_replication, self._replication_interval)
+        _log.debug("Next replication loop in %s %d %d" % (str([t[0] - time.time() for t in self._tasks if t[1] == self._check_replication]), 
+                    [t[1] == self._check_replication for t in self._tasks].index(True), len(self._tasks)))
         self.insert_task(self.strategy, 0)
-        self.insert_task(self._check_replication, self._replication_interval)
+
+    def _check_pressure(self):
+        _log.debug("_check_pressure %s" % self._pressure_event_actor_ids)
+        self.node.rm.check_pressure(self._pressure_event_actor_ids)
+        self._pressure_event_actor_ids = set([])
+        if not [True for t in self._tasks if t[1] == self._check_pressure]:
+            self.insert_task(self._check_pressure, 30)
 
     #
     # Maintenance loop

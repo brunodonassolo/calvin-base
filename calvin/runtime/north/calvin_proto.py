@@ -193,6 +193,8 @@ class CalvinProto(CalvinCBClass):
             'TUNNEL_NEW': [CalvinCB(self.tunnel_new_handler)],
             'TUNNEL_DESTROY': [CalvinCB(self.tunnel_destroy_handler)],
             'TUNNEL_DATA': [CalvinCB(self.tunnel_data_handler)],
+            'LEADER_ELECTED': [CalvinCB(self.leader_elected_handler)],
+            'QUEUE_PRESSURE': [CalvinCB(self.queue_pressure_handler)],
             'REPLY': [CalvinCB(self.reply_handler)],
             'AUTHENTICATION_DECISION': [CalvinCB(self.authentication_decision_handler)],
             'AUTHORIZATION_REGISTER': [CalvinCB(self.authorization_register_handler)],
@@ -271,7 +273,7 @@ class CalvinProto(CalvinCBClass):
 
     #### ACTORS ####
 
-    def actor_new(self, to_rt_uuid, callback, actor_type, state, prev_connections):
+    def actor_new(self, to_rt_uuid, callback, actor_type, state, prev_connections, connection_list=None):
         """ Creates a new actor on to_rt_uuid node, but is only intended for migrating actors
             callback: called when finished with the peers respons as argument
             actor_type: see actor manager
@@ -280,7 +282,10 @@ class CalvinProto(CalvinCBClass):
         """
         self.node.network.link_request(to_rt_uuid, CalvinCB(send_message,
                                                             msg = {'cmd': 'ACTOR_NEW',
-                                                                   'state': {'actor_type': actor_type, 'actor_state': state, 'prev_connections': prev_connections}},
+                                                                   'state': {'actor_type': actor_type,
+                                                                             'actor_state': state,
+                                                                             'prev_connections': prev_connections,
+                                                                             'connection_list': connection_list}},
                                                             callback=callback))
 
     def actor_new_handler(self, payload):
@@ -289,6 +294,7 @@ class CalvinProto(CalvinCBClass):
         self.node.am.new_from_migration(payload['state']['actor_type'],
                                         payload['state']['actor_state'],
                                         payload['state']['prev_connections'],
+                                        connection_list=payload['state'].get('connection_list', None),
                                         callback=CalvinCB(self.node.network.link_request, payload['from_rt_uuid'], callback=CalvinCB(send_message,
                                             msg = {'cmd': 'REPLY', 'msg_uuid': payload['msg_uuid']})))
 
@@ -570,6 +576,64 @@ class CalvinProto(CalvinCBClass):
         self.node.pm.connect(port_id=payload['port_id'], peer_port_id=payload['peer_port_id'],
                 callback=CalvinCB(self.node.network.link_request, payload['from_rt_uuid'],
                     callback=CalvinCB(send_message, msg={'cmd': 'REPLY', 'msg_uuid': payload['msg_uuid']})))
+
+    def queue_pressure(self, actor_id, replication_id, node_id, pressure, callback=None):
+        self.node.network.link_request(node_id, CalvinCB(send_message,
+             msg={'cmd': 'QUEUE_PRESSURE', 'actor_id': actor_id, 'replication_id':replication_id,
+                  'pressure': pressure},
+             callback=callback))
+
+    def queue_pressure_handler(self, payload):
+        """ Handle request for remote port connection """
+        reply = self.node.rm.update_pressure(actor_id=payload['actor_id'], replication_id=payload['replication_id'],
+                pressure=payload['pressure'])
+        # Send reply
+        msg = {'cmd': 'REPLY', 'msg_uuid': payload['msg_uuid'], 'value': reply.encode()}
+        self.network.link_request(payload['from_rt_uuid'], callback=CalvinCB(send_message, msg=msg))
+
+    #### LEADER ELECTION ####
+
+    def leader_elected(self, peer_node_id, leader_type, cmd, data, callback=None):
+        msg = {'cmd': 'LEADER_ELECTED', 'type': leader_type, 'type_cmd': cmd, 'data': data}
+        self.network.link_request(peer_node_id, callback=CalvinCB(send_message, msg=msg, callback=callback))
+
+    def leader_elected_handler(self, payload):
+        """ Handle request for selecting this runtime as leader for a <type> task """
+        try:
+            if payload["type"] == "replication":
+                if payload["type_cmd"] == "create":
+                    reply = self.node.rm.add_replication_leader(replication_data=payload["data"])
+                elif payload["type_cmd"] == "destroy":
+                    reply = self.node.rm.destroy_replication_leader(replication_id=payload["data"])
+                elif payload["type_cmd"] == "lock":
+                    def _tried_lock(status):
+                        msg = {'cmd': 'REPLY', 'msg_uuid': payload['msg_uuid'], 'value': status.encode()}
+                        self.node.network.link_request(payload['from_rt_uuid'],
+                                            callback=CalvinCB(send_message, msg=msg))
+                    self.node.rm._try_replication_lock(replication_id=payload["data"]["replication_id"],
+                                                       peer_replication_id=payload["data"]["peer_replication_id"],
+                                                       cb=_tried_lock)
+                    reply = None
+                elif payload["type_cmd"] == "release":
+                    def _released(status):
+                        msg = {'cmd': 'REPLY', 'msg_uuid': payload['msg_uuid'], 'value': status.encode()}
+                        self.node.network.link_request(payload['from_rt_uuid'],
+                                            callback=CalvinCB(send_message, msg=msg))
+                    self.node.rm._release_replication_lock(replication_id=payload["data"]["replication_id"],
+                                                       peer_replication_id=payload["data"]["peer_replication_id"],
+                                                       cb=_released)
+                    reply = None
+                else:
+                    reply = response.CalvinResponse(response.BAD_REQUEST)
+            else:
+                reply = response.CalvinResponse(response.BAD_REQUEST)
+        except:
+            reply = response.CalvinResponse(False)
+        if reply is None:
+            return
+        msg = {'cmd': 'REPLY', 'msg_uuid': payload['msg_uuid'], 'value': reply.encode()}
+        self.node.network.link_request(payload['from_rt_uuid'],
+                            callback=CalvinCB(send_message, msg=msg))
 
     #### AUTHENTICATION ####
 

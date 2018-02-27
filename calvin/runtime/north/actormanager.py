@@ -65,7 +65,8 @@ class ActorManager(object):
           2) a mangled list of tuples with (in_node_id, in_port_id, out_node_id, out_port_id) supplied as
              connection_list
         """
-        _log.debug("class: %s args: %s state: %s, signature: %s" % (actor_type, args, state, signature))
+        _log.debug("class: %s args: %s state: %s, signature: %s\nprev_connections: %s connection_list:%s" %
+                    (actor_type, args, state, signature, prev_connections, connection_list))
         _log.analyze(self.node.id, "+", {'actor_type': actor_type, 'state': state})
 
         try:
@@ -82,6 +83,8 @@ class ActorManager(object):
 
         self.actors[a.id] = a
 
+        a._migration_connected = False
+
         self.node.storage.add_actor(a, self.node.id)
 
         if prev_connections:
@@ -95,6 +98,7 @@ class ActorManager(object):
             self.connect(a.id, connection_list, callback=callback)
         else:
             # Nothing to connect then we are OK
+            a._migration_connected = True
             if callback:
                 callback(status=response.CalvinResponse(True), actor_id=a.id)
             else:
@@ -118,7 +122,6 @@ class ActorManager(object):
         except Exception as e:
             _log.error("The actor %s(%s) can't be instantiated." % (actor_type, class_.__init__))
             raise(e)
-        a._calvinsys = self.node.calvinsys()
         if isinstance(access_decision, tuple):
             # Authorization checks needed if access_decision is a tuple.
             a.set_authorization_checks(access_decision[1])
@@ -142,7 +145,7 @@ class ActorManager(object):
             raise(e)
         return a
 
-    def new_from_migration(self, actor_type, state, prev_connections=None, callback=None):
+    def new_from_migration(self, actor_type, state, prev_connections=None, connection_list=None, callback=None):
         """Instantiate an actor of type 'actor_type' and apply the 'state' to the actor."""
         try:
             _log.analyze(self.node.id, "+", state)
@@ -163,13 +166,15 @@ class ActorManager(object):
             self.check_requirements_and_sec_policy(requirements, security, state['private']['_id'],
                                                    signer, migration_info,
                                                    CalvinCB(self.new, actor_type, None,
-                                                            state, prev_connections,
+                                                            state, prev_connections=prev_connections,
+                                                            connection_list=connection_list,
                                                             callback=callback,
                                                             actor_def=actor_def,
                                                             security=security))
         except Exception:
             # Still want to create shadow actor.
-            self.new(actor_type, None, state, prev_connections, callback=callback, shadow_actor=True)
+            self.new(actor_type, None, state, prev_connections=prev_connections,
+                    connection_list=connection_list, callback=callback, shadow_actor=True)
 
     def _new_from_state(self, actor_type, state, actor_def, security,
                              access_decision=None, shadow_actor=False):
@@ -181,15 +186,23 @@ class ActorManager(object):
                 # We were a shadow, do a full init
                 args = state['managed'].pop('_shadow_args')
                 a.init(**args)
-                # If still shadow don't call did_migrate
-                did_migrate = isinstance(a, ShadowActor)
+                # If still shadow don't call did_replicate even when replication
+                did_replicate = (not isinstance(a, ShadowActor)) and 'replication' in state
+                # If still shadow don't call did_migrate also skip if replication
+                did_migrate = isinstance(a, ShadowActor) and not did_replicate
             else:
                 did_migrate = True
+                did_replicate = False
             # Always do a set_state for the port's state
             a.deserialize(state)
             self.node.pm.add_ports_of_actor(a)
             if did_migrate:
                 a.did_migrate()
+            if did_replicate:
+                try:
+                    a.did_replicate(state['private']['_replication_id']['index'])
+                except:
+                    _log.exception("did_replicate failed for actor %s" % a.name)
             a.setup_complete()
         except Exception as e:
             _log.exception("Catched new from state %s %s" % (a, dir(a)))
@@ -273,7 +286,7 @@ class ActorManager(object):
     def check_requirements_and_sec_policy(self, requirements, security=None, actor_id=None,
                                           signer=None, decision_from_migration=None, callback=None):
         for req in requirements:
-            if not self.node.calvinsys().has_capability(req) and not get_calvinsys().has_capability(req) and not get_calvinlib().has_capability(req):
+            if not get_calvinsys().has_capability(req) and not get_calvinlib().has_capability(req):
                 raise Exception("Actor requires %s" % req)
         if security_enabled():
             # Check if access is permitted for the actor by the security policy.
@@ -301,8 +314,8 @@ class ActorManager(object):
                 callback(status=response.CalvinResponse(response.BAD_REQUEST))
             return
         actor = self.actors[actor_id]
-        actor._replication_data.inhibate(actor_id, True)
         actor.requirements_add(requirements, extend)
+        self.node.storage.add_actor(actor, self.node.id)  # Update requirements in registry
         r = ReqMatch(self.node,
                      callback=CalvinCB(self._update_requirements_placements, actor_id=actor_id, move=move, cb=callback))
         r.match_for_actor(actor_id)
@@ -314,12 +327,10 @@ class ActorManager(object):
             possible_placements.discard(self.node.id)
         actor = self.actors[actor_id]
         if not possible_placements:
-            actor._replication_data.inhibate(actor_id, False)
             if cb:
                 cb(status=response.CalvinResponse(False))
             return
         if self.node.id in possible_placements:
-            actor._replication_data.inhibate(actor_id, False)
             # Actor could stay, then do that
             if cb:
                 cb(status=response.CalvinResponse(True))
@@ -378,8 +389,16 @@ class ActorManager(object):
                 callback(status=response.CalvinResponse(False))
             return
         actor = self.actors[actor_id]
-        # No need to inhibate replication anymore (could still be locked out by _migrating_to set below)
-        actor._replication_data.inhibate(actor_id, False)
+        if actor._migrating_to is not None:
+            # We can't migrate while migrating
+            if callback:
+                callback(status=response.CalvinResponse(response.BAD_REQUEST))
+            return
+        if not actor._migration_connected:
+            # We can't migrate before finished with setup actor from previous migration
+            if callback:
+                callback(status=response.CalvinResponse(response.SERVICE_UNAVAILABLE))
+            return
         if node_id == self.node.id:
             # No need to migrate to ourself
             if callback:
@@ -437,9 +456,10 @@ class ActorManager(object):
         Reconnecting the ports can be done using a connection_list
         of tuples (node_id i.e. our id, port_id, peer_node_id, peer_port_id)
         """
+        _log.debug("ACTOR CONNECT BEGIN %s" % actor_id)
         if actor_id not in self.actors:
             self._actor_not_found(actor_id)
-
+        _log.debug("ACTOR CONNECT LIST %s %s\n%s" % (actor_id, self.actors[actor_id]._name, connection_list))
         peer_port_ids = [c[3] for c in connection_list]
 
         for node_id, port_id, peer_node_id, peer_port_id in connection_list:
@@ -459,8 +479,10 @@ class ActorManager(object):
             peer_port_ids: list of port ids kept in context between calls when *changed* by this function,
                            do not replace it
         """
+        _log.debug("_actor_connected %s %s" % (actor_id, status))
         # Send negative response if not already done it
         if not status and peer_port_ids:
+            self.actors[actor_id]._migration_connected = True
             if _callback:
                 del peer_port_ids[:]
                 _callback(status=response.CalvinResponse(False), actor_id=actor_id)
@@ -469,6 +491,7 @@ class ActorManager(object):
             peer_port_ids.remove(peer_port_id)
             # If all ports done send OK
             if not peer_port_ids:
+                self.actors[actor_id]._migration_connected = True
                 if _callback:
                     _callback(status=response.CalvinResponse(True), actor_id=actor_id)
 

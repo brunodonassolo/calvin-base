@@ -94,24 +94,17 @@ class Port(object):
             # Want to replace an existing queue type (e.g. during migration)
             raise NotImplementedError("FIXME Can't swap queue types")
 
-    def _state(self, remap=None):
+    def _state(self):
         """Return port state for serialization."""
-        if remap is None:
-            return {'name': self.name, 'id': self.id, 'queue': self.queue._state(), 'properties': self.properties}
-        else:
-            return {
-                'name': self.name,
-                'id': remap[self.id],
-                'queue': self.queue._state(remap),
-                'properties': self.properties
-            }
+        return {'name': self.name, 'id': self.id, 'queue': self.queue._state(), 'properties': self.properties}
 
     def _set_state(self, state):
         """Set port state."""
-        self.name = state.pop('name')
-        self.id = state.pop('id')
-        self.queue._set_state(state.pop('queue'))
-        self.properties.update(state.pop('properties', {}))
+        self.name = state.get('name')
+        self.id = state.get('id', calvinuuid.uuid("PORT"))
+        self.properties.update(state.get('properties', {}))
+        if 'queue' in state:
+            self.queue._set_state(state.get('queue'))
 
     def attach_endpoint(self, endpoint_):
         """
@@ -417,6 +410,18 @@ class PortMeta(object):
             except response.CalvinResponseException:
                 return False
         return self.node_id == self.pm.node.id
+
+    def check_still_local(self):
+        """ Check if a retrived port meta still is local.
+        """
+        node = self.pm.node
+        if self.actor_id is not None and self.actor_id not in node.am.actors:
+            # Actor not hear anymore
+            return False
+        if self.port_id is not None and self.port_id not in node.pm.ports:
+            # Port not hear anymore
+            return False
+        return True
 
     @property
     def port(self):

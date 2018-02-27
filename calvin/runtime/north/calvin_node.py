@@ -21,7 +21,6 @@ import os
 import trace
 import logging
 
-from calvin.calvinsys import Sys as CalvinSys
 from calvin.runtime.north.calvinsys import get_calvinsys
 from calvin.runtime.north.calvinlib import get_calvinlib
 
@@ -73,6 +72,7 @@ class Node(object):
     def __init__(self, uris, control_uri, attributes=None):
         super(Node, self).__init__()
         self.quitting = False
+        self.super_node_class = None
 
         # Warn if its not a uri
         if not isinstance(uris, list):
@@ -120,7 +120,6 @@ class Node(object):
         # _scheduler = scheduler.BaselineScheduler
         self.sched = _scheduler(self, self.am)
         self.async_msg_ids = {}
-        self._calvinsys = CalvinSys(self)
         calvinsys = get_calvinsys()
         calvinsys.init(self)
         calvinlib = get_calvinlib()
@@ -216,12 +215,6 @@ class Node(object):
             self.app_manager.add(app_id, actor_id,
                                  deploy_info = deploy_args['deploy_info'] if 'deploy_info' in deploy_args else None)
         return actor_id
-
-    def calvinsys(self):
-        """Return a CalvinSys instance"""
-        # FIXME: We still need to sort out actor requirements vs. node capabilities and user permissions.
-        # @TODO: Write node capabilities to storage
-        return self._calvinsys
 
     #
     # Event loop
@@ -353,7 +346,7 @@ class Node(object):
         # Migrate the actors according to their requirements
         # (even actors without explicit requirements will migrate based on e.g. requires and port property needs)
         for actor in actors:
-            if actor._replication_data.terminate_with_node(actor.id):
+            if actor._replication_id.terminate_with_node(actor.id):
                 _log.info("TERMINATE REPLICA")
                 self.rm.terminate(actor.id, callback=CalvinCB(migrated, actor_id=actor.id))
             else:

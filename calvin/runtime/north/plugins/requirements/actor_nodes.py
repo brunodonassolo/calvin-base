@@ -15,17 +15,25 @@
 # limitations under the License.
 
 from calvin.utilities import dynops
+import calvin.requests.calvinresponse as response
 
 req_type = "placement"
 
-def req_op(node, actor_id=None, component=None, replication_id=None):
-    """ Returns any nodes that have replicas of actor """
-    if replication_id is None:
+def req_op(node, actor_id=None, component=None):
+    """ Returns any node that have the actor """
+    if not actor_id:
         #empty
         it = dynops.List()
-        it.set_name("replica_nodes_empty")
+        it.set_name("actor_nodes_empty")
         it.final()
         return it
-    it = node.storage.get_index_iter(['replicas', 'nodes', replication_id])
-    it.set_name("replica_nodes")
+    it = dynops.List()
+    it.set_name("actor_nodes")
+    def _got_actor(key, value):
+        try:
+            it.append(value['node_id'])
+        except:
+            pass
+        it.final()
+    node.storage.get_actor(actor_id=actor_id, cb=_got_actor)
     return it

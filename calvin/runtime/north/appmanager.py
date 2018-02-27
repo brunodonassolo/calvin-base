@@ -208,40 +208,49 @@ class AppManager(object):
         application.clear_node_info()
         application.actor_replicas = []
         application.replication_ids = []
+        application._replicas_actor_final = {}
+        application._replicas_node_final = {}
         for actor_id in application.actors.keys():
             if actor_id in self._node.am.list_actors():
-                # TODO fix this if master can switch from original actor
-                replicas = self._node.am.actors[actor_id]._replication_data.get_replicas(actor_id)
-                _log.analyze(self._node.id, "+ LOCAL ACTOR", {'actor_id': actor_id, 'replicas': replicas})
-                application.actor_replicas.extend(replicas)
                 application.update_node_info(self._node.id, actor_id)
+                replication_id = self._node.am.actors[actor_id]._replication_id.id
+                _log.analyze(self._node.id, "+ LOCAL ACTOR", {'actor_id': actor_id, 'replication_id': replication_id})
+                if replication_id is not None:
+                    # Destroy the replication manager
+                    self._node.rm.destroy_replication_leader(replication_id)
+                    # Destroy the replicas
+                    application.replication_ids.append(replication_id)
+                    self._node.storage.get_replica(
+                        replication_id, 
+                        cb=CalvinCB(func=self._replicas_cb, replication_id=replication_id,
+                                    master_id=self._node.am.actors[actor_id]._replication_id.original_actor_id,
+                                    application=application))
             else:
                 _log.analyze(self._node.id, "+ REMOTE ACTOR", {'actor_id': actor_id})
                 self.storage.get_actor(actor_id, CalvinCB(func=self._destroy_actor_cb, application=application))
 
-        _log.analyze(self._node.id, "+ LOCAL REPLICAS", {'replicas': application.actor_replicas})
-        for actor_id in application.actor_replicas[:]:
-            application.actors[actor_id] = "noname"
-            application.actor_replicas.remove(actor_id)
-            if actor_id in self._node.am.list_actors():
-                application.update_node_info(self._node.id, actor_id)
-            else:
-                self.storage.get_actor(actor_id,
-                    CalvinCB(func=self._destroy_actor_cb, application=application, check_replica=False))
-
-        if application.complete_node_info() and not application.replication_ids and not application.actor_replicas:
-            # All actors were local
-            _log.analyze(self._node.id, "+ DONE", {'actors': application.actors, 'replicas': application.actor_replicas})
+        if application.complete_node_info() and not application.replication_ids:
+            # All actors were local and no replicas
+            _log.analyze(self._node.id, "+ DONE", {'actors': application.actors})
             self._destroy_final(application)
 
     def _destroy_actor_cb(self, key, value, application, retries=0, check_replica=True):
         """ Get actor callback """
         _log.analyze(self._node.id, "+", {'actor_id': key, 'value': value, 'retries': retries,
                                         'check_replica': check_replica})
-        _log.debug("Destroy app peers actor cb %s - retry: %d\n%s" % (key, retries, str(value)))
         if response.isnotfailresponse(value) and 'node_id' in value:
             application.update_node_info(value['node_id'], key)
-            if 'replication_id' in value and check_replica:
+            try:
+                # When this is the callback for finding a replica we need to remove it as well
+                application.actor_replicas.remove(key)
+            except:
+                pass
+            if 'replication_id' in value and value['replication_id'] is not None and not check_replica:
+                application._replicas_node_final.setdefault(value['replication_id'], set()).add(value['node_id'])
+            if 'replication_id' in value and value['replication_id'] is not None and check_replica:
+                # Destroy the replication manager
+                self._node.rm.destroy_replication_leader(value['replication_id'])
+                # Destroy the replicas
                 application.replication_ids.append(value['replication_id'])
                 self.storage.get_replica(value['replication_id'],
                     cb=CalvinCB(func=self._replicas_cb, replication_id=value['replication_id'], master_id=key,
@@ -257,33 +266,38 @@ class AppManager(object):
                 application.update_node_info(None, key)
 
         if application.complete_node_info() and not application.replication_ids and not application.actor_replicas:
+            _log.debug("_destroy_actor_cb final")
             self._destroy_final(application)
 
     def _replicas_cb(self, value, replication_id, master_id, application):
-        _log.analyze(self._node.id, "+", {'value': value})
+        _log.analyze(self._node.id, "+", {'value': value, 'replication_id': replication_id, 'replication_ids': application.replication_ids})
         application.replication_ids.remove(replication_id)
-        if isinstance(value, (list, tuple, set)):
-            application.actor_replicas.extend(value)
-        for actor_id in application.actor_replicas[:]:
+        application.actor_replicas.extend(value)
+        application._replicas_actor_final.setdefault(replication_id, []).extend(value)
+        for actor_id in value:
             if actor_id == master_id:
                 application.actor_replicas.remove(actor_id)
                 continue
             application.actors[actor_id] = "noname"
-            application.actor_replicas.remove(actor_id)
             if actor_id in self._node.am.list_actors():
+                _log.debug("_replicas_cb actor %s LOCAL" % actor_id)
+                application.actor_replicas.remove(actor_id)
                 application.update_node_info(self._node.id, actor_id)
             else:
+                _log.debug("_replicas_cb actor %s REMOTE" % actor_id)
                 self.storage.get_actor(actor_id,
                     CalvinCB(func=self._destroy_actor_cb, application=application, check_replica=False))
         if application.complete_node_info() and not application.replication_ids:
+            _log.debug("_replicas_cb final")
             self._destroy_final(application)
 
     def _destroy_final(self, application):
         """ Final destruction of the application on this node and send request to peers to also destroy the app """
+        _log.analyze(self._node.id, "+ BEGIN 1", {'node_info': application.node_info, 'origin_node_id': application.origin_node_id})
         if hasattr(application, '_destroy_node_ids'):
             # Already called
             return
-        _log.analyze(self._node.id, "+", {'node_info': application.node_info, 'origin_node_id': application.origin_node_id})
+        _log.analyze(self._node.id, "+ BEGIN 2", {'node_info': application.node_info, 'origin_node_id': application.origin_node_id})
         application._destroy_node_ids = {n: None for n in application.node_info.keys()}
         for node_id, actor_ids in application.node_info.iteritems():
             if not node_id:
@@ -321,7 +335,12 @@ class AppManager(object):
         if any([s is None for s in application._destroy_node_ids.values()]):
             return
         # Done
-        
+        for replication_id, replica_ids in application._replicas_actor_final.items():
+            for replica_id in replica_ids:
+                self._node.storage.remove_replica(replication_id, replica_id)
+        for replication_id, replica_node_ids in application._replicas_node_final.items():
+            for replica_node_id in replica_node_ids:
+                self._node.storage.remove_replica_node_force(replication_id, replica_node_id)
         if all(application._destroy_node_ids.values()):
             application.destroy_cb(status=response.CalvinResponse(True))
         else:
@@ -375,7 +394,7 @@ class AppManager(object):
             del self.applications[application_id]
         if callback:
             if missing:
-                callback(status=response.CalvinResponse(False, missing=missing))
+                callback(status=response.CalvinResponse(False, data={'missing': missing}))
             else:
                 callback(status=response.CalvinResponse(True))
 
@@ -577,12 +596,15 @@ class Deployer(object):
         self.sec = security
         self.actorstore = ActorStore(security=self.sec)
         self.actor_map = {}
+        self.replication_map = {}
         self.actor_connections = {}
         self.node = node
         self.cb = cb
         self._verified_actors = {}
         self._deploy_counter = 0
         self._instantiate_counter = 0
+        self._requires_counter = 0
+        self._connection_count = None
         if name:
             self.name = name
             self.app_id = self.node.app_manager.new(self.name)
@@ -692,12 +714,14 @@ class Deployer(object):
              info['signature'] is the GlobalStore actor-signature to lookup the actor
           - 'access_decision' is a boolean indicating if access is permitted
         """
+        #TODO component ns needs to be stored in registry /component/<app-id>/ns[0]/ns[1]/.../actor_name: actor_id
         try:
             if 'port_properties' in self.deployable:
                 port_properties = self.deployable['port_properties'].get(actor_name, None)
             else:
                 port_properties = None
             info['args']['name'] = actor_name
+            # TODO add requirements should be part of actor_manager new
             actor_id = self.node.am.new(actor_type=info['actor_type'], args=info['args'], signature=info['signature'], 
                                         actor_def=actor_def, security=self.sec, access_decision=access_decision, 
                                         shadow_actor='shadow_actor' in info, port_properties=port_properties)
@@ -706,16 +730,21 @@ class Deployer(object):
             deploy_req = self.get_req(actor_name)
             if deploy_req:
                 # Seperate replication and placement requirements
-                actor_reqs = copy.deepcopy(deploy_req)
-                reqs_replication = [r for r in actor_reqs if self._requirement_type(r) == "replication"]
-                if reqs_replication:
-                    actor_reqs.remove(reqs_replication[0])
-                    # Replication requirements
-                    self.node.rm.supervise_actor(actor_id, reqs_replication[0])
-                    if actor_reqs:
-                        self.node.am.actors[actor_id]._replication_data.inhibate(actor_id, True)
+                actor_reqs = [r for r in deploy_req if self._requirement_type(r) != "replication"]
+                replication_reqs = [r for r in deploy_req if self._requirement_type(r) == "replication"]
+                if replication_reqs:
+                    # Replication requirements (should only be one)
+                    replication_result = self.node.rm.supervise_actor(actor_id, replication_reqs[0], actor_args=info['args'])
+                    if replication_result:
+                        self.replication_map[actor_name] = replication_result.data['replication_id']
+                    else:
+                        _log.error("ERROR {} when applying scaling requirements {} on actor {}".format(
+                                    replication_result, replication_reqs, actor_name))
                 # Placement requirements
                 self.node.am.actors[actor_id].requirements_add(actor_reqs, extend=False)
+                # Update requirements in registry
+                self.node.storage.add_actor(self.node.am.actors[actor_id], self.node.id)
+            self.store_complete_requirements(actor_id)
             self.actor_map[actor_name] = actor_id
             self.node.app_manager.add(self.app_id, actor_id)
         except Exception as e:
@@ -726,7 +755,34 @@ class Deployer(object):
             if cb:
                 cb()
 
-    def connectid(self, connection):
+    def store_complete_requirements(self, actor_id):
+        actor = self.node.am.actors[actor_id]
+        if actor.is_shadow():
+            # Find requires
+            def _desc_cb(signature, description):
+                _log.debug("REQUIRES BACK %s" % description)
+                requires = None
+                for actor_desc in description:
+                    # We get list of possible descriptions back matching the signature
+                    # In reality it is only one
+                    if 'requires' in actor_desc:
+                        requires = actor_desc['requires']
+                if requires is not None:
+                    actor.requires = requires
+                    self.node.storage.add_actor_requirements(actor)
+                self._requires_counter += 1
+                if self._requires_counter >= len(self.deployable['actors']):
+                    self._wait_for_all_connections_and_requires()
+            try:
+                GlobalStore(node=self.node).global_signature_lookup(actor._signature, cb=_desc_cb)
+            except:
+                _log.exception("actor instanciate GlobalStore exception")
+                self._requires_counter += 1
+        else:
+            self._requires_counter += 1
+            self.node.storage.add_actor_requirements(actor)
+
+    def connectid(self, connection, cb):
         src_actor, src_port, dst_actor, dst_port = connection
         # connect from dst to src
         # use node info if exists, otherwise assume local node
@@ -741,7 +797,8 @@ class Deployer(object):
             peer_node_id=src_node,
             peer_actor_id=src_actor_id,
             peer_port_name=src_port,
-            peer_port_dir='out')
+            peer_port_dir='out',
+            cb=cb)
         return result
 
     def deploy(self):
@@ -784,13 +841,29 @@ class Deployer(object):
                 self.node.pm.set_port_properties(actor_id=self.actor_map[src_name], port_dir='out', port_name=src_port,
                                                  **kwargs)
 
+        self._connection_count = sum(map(len, self.deployable['connections'].values()))
+        self._connection_status = response.CalvinResponse(True)
         for src, dst_list in self.deployable['connections'].iteritems():
             src_actor, src_port = src.split('.')
             for dst in dst_list:
                 dst_actor, dst_port = dst.split('.')
                 c = (src_actor, src_port, dst_actor, dst_port)
-                self.connectid(c)
+                self.connectid(c, cb=self._wait_for_all_connections)
 
-        self.node.app_manager.finalize(self.app_id, migrate=True if self.deploy_info else False,
-                                       cb=CalvinCB(self.cb, deployer=self))
+    def _wait_for_all_connections(self, status, *args, **kwargs):
+        _log.debug("_wait_for_all_connections %d" % self._connection_count)
+        self._connection_count -= 1
+        if not status:
+            # TODO handle connection errors
+            _log.error("Deployer failed a port connection status: %s port info: %s" % (str(status), str(kwargs)))
+            self._connection_status = status
+        if self._connection_count == 0:
+            _log.debug("_wait_for_all_connections final")
+            # Replication manager needs to fetch port info if supervise ShadowActor
+            self.node.rm.deployed_actors_connected(self.actor_map.values())
+            self._wait_for_all_connections_and_requires()
 
+    def _wait_for_all_connections_and_requires(self):
+        if self._connection_count == 0 and self._requires_counter >= len(self.deployable['actors']):
+            self.node.app_manager.finalize(self.app_id, migrate=True if self.deploy_info else False,
+                                   cb=CalvinCB(self.cb, deployer=self))

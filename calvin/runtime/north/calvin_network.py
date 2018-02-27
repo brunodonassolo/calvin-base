@@ -470,7 +470,7 @@ class CalvinNetwork(object):
         """
         status = kwargs.pop('status', True)
         if not status:
-            callback(peer_id, None, status)
+            callback(peer_id, None, status=status)
 
         if peer_id in self._links:
             # We have a link lets give it back
@@ -576,7 +576,8 @@ class CalvinNetwork(object):
             _log.info("Failed to get node %s info from storage", key)
             if key in self._peer_cache:
                 self._peer_cache.pop(key)
-            callback(status=response.CalvinResponse(response.NOT_FOUND, {'peer_node_id': key}))
+            if callback:
+                callback(status=response.CalvinResponse(response.NOT_FOUND, {'peer_node_id': key}))
             return
 
         matching = [s for s in value['attributes']['indexed_public'] if "node_name" in s]
