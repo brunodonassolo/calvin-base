@@ -105,14 +105,6 @@ In the old version it was okay to return a set of possible runtimes as actors we
 
 == Problems ==
 
-=== Test instability ===
-
-In order to test the implementation done, we tried to recover the tests described in *calvin/tests/test_requirements.py*. After some fixes, we got a set of tests that pass but they are not stable.
-
-Some retries were added to improve test stability but it is not enough to avoid false errors. The main source of instability seems to be the DHT. At least, several error messages pop up during the test execution.
-
-A better way to write the end-to-end tests needs to be developed.
-
 === Migration ===
 
 Another open point in the implementation is the migration mechanism. Nowadays, it is possible to change/add the requirements of a single actor. As the actors deployment were independent, it was okay to simply retrigger the deployment algorithm for this actor.
