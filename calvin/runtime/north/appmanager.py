@@ -769,8 +769,29 @@ class AppManager(object):
                             continue
 
                         # add runtime that hosts src_actor as acceptable runtimes
-                        accept_runtimes = set()
-                        accept_runtimes.add(placement[src_actor])
+                        accept_runtimes = {}
+                        accept_runtimes[placement[src_actor]] = 0
+
+                        link = self._node.link_manager.links[link_id]
+                        print "LINK"
+                        print link.requirements_get()
+                        actor = self._node.am.actors[actor_id]
+                        link_attr = [x for x in link.requirements_get() if x["op"] == "link_attr_match"]
+                        for i in link_attr:
+                            if "latency" in i["kwargs"]["index"]:
+                                print i["kwargs"]["index"]["latency"]
+                            if "bandwidth" in i["kwargs"]["index"]:
+                                print i["kwargs"]["index"]["bandwidth"]
+
+                        print "ACTOR"
+                        print actor.requirements_get()
+                        actor_attr = [x for x in actor.requirements_get() if x["op"] == "node_attr_match"]
+                        for i in actor_attr:
+                            if "cpuAvail" in i["kwargs"]["index"]:
+                                print i["kwargs"]["index"]["cpuAvail"]
+                            if "memAvail" in i["kwargs"]["index"]:
+                                print i["kwargs"]["index"]["memAvail"]
+
 
                         #self.get_runtimes_in_a_range(placement[src_actor], 2)
                         for phy_link_id in phys_link_placements:
@@ -778,9 +799,9 @@ class AppManager(object):
                             rt1 = app.phys_link_placement_runtimes[phy_link_id]['runtime1']
                             rt2 = app.phys_link_placement_runtimes[phy_link_id]['runtime2']
                             if rt1 == placement[src_actor]:
-                                accept_runtimes.add(rt2)
-                            if rt2 == placement[src_actor]:
-                                accept_runtimes.add(rt1)
+                                accept_runtimes[rt2] = 0
+                            elif rt2 == placement[src_actor]:
+                                accept_runtimes[rt1] = 0
                             print "Information about physical link %s" % phy_link_id
                             print " Bandwidth %d" % app.phys_link_bandwidth[phy_link_id]
                             print " Latency %d" % app.phys_link_latency[phy_link_id]
@@ -794,11 +815,13 @@ class AppManager(object):
                          
                         print "Acceptable runtimes..."
                         print accept_runtimes
-                        actor_placement.intersection_update(accept_runtimes)
+                        temp = { i : 0 for i in accept_runtimes if i in actor_placement }
+                        actor_placement.clear()
+                        actor_placement.update(temp)
 
     def incremental_placement(self, app, placement, actor_id):
 
-        actor_placement = copy.deepcopy(app.actor_placement[actor_id])
+        actor_placement = { i : 0 for i in app.actor_placement[actor_id] }
         # filter possible runtimes considering already placed actors and links
         self.incremental_filter_candidates_considering_neighbors(app, placement, actor_id, actor_placement)
 
