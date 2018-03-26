@@ -8,15 +8,33 @@ from calvin.requests import calvinresponse
 
 _log = get_logger(__name__)
 
+def latency_discretizer(lat):
+    # valid values in microseconds
+    values = [1, 100, 1000, 100000, 1000000]
+    values_str = ['1us', '100us', '1ms', '100ms', '1s']
+
+    minus = [abs(i - lat) for i in values]
+    return values_str[minus.index(min(minus))]
+
+def bandwidth_discretizer(band):
+    # valid values in kbits
+    values = [1000, 100000, 1000000, 10000000, 100000000]
+    values_str = ['1M', '100M', '1G', '10G', '100G']
+
+    minus = [abs(i - band) for i in values]
+    return values_str[minus.index(min(minus))]
+
 class LinkMonitor(object):
     def __init__(self, node_id, storage):
         self.storage = storage
         self.node_id = node_id
         self.band_acceptable = ['1M', '100M', '1G', '10G', '100G']
+        self.band_values = [1000, 100000, 1000000, 10000000, 100000000]
         self.lat_acceptable = ['1us', '100us', '1ms', '100ms', '1s']
+        self.lat_values = [1, 100, 1000, 100000, 1000000]
         self.helper = ResourceMonitorHelper(storage)
 
-    def _set_helper_cb(self, key, value, link_prefix, link_prefix_index, link_value, org_cb):
+    def _set_helper_cb(self, key, value, link_prefix, link_prefix_index, link_value, discretizer, org_cb):
         if not value:
             _log.error("LinkMonitor (%s, %s): Link not found for key: %s. Value %s not updated" % (link_prefix, link_prefix_index, key, str(link_value)))
             if org_cb:
@@ -24,33 +42,38 @@ class LinkMonitor(object):
             return
 
         _log.debug("LinkMonitor (%s, %s): Link found (%s) for key: %s. Value %s will be updated" % (link_prefix, link_prefix_index, value, key, str(link_value)))
-        self.helper.set(ident=value, prefix=link_prefix, prefix_index=link_prefix_index, value=link_value, cb=org_cb)
+        self.helper.set(ident=value, prefix=link_prefix, prefix_index=link_prefix_index, value=link_value, discretizer=discretizer, cb=org_cb)
 
     def set_bandwidth(self, runtime1, runtime2, bandwidth, cb=None):
         """
         Sets the link bandwidth
         Acceptable range: ['1M', '100M', '1G', '10G', '100G']
         """
-        if bandwidth.upper() not in self.band_acceptable:
-            _log.error("Invalid bandwidth value: " + str(bandwidth))
-            if cb:
-                async.DelayedCall(0, cb, bandwidth, False)
-            return
+        #if bandwidth.upper() not in self.band_acceptable:
+        #    _log.error("Invalid bandwidth value: " + str(bandwidth))
+        #    if cb:
+        #        async.DelayedCall(0, cb, bandwidth, False)
+        #    return
+        if bandwidth in self.band_acceptable:
+            bandwidth = self.band_values[self.band_acceptable.index(bandwidth)]
 
-        self.storage.get("rt-link-", runtime1 + runtime2, CalvinCB(func=self._set_helper_cb, link_prefix = "linkBandwidth-", link_prefix_index = "bandwidth", link_value=bandwidth.upper(), org_cb=cb))
+        self.storage.get("rt-link-", runtime1 + runtime2, CalvinCB(func=self._set_helper_cb, link_prefix = "linkBandwidth-", link_prefix_index = "bandwidth", link_value=bandwidth, discretizer=bandwidth_discretizer, org_cb=cb))
 
     def set_latency(self, runtime1, runtime2, latency, cb=None):
         """
         Sets the link latency
         Acceptable range: ['1us', '100us', '1ms', '100ms', '1s']
         """
-        if latency.lower() not in self.lat_acceptable:
-            _log.error("Invalid latency value: " + str(latency))
-            if cb:
-                async.DelayedCall(0, cb, latency, False)
-            return
+        #if latency.lower() not in self.lat_acceptable:
+        #    _log.error("Invalid latency value: " + str(latency))
+        #    if cb:
+        #        async.DelayedCall(0, cb, latency, False)
+        #    return
 
-        self.storage.get("rt-link-", runtime1 + runtime2, CalvinCB(func=self._set_helper_cb, link_prefix = "linkLatency-", link_prefix_index = "latency", link_value=latency.lower(), org_cb=cb))
+        if latency in self.lat_acceptable:
+            latency = self.lat_values[self.lat_acceptable.index(latency)]
+
+        self.storage.get("rt-link-", runtime1 + runtime2, CalvinCB(func=self._set_helper_cb, link_prefix = "linkLatency-", link_prefix_index = "latency", link_value=latency, discretizer=latency_discretizer, org_cb=cb))
 
     def get_info(self, phys_link, cb):
         """
@@ -145,8 +168,8 @@ class LinkMonitor(object):
         - Remove links from /phyLink-ID/ database
         - Remove from /phyLinks/runtimes the link
         """
-        self.helper.set(key, "linkBandwidth-", "bandwidth", value=None, cb=None)
-        self.helper.set(key, "linkLatency-", "latency", value=None, cb=None)
+        self.helper.set(key, "linkBandwidth-", "bandwidth", value=None, discretizer=bandwidth_discretizer, cb=None)
+        self.helper.set(key, "linkLatency-", "latency", value=None, discretizer=latency_discretizer, cb=None)
         self.storage.remove_index(['phyLinks', value['runtime1']], key, root_prefix_level=1, cb=None)
         self.storage.remove_index(['phyLinks', value['runtime2']], key, root_prefix_level=1, cb=None)
         self.storage.delete('rt-link-', value['runtime1'] + value['runtime2'], cb=None)

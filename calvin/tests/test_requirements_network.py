@@ -318,6 +318,12 @@ class TestDeployScript(unittest.TestCase):
         #  rt1  --- 100G  --- rt2     --- 1s    --- rt3
         _log.analyze("TESTRUN", "+", {})
         rt_ids = wait_link_convergence([rt1, rt2, rt3])
+        with open('neighbors.json', 'w') as the_file:
+            the_file.write('{\n')
+            the_file.write('"%s" : [ "%s" ],\n' % (rt_ids[0], rt_ids[1]))
+            the_file.write('"%s" : [ "%s", "%s" ],\n' % (rt_ids[1], rt_ids[0], rt_ids[2]))
+            the_file.write('"%s" : [ "%s" ]\n' % (rt_ids[2], rt_ids[1]))
+            the_file.write('}\n')
 
         from functools import partial
         # ok for linkB

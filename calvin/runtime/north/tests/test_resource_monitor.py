@@ -63,7 +63,7 @@ class TestCpuMonitor(object):
         """
         Verify invalid values for CPU avail
         """
-        for i in [-1, 40, 101]:
+        for i in [-1, 101]:
             self.done = False
             self.cpu.set_avail(i, CalvinCB(self.cb))
             yield wait_for(self._test_done)
@@ -207,7 +207,7 @@ class TestMemMonitor(object):
         """
         Verify invalid values for RAM avail
         """
-        for i in [-1, 40, 101]:
+        for i in [-1, 101]:
             self.done = False
             self.mem.set_avail(i, CalvinCB(self.cb))
             yield wait_for(self._test_done)
@@ -346,6 +346,7 @@ class TestLinkMonitor(object):
         self.done = True
 
     @pytest.inlineCallbacks
+    @pytest.mark.skip
     def test_bandwidth_invalid(self):
         """
         Verify invalid values for bandwidth
@@ -362,7 +363,8 @@ class TestLinkMonitor(object):
         Test valid values for bandwidth.
         Verify if storage is as expected
         """
-        values = ['1M', '100M', '1G', '10G', '100G']
+        values = ['1000', '100000', '1000000', '10000000', '100000000']
+        values_str = ['1M', '100M', '1G', '10G', '100G']
         for i in values:
             # verify set return
             self.done = False
@@ -379,7 +381,7 @@ class TestLinkMonitor(object):
             # verify index ok and present until level i
             for j in range(0, values.index(i)):
                 self.done = False
-                self.storage.get_index(index=self.BANDWIDTH_INDEX_BASE + map(str, values[:j+1]), root_prefix_level=2, cb=CalvinCB(self.cb2))
+                self.storage.get_index(index=self.BANDWIDTH_INDEX_BASE + map(str, values_str[:j+1]), root_prefix_level=2, cb=CalvinCB(self.cb2))
                 yield wait_for(self._test_done)
                 assert self.link_id in self.get_ans
 
@@ -390,11 +392,11 @@ class TestLinkMonitor(object):
         Old value must be erased from indexes
         """
         self.done = False
-        self.link.set_bandwidth(self.node.id, self.node2.id, '100m', CalvinCB(self.cb))
+        self.link.set_bandwidth(self.node.id, self.node2.id, '100000', CalvinCB(self.cb))
         yield wait_for(self._test_done)
         assert self.get_ans == True
         self.done = False
-        self.link.set_bandwidth(self.node.id, self.node2.id, '1M', CalvinCB(self.cb))
+        self.link.set_bandwidth(self.node.id, self.node2.id, '1000', CalvinCB(self.cb))
         yield wait_for(self._test_done)
         assert self.get_ans == True
 
@@ -405,6 +407,7 @@ class TestLinkMonitor(object):
         assert self.get_ans == []
 
     @pytest.inlineCallbacks
+    @pytest.mark.skip
     def test_latency_invalid(self):
         """
         Verify invalid values for latency
@@ -421,7 +424,8 @@ class TestLinkMonitor(object):
         Test valid values for latency.
         Verify if storage is as expected
         """
-        values = ['1s', '100ms', '1ms', '100us', '1us']
+        values = ['1000000', '100000', '1000', '100', '1']
+        values_str = ['1s', '100ms', '1ms', '100us', '1us']
         for i in values:
             # verify set return
             self.done = False
@@ -438,7 +442,7 @@ class TestLinkMonitor(object):
             # verify index ok and present until level i
             for j in range(0, values.index(i)):
                 self.done = False
-                self.storage.get_index(index=self.LATENCY_INDEX_BASE + map(str, values[:j+1]), root_prefix_level=2, cb=CalvinCB(self.cb2))
+                self.storage.get_index(index=self.LATENCY_INDEX_BASE + map(str, values_str[:j+1]), root_prefix_level=2, cb=CalvinCB(self.cb2))
                 yield wait_for(self._test_done)
                 assert self.link_id in self.get_ans
 

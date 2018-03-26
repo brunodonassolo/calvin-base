@@ -26,6 +26,7 @@ from calvin.actorstore.store import ActorStore, GlobalStore
 from calvin.runtime.south.plugins.async import async
 from calvin.utilities.security import Security
 from calvin.utilities.requirement_matching import ReqMatch
+from heapq import heappush, heapify
 
 _log = calvinlogger.get_logger(__name__)
 
@@ -460,8 +461,15 @@ class AppManager(object):
         app.link_placement = {}  # Clean placement slate, saves possible physical links that satifies requirements
         app.phys_link_placement_runtimes = {}  # Clean placement slate, saves the runtimes that the physical link connects
         link_ids = app.get_links()
+
+        app.runtime_cpu = {}
+        app.runtime_mem = {}
+        app.phys_link_latency = {}
+        app.phys_link_bandwidth = {}
+        app.runtimes_nbr = set()
+
         app.link_placement_nbr = len(link_ids) # number of links that must be found
-        app.phys_link_placement_runtimes_nbr = 0
+        app.phys_link_placement_runtimes_nbr = set()
         app.placement_done = False # controls when the placement was done
 
         # requests all actors placements
@@ -490,7 +498,11 @@ class AppManager(object):
     def _verify_collect_placement(self, app):
         return (len(app.actor_placement) == app.actor_placement_nbr and
             len(app.link_placement) == app.link_placement_nbr and
-            len(app.phys_link_placement_runtimes) == app.phys_link_placement_runtimes_nbr)
+            set(app.phys_link_placement_runtimes.keys()) == app.phys_link_placement_runtimes_nbr and
+            set(app.runtime_cpu.keys()) == app.runtimes_nbr and
+            set(app.runtime_mem.keys()) == app.runtimes_nbr and
+            set(app.phys_link_latency.keys()) == app.phys_link_placement_runtimes_nbr and
+            set(app.phys_link_bandwidth.keys()) == app.phys_link_placement_runtimes_nbr)
 
     def collect_actor_placement(self, app, actor_id, possible_placements, status):
         """
@@ -503,6 +515,34 @@ class AppManager(object):
         # TODO look at status
         _log.debug("Collect possible placements: %s for actor: %s" %(str(possible_placements), actor_id))
         app.actor_placement[actor_id] = possible_placements
+
+        app.runtimes_nbr.update(possible_placements)
+        for candidate in possible_placements:
+            if isinstance(candidate, dynops.InfiniteElement):
+                _log.debug("Skipping InfiniteElement in placement")
+                app.runtimes_nbr.pop(candidate)
+                continue
+
+            self.storage.get("nodeCpuAvail-", candidate, cb=CalvinCB(func=self.collect_runtime_cpu, app=app))
+            self.storage.get("nodeMemAvail-", candidate, cb=CalvinCB(func=self.collect_runtime_mem, app=app))
+
+        if self._verify_collect_placement(app):
+            self.decide_placement(app)
+
+    def collect_runtime_cpu(self, key, value, app):
+        if not value or value == response.NOT_FOUND:
+            value = 0
+
+        app.runtime_cpu[key] = value
+
+        if self._verify_collect_placement(app):
+            self.decide_placement(app)
+
+    def collect_runtime_mem(self, key, value, app):
+        if not value or value == response.NOT_FOUND:
+            value = 0
+
+        app.runtime_mem[key] = value
 
         if self._verify_collect_placement(app):
             self.decide_placement(app)
@@ -519,14 +559,35 @@ class AppManager(object):
         app.link_placement[link_id] = copy.deepcopy(possible_placements)
 
         # expect to receive all answers before continuing the placement
-        app.phys_link_placement_runtimes_nbr += len(possible_placements)
+        app.phys_link_placement_runtimes_nbr.update(possible_placements)
         for candidate in possible_placements:
             if isinstance(candidate, dynops.InfiniteElement):
                 _log.debug("Skipping InfiniteElement in link placement")
-                app.phys_link_placement_runtimes_nbr -= 1
+                app.phys_link_placement_runtimes_nbr.discard(candidate)
                 continue
             # requesting the runtimes that this physical link connects
             self._node.link_monitor.get_info(candidate, cb=CalvinCB(func=self.collect_link_placement_runtime, app=app, link=link_id))
+            #FIXME [donassolo]: put in resource_monitor/link.py
+            self.storage.get("linkBandwidth-", candidate, cb=CalvinCB(func=self.collect_phys_link_bandwidth, app=app))
+            self.storage.get("linkLatency-", candidate, cb=CalvinCB(func=self.collect_phys_link_latency, app=app))
+
+        if self._verify_collect_placement(app):
+            self.decide_placement(app)
+
+    def collect_phys_link_bandwidth(self, key, value, app):
+        if not value or value == response.NOT_FOUND:
+            value = 0
+
+        app.phys_link_bandwidth[key] = value
+
+        if self._verify_collect_placement(app):
+            self.decide_placement(app)
+
+    def collect_phys_link_latency(self, key, value, app):
+        if not value or value == response.NOT_FOUND:
+            value = 0
+
+        app.phys_link_latency[key] = value
 
         if self._verify_collect_placement(app):
             self.decide_placement(app)
@@ -543,7 +604,9 @@ class AppManager(object):
         if not value:
             _log.error("Error collecting placement for physical link %s. Application placement is probably incomplete" % (key))
             app.link_placement[link].remove(key)
-            app.phys_link_placement_runtimes_nbr -= 1
+            app.phys_link_latency.pop(key, None)
+            app.phys_link_bandwidth.pop(key, None)
+            app.phys_link_placement_runtimes_nbr.discard(key)
         else:
             _log.debug("Collect runtimes for physical link: %s, source: %s, dst: %s" % (key, value['runtime1'], value['runtime2']))
             app.phys_link_placement_runtimes[key] = value
@@ -663,6 +726,133 @@ class AppManager(object):
 
         _log.debug("Final actor placement " + str(app.actor_placement))
 
+    def get_runtimes_in_a_range(self, runtime, levels):
+        import json
+        neighbors = set()
+        neighbors.add(runtime)
+        with open("neighbors.json") as json_data_file:
+            neigh_list = json.load(json_data_file)
+
+        next_runtimes = [ runtime ]
+        while (levels > 0):
+            next_temp = []
+            for r in next_runtimes:
+                for n in neigh_list[r]:
+                    if n not in neighbors:
+                        neighbors.add(n)
+                        next_temp.append(n)
+            levels -= 1
+            next_runtimes = next_temp
+        print neighbors
+
+    def incremental_filter_candidates_considering_neighbors(self, app, placement, actor_id, actor_placement):
+        # filter possible runtimes considering already placed actors and links
+        for i in self._node.am.actors[actor_id].inports.values():
+            for p in i.get_peers():
+                neigh_id = ""
+                try:
+                    neigh_id = self._node.pm._get_local_port(port_id=p[1]).owner.id
+                except:
+                    print "Didn't find neighbor actor"
+                    continue
+
+                for link_id, phys_link_placements in app.link_placement.iteritems():
+                    src_actor = self._node.link_manager.links[link_id].src_id
+                    dst_actor = self._node.link_manager.links[link_id].dst_id
+                    # skip if src_actor wasn't placed for some reason
+                    if src_actor not in placement:
+                        continue
+                    if src_actor == neigh_id and dst_actor == actor_id:
+                        print "Found link connecting an actor already placed (%s) and our actor (%s), link_id: %s" % (src_actor, dst_actor, link_id)
+                        if any([isinstance(n, dynops.InfiniteElement) for n in phys_link_placements]):
+                            print "Link can be any physical link"
+                            continue
+
+                        # add runtime that hosts src_actor as acceptable runtimes
+                        accept_runtimes = set()
+                        accept_runtimes.add(placement[src_actor])
+
+                        #self.get_runtimes_in_a_range(placement[src_actor], 2)
+                        for phy_link_id in phys_link_placements:
+
+                            rt1 = app.phys_link_placement_runtimes[phy_link_id]['runtime1']
+                            rt2 = app.phys_link_placement_runtimes[phy_link_id]['runtime2']
+                            if rt1 == placement[src_actor]:
+                                accept_runtimes.add(rt2)
+                            if rt2 == placement[src_actor]:
+                                accept_runtimes.add(rt1)
+                            print "Information about physical link %s" % phy_link_id
+                            print " Bandwidth %d" % app.phys_link_bandwidth[phy_link_id]
+                            print " Latency %d" % app.phys_link_latency[phy_link_id]
+                            print "Information about runtime %s" % rt1
+                            print " CPU %d" % app.runtime_cpu[rt1]
+                            print " RAM %d" % app.runtime_mem[rt1]
+                            print "Information about runtime %s" % rt2
+                            print " CPU %d" % app.runtime_cpu[rt2]
+                            print " RAM %d" % app.runtime_mem[rt2]
+                            
+                         
+                        print "Acceptable runtimes..."
+                        print accept_runtimes
+                        actor_placement.intersection_update(accept_runtimes)
+
+    def incremental_placement(self, app, placement, actor_id):
+
+        actor_placement = copy.deepcopy(app.actor_placement[actor_id])
+        # filter possible runtimes considering already placed actors and links
+        self.incremental_filter_candidates_considering_neighbors(app, placement, actor_id, actor_placement)
+
+        #FIXME: choose the "best" runtime
+        if len(actor_placement) > 0:
+            import random
+            placement[actor_id] = random.choice(tuple(actor_placement))
+            print "Setting placement for actor %s, runtime %s" % (actor_id, placement[actor_id])
+
+
+    def ant_placement(self, app, actor_ids):
+        orphan_actors = []
+        for actor_id in actor_ids:
+            print ("Actor id: %s, name: %s") % (actor_id, app.actors[actor_id])
+            if len(self._node.am.actors[actor_id].inports.values()) == 0:
+                heappush(orphan_actors, (-100000, actor_id))
+
+        print "Starting placing the actors..."
+        weighted_actor_placement = {}
+        while len(orphan_actors) > 0:
+            neigh_actors = {}
+            for prio, actor_id in orphan_actors:
+                print ("Actor id: %s, name: %s, prio(orphan): %d") % (actor_id, app.actors[actor_id], prio)
+                self.incremental_placement(app, weighted_actor_placement, actor_id)
+                for i in self._node.am.actors[actor_id].outports.values():
+                    for p in i.get_peers():
+                        try:
+                            neigh_id = self._node.pm._get_local_port(port_id=p[1]).owner.id
+                        except:
+                            print "Didn't find neighbor actor"
+                            continue
+                        if not neigh_id in neigh_actors:
+                            neigh_actors[neigh_id] = -1
+                        else:
+                            neigh_actors[neigh_id] -= 1
+            orphan_actors = [(val, actor) for actor, val in neigh_actors.iteritems()]
+            heapify(orphan_actors)
+
+        print "Ending placing actors:..."
+        return weighted_actor_placement
+
+    def ants_placement(self, app, actor_ids, n_ants = 10):
+
+        place_set = []
+        for i in range(0,n_ants):
+            place_set.append(self.ant_placement(app, actor_ids))
+
+        # get the placement that contains the largest number of actors
+        # and prefers the placement where actors are spread between runtimes
+        # otherwise we would always put everybody in the same runtime
+        place_set = sorted(place_set, key=len, reverse=True)
+        place_set = sorted(place_set, key=lambda k : len(set(k.values())), reverse=True)
+        return place_set[0]
+
 
     def decide_placement(self, app):
         # this method can be called more than once depending on collect_* callbacks execution order (inlined calls)
@@ -706,8 +896,11 @@ class AppManager(object):
                                             'node_ids': node_ids, 'placement': app.actor_placement}, tb=True)
 
         _log.debug("Actor Placement before network filtering %s" % (str(app.actor_placement)))
-        self.filter_link_placement(app, status)
+        #self.filter_link_placement(app, status)
+
         # Weight the actors possible placement with their connectivity matrix
+        app.actor_placement.update(self.ants_placement(app, actor_ids))
+
         weighted_actor_placement = {}
         for actor_id in actor_ids:
             # actor matrix is symmetric, so independent if read horizontal or vertical
