@@ -769,29 +769,11 @@ class AppManager(object):
                             continue
 
                         # add runtime that hosts src_actor as acceptable runtimes
-                        accept_runtimes = {}
+                        from collections import defaultdict
+                        accept_runtimes = defaultdict(float)
                         accept_runtimes[placement[src_actor]] = 0
 
                         link = self._node.link_manager.links[link_id]
-                        print "LINK"
-                        print link.requirements_get()
-                        actor = self._node.am.actors[actor_id]
-                        link_attr = [x for x in link.requirements_get() if x["op"] == "link_attr_match"]
-                        for i in link_attr:
-                            if "latency" in i["kwargs"]["index"]:
-                                print i["kwargs"]["index"]["latency"]
-                            if "bandwidth" in i["kwargs"]["index"]:
-                                print i["kwargs"]["index"]["bandwidth"]
-
-                        print "ACTOR"
-                        print actor.requirements_get()
-                        actor_attr = [x for x in actor.requirements_get() if x["op"] == "node_attr_match"]
-                        for i in actor_attr:
-                            if "cpuAvail" in i["kwargs"]["index"]:
-                                print i["kwargs"]["index"]["cpuAvail"]
-                            if "memAvail" in i["kwargs"]["index"]:
-                                print i["kwargs"]["index"]["memAvail"]
-
 
                         #self.get_runtimes_in_a_range(placement[src_actor], 2)
                         for phy_link_id in phys_link_placements:
@@ -799,41 +781,74 @@ class AppManager(object):
                             rt1 = app.phys_link_placement_runtimes[phy_link_id]['runtime1']
                             rt2 = app.phys_link_placement_runtimes[phy_link_id]['runtime2']
                             if rt1 == placement[src_actor]:
-                                accept_runtimes[rt2] = 0
+                                accept_runtimes[rt2] += self.cost_for_link(app, actor_id, link_id, phy_link_id)
                             elif rt2 == placement[src_actor]:
-                                accept_runtimes[rt1] = 0
-                            print "Information about physical link %s" % phy_link_id
-                            print " Bandwidth %d" % app.phys_link_bandwidth[phy_link_id]
-                            print " Latency %d" % app.phys_link_latency[phy_link_id]
-                            print "Information about runtime %s" % rt1
-                            print " CPU %d" % app.runtime_cpu[rt1]
-                            print " RAM %d" % app.runtime_mem[rt1]
-                            print "Information about runtime %s" % rt2
-                            print " CPU %d" % app.runtime_cpu[rt2]
-                            print " RAM %d" % app.runtime_mem[rt2]
-                            
-                         
+                                accept_runtimes[rt1] += self.cost_for_link(app, actor_id, link_id, phy_link_id)
+
                         print "Acceptable runtimes..."
                         print accept_runtimes
-                        temp = { i : 0 for i in accept_runtimes if i in actor_placement }
+                        temp = { i : accept_runtimes[i] + actor_placement[i] for i in accept_runtimes if i in actor_placement }
                         actor_placement.clear()
                         actor_placement.update(temp)
 
+    def cost_for_link(self, app, actor_id, link_id, phy_link_id):
+        from calvin.runtime.north.resource_monitor.link import bandwidth_text2number, latency_text2number
+        link = self._node.link_manager.links[link_id]
+        actor = self._node.am.actors[actor_id]
+        link_attr = [x for x in link.requirements_get() if x["op"] == "link_attr_match"]
+        cost = 0.0
+        print "Calculating cost for actor %s, link %s, phys_link %s" % (actor_id, link_id, phy_link_id)
+        for i in link_attr:
+            if "latency" in i["kwargs"]["index"]:
+                print " Required latency: %s" % i["kwargs"]["index"]["latency"]
+                print " Available latency %d" % app.phys_link_latency[phy_link_id]
+                cost += float(app.phys_link_latency[phy_link_id])/float(latency_text2number(i["kwargs"]["index"]["latency"]))
+            if "bandwidth" in i["kwargs"]["index"]:
+                print " Required bandwidth: %s" % i["kwargs"]["index"]["bandwidth"]
+                print " Available bandwidth %d" % app.phys_link_bandwidth[phy_link_id]
+                cost += float(bandwidth_text2number(i["kwargs"]["index"]["bandwidth"]))/float(app.phys_link_bandwidth[phy_link_id])
+        print "Total cost: %f" % cost
+        return cost
+
+    def cost_for_runtime(self, app, actor_id, runtime):
+        actor = self._node.am.actors[actor_id]
+        print actor.requirements_get()
+        actor_attr = [x for x in actor.requirements_get() if x["op"] == "node_attr_match"]
+        print "Calculating cost for actor %s, runtime %s" % (actor_id, runtime)
+        cost = 0.0
+        for i in actor_attr:
+            if "cpuAvail" in i["kwargs"]["index"]:
+                print " Required CPU: %s" % i["kwargs"]["index"]["cpuAvail"]
+                print " Available CPU: %d" % app.runtime_cpu[runtime]
+                cost += float(i["kwargs"]["index"]["cpuAvail"])/float(app.runtime_cpu[runtime])
+            if "memAvail" in i["kwargs"]["index"]:
+                print " Required RAM: %s" % i["kwargs"]["index"]["memAvail"]
+                print " Available RAM: %d" % app.runtime_mem[runtime]
+                cost += float(i["kwargs"]["index"]["memAvail"])/float(app.runtime_mem[runtime])
+        print "Total cost: %f" % cost
+        return cost
+
+
     def incremental_placement(self, app, placement, actor_id):
 
-        actor_placement = { i : 0 for i in app.actor_placement[actor_id] }
+        actor_placement = { i : self.cost_for_runtime(app, actor_id, i) for i in app.actor_placement[actor_id] }
         # filter possible runtimes considering already placed actors and links
         self.incremental_filter_candidates_considering_neighbors(app, placement, actor_id, actor_placement)
 
+        print "Summary placement for actor %s: " % actor_id
+        print actor_placement
         #FIXME: choose the "best" runtime
         if len(actor_placement) > 0:
             import random
             placement[actor_id] = random.choice(tuple(actor_placement))
             print "Setting placement for actor %s, runtime %s" % (actor_id, placement[actor_id])
+            return actor_placement[placement[actor_id]]
 
+        return 0.0
 
     def ant_placement(self, app, actor_ids):
         orphan_actors = []
+        cost = 0.0
         for actor_id in actor_ids:
             print ("Actor id: %s, name: %s") % (actor_id, app.actors[actor_id])
             if len(self._node.am.actors[actor_id].inports.values()) == 0:
@@ -845,7 +860,7 @@ class AppManager(object):
             neigh_actors = {}
             for prio, actor_id in orphan_actors:
                 print ("Actor id: %s, name: %s, prio(orphan): %d") % (actor_id, app.actors[actor_id], prio)
-                self.incremental_placement(app, weighted_actor_placement, actor_id)
+                cost += self.incremental_placement(app, weighted_actor_placement, actor_id)
                 for i in self._node.am.actors[actor_id].outports.values():
                     for p in i.get_peers():
                         try:
@@ -860,10 +875,12 @@ class AppManager(object):
             orphan_actors = [(val, actor) for actor, val in neigh_actors.iteritems()]
             heapify(orphan_actors)
 
+        cost += (4*len(actor_ids) + len(app.runtimes_nbr))*(len(actor_ids) - len(weighted_actor_placement))
+        cost += 4*len(actor_ids)*len(app.runtimes_nbr)/len(set(weighted_actor_placement.values()))
         print "Ending placing actors:..."
-        return weighted_actor_placement
+        return weighted_actor_placement,cost
 
-    def ants_placement(self, app, actor_ids, n_ants = 10):
+    def ants_placement(self, app, actor_ids, n_ants = 100):
 
         place_set = []
         for i in range(0,n_ants):
@@ -872,9 +889,10 @@ class AppManager(object):
         # get the placement that contains the largest number of actors
         # and prefers the placement where actors are spread between runtimes
         # otherwise we would always put everybody in the same runtime
-        place_set = sorted(place_set, key=len, reverse=True)
-        place_set = sorted(place_set, key=lambda k : len(set(k.values())), reverse=True)
-        return place_set[0]
+        #place_set = sorted(place_set, key=len, reverse=True)
+        #place_set = sorted(place_set, key=lambda k : len(set(k.values())), reverse=True)
+        place_set = sorted(place_set, key=lambda k : k[1])
+        return place_set[0][0]
 
 
     def decide_placement(self, app):
