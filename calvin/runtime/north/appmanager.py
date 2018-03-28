@@ -837,7 +837,6 @@ class AppManager(object):
 
         print "Summary placement for actor %s: " % actor_id
         print actor_placement
-        #FIXME: choose the "best" runtime
         if len(actor_placement) > 0:
             import random
             placement[actor_id] = random.choice(tuple(actor_placement))
@@ -846,7 +845,7 @@ class AppManager(object):
 
         return 0.0
 
-    def ant_placement(self, app, actor_ids):
+    def random_actor_placement(self, app, actor_ids):
         orphan_actors = []
         cost = 0.0
         for actor_id in actor_ids:
@@ -880,11 +879,11 @@ class AppManager(object):
         print "Ending placing actors:..."
         return weighted_actor_placement,cost
 
-    def ants_placement(self, app, actor_ids, n_ants = 100):
+    def random_placement(self, app, actor_ids, n_samples = 10):
 
         place_set = []
-        for i in range(0,n_ants):
-            place_set.append(self.ant_placement(app, actor_ids))
+        for i in range(0,n_samples):
+            place_set.append(self.random_actor_placement(app, actor_ids))
 
         # get the placement that contains the largest number of actors
         # and prefers the placement where actors are spread between runtimes
@@ -892,8 +891,84 @@ class AppManager(object):
         #place_set = sorted(place_set, key=len, reverse=True)
         #place_set = sorted(place_set, key=lambda k : len(set(k.values())), reverse=True)
         place_set = sorted(place_set, key=lambda k : k[1])
+        print "Ramdom placement cost: %f" % place_set[0][1]
+        print place_set[0][0]
         return place_set[0][0]
 
+    def best_first_incremental_placement(self, app, placement, actor_id, n_samples):
+
+        actor_placement = { i : self.cost_for_runtime(app, actor_id, i) for i in app.actor_placement[actor_id] }
+        # filter possible runtimes considering already placed actors and links
+        self.incremental_filter_candidates_considering_neighbors(app, placement, actor_id, actor_placement)
+
+        print "Summary placement for actor %s: " % actor_id
+        actor_placement_sorted = sorted(actor_placement.items(), key=lambda k : k[1])
+        print actor_placement_sorted
+        return actor_placement_sorted[:min(len(actor_placement_sorted), n_samples)]
+
+
+    def best_first_actor_placement(self, app, actor_ids, n_samples):
+        orphan_actors = []
+        for actor_id in actor_ids:
+            print ("Actor id: %s, name: %s") % (actor_id, app.actors[actor_id])
+            if len(self._node.am.actors[actor_id].inports.values()) == 0:
+                heappush(orphan_actors, (-100000, actor_id))
+
+        print "Starting placing the actors..."
+        place_set = [ ({},0) ]
+        while len(orphan_actors) > 0:
+            neigh_actors = {}
+            for prio, actor_id in orphan_actors:
+                print ("Actor id: %s, name: %s, prio(orphan): %d") % (actor_id, app.actors[actor_id], prio)
+                place_set_copy = place_set
+                place_set = []
+                for idx in range(0, len(place_set_copy)):
+                    weighted_actor_placement = place_set_copy[idx][0]
+                    plac_cost = place_set_copy[idx][1]
+                    options = self.best_first_incremental_placement(app, weighted_actor_placement, actor_id, n_samples)
+                    if (len(options) == 0):
+                        place_set.append((weighted_actor_placement, plac_cost))
+                    for opt,actor_cost in options:
+                        new_actor_placement = copy.deepcopy(weighted_actor_placement)
+                        new_actor_placement[actor_id] = opt
+                        new_cost = plac_cost + actor_cost
+                        print "New best option generated: cost %f" % new_cost
+                        print new_actor_placement
+                        place_set.append((new_actor_placement, new_cost))
+
+                for i in self._node.am.actors[actor_id].outports.values():
+                    for p in i.get_peers():
+                        try:
+                            neigh_id = self._node.pm._get_local_port(port_id=p[1]).owner.id
+                        except:
+                            print "Didn't find neighbor actor"
+                            continue
+                        if not neigh_id in neigh_actors:
+                            neigh_actors[neigh_id] = -1
+                        else:
+                            neigh_actors[neigh_id] -= 1
+            orphan_actors = [(val, actor) for actor, val in neigh_actors.iteritems()]
+            heapify(orphan_actors)
+
+        place_set[:] = [ (p, pcost + ((4*len(actor_ids) + len(app.runtimes_nbr))*(len(actor_ids) - len(p))) + (4*len(actor_ids)*len(app.runtimes_nbr)/len(set(p.values())))) for p, pcost in place_set]
+
+        print "Ending placing actors:..."
+        print place_set
+        return place_set
+
+    def best_first_placement(self, app, actor_ids, n_samples = 3):
+
+        place_set = self.best_first_actor_placement(app, actor_ids, n_samples)
+
+        # get the placement that contains the largest number of actors
+        # and prefers the placement where actors are spread between runtimes
+        # otherwise we would always put everybody in the same runtime
+        #place_set = sorted(place_set, key=len, reverse=True)
+        #place_set = sorted(place_set, key=lambda k : len(set(k.values())), reverse=True)
+        place_set = sorted(place_set, key=lambda k : k[1])
+        print "Best First placement cost: %f" % place_set[0][1]
+        print place_set[0][0]
+        return place_set[0][0]
 
     def decide_placement(self, app):
         # this method can be called more than once depending on collect_* callbacks execution order (inlined calls)
@@ -940,7 +1015,12 @@ class AppManager(object):
         #self.filter_link_placement(app, status)
 
         # Weight the actors possible placement with their connectivity matrix
-        app.actor_placement.update(self.ants_placement(app, actor_ids))
+        placement_random = self.random_placement(app, actor_ids)
+        placement_best = self.best_first_placement(app, actor_ids)
+        #app.actor_placement.update(self.random_placement(app, actor_ids))
+        app.actor_placement.update(placement_best)
+        print "FINAL"
+        print app.actor_placement
 
         weighted_actor_placement = {}
         for actor_id in actor_ids:
