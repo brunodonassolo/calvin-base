@@ -820,11 +820,11 @@ class AppManager(object):
             if "cpuAvail" in i["kwargs"]["index"]:
                 print " Required CPU: %s" % i["kwargs"]["index"]["cpuAvail"]
                 print " Available CPU: %d" % app.runtime_cpu[runtime]
-                cost += float(i["kwargs"]["index"]["cpuAvail"])/float(app.runtime_cpu[runtime])
+                cost += float(i["kwargs"]["index"]["cpuAvail"])/(float(app.runtime_cpu[runtime]+0.0001))
             if "memAvail" in i["kwargs"]["index"]:
                 print " Required RAM: %s" % i["kwargs"]["index"]["memAvail"]
                 print " Available RAM: %d" % app.runtime_mem[runtime]
-                cost += float(i["kwargs"]["index"]["memAvail"])/float(app.runtime_mem[runtime])
+                cost += float(i["kwargs"]["index"]["memAvail"])/(float(app.runtime_mem[runtime]) + 0.0001)
         print "Total cost: %f" % cost
         return cost
 
