@@ -67,7 +67,8 @@ class TestCpuMonitor(object):
             self.done = False
             self.cpu.set_avail(i, CalvinCB(self.cb))
             yield wait_for(self._test_done)
-            assert self.get_ans == False
+            print self.get_ans
+            assert isinstance(self.get_ans, calvinresponse.CalvinResponse) and self.get_ans == calvinresponse.INTERNAL_ERROR
 
     @pytest.inlineCallbacks
     def test_avail_valid(self):
@@ -81,7 +82,7 @@ class TestCpuMonitor(object):
             self.done = False
             self.cpu.set_avail(i, CalvinCB(self.cb))
             yield wait_for(self._test_done)
-            assert self.get_ans == True
+            assert isinstance(self.get_ans, calvinresponse.CalvinResponse) and self.get_ans == calvinresponse.OK
 
             # verify nodeCpuAvail in DB
             self.done = False
@@ -105,7 +106,7 @@ class TestCpuMonitor(object):
         self.cpu.set_avail(50)
         self.cpu.set_avail(25, CalvinCB(self.cb))
         yield wait_for(self._test_done)
-        assert self.get_ans == True
+        assert isinstance(self.get_ans, calvinresponse.CalvinResponse) and self.get_ans == calvinresponse.OK
 
         # node id must not be present at level 50, only at 25
         self.done = False
@@ -121,7 +122,7 @@ class TestCpuMonitor(object):
         """
         self.cpu.set_avail(25, CalvinCB(self.cb))
         yield wait_for(self._test_done)
-        assert self.get_ans == True
+        assert isinstance(self.get_ans, calvinresponse.CalvinResponse) and self.get_ans == calvinresponse.OK
 
         self.done = False
         self.storage.get_index(index=self.CPUAVAIL_INDEX_BASE + ['0', '25'], root_prefix_level=2, cb=CalvinCB(self.cb2))
@@ -211,7 +212,7 @@ class TestMemMonitor(object):
             self.done = False
             self.mem.set_avail(i, CalvinCB(self.cb))
             yield wait_for(self._test_done)
-            assert self.get_ans == False
+            assert isinstance(self.get_ans, calvinresponse.CalvinResponse) and self.get_ans == calvinresponse.INTERNAL_ERROR
 
     @pytest.inlineCallbacks
     def test_avail_valid(self):
@@ -225,7 +226,7 @@ class TestMemMonitor(object):
             self.done = False
             self.mem.set_avail(i, CalvinCB(self.cb))
             yield wait_for(self._test_done)
-            assert self.get_ans == True
+            assert isinstance(self.get_ans, calvinresponse.CalvinResponse) and self.get_ans == calvinresponse.OK
 
             # verify nodeMemAvail in DB
             self.done = False
@@ -249,7 +250,7 @@ class TestMemMonitor(object):
         self.mem.set_avail(50)
         self.mem.set_avail(25, CalvinCB(self.cb))
         yield wait_for(self._test_done)
-        assert self.get_ans == True
+        assert isinstance(self.get_ans, calvinresponse.CalvinResponse) and self.get_ans == calvinresponse.OK
 
         # node id must not be present at level 50, only at 25
         self.done = False
@@ -265,7 +266,7 @@ class TestMemMonitor(object):
         """
         self.mem.set_avail(25, CalvinCB(self.cb))
         yield wait_for(self._test_done)
-        assert self.get_ans == True
+        assert isinstance(self.get_ans, calvinresponse.CalvinResponse) and self.get_ans == calvinresponse.OK
 
         self.done = False
         self.storage.get_index(index=self.MEMAVAIL_INDEX_BASE + ['0', '25'], root_prefix_level=2, cb=CalvinCB(self.cb2))
@@ -355,7 +356,7 @@ class TestLinkMonitor(object):
             self.done = False
             self.link.set_bandwidth(self.node.id, self.node2.id, i, CalvinCB(self.cb))
             yield wait_for(self._test_done)
-            assert self.get_ans == False
+            assert isinstance(self.get_ans, calvinresponse.CalvinResponse) and self.get_ans == calvinresponse.INTERNAL_ERROR
 
     @pytest.inlineCallbacks
     def test_bandwidth_valid(self):
@@ -363,14 +364,14 @@ class TestLinkMonitor(object):
         Test valid values for bandwidth.
         Verify if storage is as expected
         """
-        values = ['1000', '100000', '1000000', '10000000', '100000000']
+        values = [1000, 100000, 1000000, 10000000, 100000000]
         values_str = ['1M', '100M', '1G', '10G', '100G']
         for i in values:
             # verify set return
             self.done = False
             self.link.set_bandwidth(self.node.id, self.node2.id, i, CalvinCB(self.cb))
             yield wait_for(self._test_done)
-            assert self.get_ans == True
+            assert isinstance(self.get_ans, calvinresponse.CalvinResponse) and self.get_ans == calvinresponse.OK
 
             # verify linkBandwidth in DB
             self.done = False
@@ -394,11 +395,11 @@ class TestLinkMonitor(object):
         self.done = False
         self.link.set_bandwidth(self.node.id, self.node2.id, '100000', CalvinCB(self.cb))
         yield wait_for(self._test_done)
-        assert self.get_ans == True
+        assert isinstance(self.get_ans, calvinresponse.CalvinResponse) and self.get_ans == calvinresponse.OK
         self.done = False
         self.link.set_bandwidth(self.node.id, self.node2.id, '1000', CalvinCB(self.cb))
         yield wait_for(self._test_done)
-        assert self.get_ans == True
+        assert isinstance(self.get_ans, calvinresponse.CalvinResponse) and self.get_ans == calvinresponse.OK
 
         # node id must not be present at level 100M, only at 1M
         self.done = False
@@ -416,7 +417,7 @@ class TestLinkMonitor(object):
             self.done = False
             self.link.set_latency(self.node.id, self.node2.id, i, CalvinCB(self.cb))
             yield wait_for(self._test_done)
-            assert self.get_ans == False
+            assert isinstance(self.get_ans, calvinresponse.CalvinResponse) and self.get_ans == calvinresponse.INTERNAL_ERROR
 
     @pytest.inlineCallbacks
     def test_latency_valid(self):
@@ -424,14 +425,14 @@ class TestLinkMonitor(object):
         Test valid values for latency.
         Verify if storage is as expected
         """
-        values = ['1000000', '100000', '1000', '100', '1']
+        values = [1000000, 100000, 1000, 100, 1]
         values_str = ['1s', '100ms', '1ms', '100us', '1us']
         for i in values:
             # verify set return
             self.done = False
             self.link.set_latency(self.node.id, self.node2.id, i, CalvinCB(self.cb))
             yield wait_for(self._test_done)
-            assert self.get_ans == True
+            assert isinstance(self.get_ans, calvinresponse.CalvinResponse) and self.get_ans == calvinresponse.OK
 
             # verify linkLatency in DB
             self.done = False
@@ -453,13 +454,13 @@ class TestLinkMonitor(object):
         Old value must be erased from indexes
         """
         self.done = False
-        self.link.set_latency(self.node.id, self.node2.id, '100MS', CalvinCB(self.cb))
+        self.link.set_latency(self.node.id, self.node2.id, '100000', CalvinCB(self.cb))
         yield wait_for(self._test_done)
-        assert self.get_ans == True
+        assert isinstance(self.get_ans, calvinresponse.CalvinResponse) and self.get_ans == calvinresponse.OK
         self.done = False
-        self.link.set_latency(self.node.id, self.node2.id, '1S', CalvinCB(self.cb))
+        self.link.set_latency(self.node.id, self.node2.id, '1000000', CalvinCB(self.cb))
         yield wait_for(self._test_done)
-        assert self.get_ans == True
+        assert isinstance(self.get_ans, calvinresponse.CalvinResponse) and self.get_ans == calvinresponse.OK
 
         # node id must not be present at level 100ms, only at 1ms
         self.done = False
@@ -475,7 +476,7 @@ class TestLinkMonitor(object):
         """
         self.link.set_bandwidth(self.node.id, self.node2.id, '100M', CalvinCB(self.cb))
         yield wait_for(self._test_done)
-        assert self.get_ans == True
+        assert isinstance(self.get_ans, calvinresponse.CalvinResponse) and self.get_ans == calvinresponse.OK
 
         self.done = False
         self.storage.get_index(index=self.BANDWIDTH_INDEX_BASE + ['1M', '100M'], root_prefix_level=2, cb=CalvinCB(self.cb2))
@@ -485,7 +486,7 @@ class TestLinkMonitor(object):
         self.done = False
         self.link.set_latency(self.node.id, self.node2.id, '100ms', CalvinCB(self.cb))
         yield wait_for(self._test_done)
-        assert self.get_ans == True
+        assert isinstance(self.get_ans, calvinresponse.CalvinResponse) and self.get_ans == calvinresponse.OK
 
         self.done = False
         self.storage.get_index(index=self.LATENCY_INDEX_BASE + ['1s', '100ms'], root_prefix_level=2, cb=CalvinCB(self.cb2))
