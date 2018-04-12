@@ -3,6 +3,7 @@
 from calvin.runtime.south.plugins.async import async
 from calvin.runtime.north.resource_monitor.helper import ResourceMonitorHelper
 from calvin.utilities.calvinlogger import get_logger
+from calvin.requests import calvinresponse
 
 _log = get_logger(__name__)
 
@@ -27,7 +28,7 @@ class MemMonitor(object):
         if avail < 0 or avail > 100:
             _log.error("Invalid RAM avail value: " + str(avail))
             if cb:
-                async.DelayedCall(0, cb, avail, False)
+                async.DelayedCall(0, cb, avail, value=calvinresponse.CalvinResponse(False))
             return
 
         self.helper.set(ident=self.node_id, prefix="nodeMemAvail-", prefix_index="memAvail", value=avail, discretizer= memory_discretizer, cb=cb)

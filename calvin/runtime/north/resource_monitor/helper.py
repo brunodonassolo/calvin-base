@@ -58,5 +58,5 @@ class ResourceMonitorHelper(object):
 
         self.storage.set(prefix=prefix, key=ident, value=value, cb=None)
         if cb:
-            async.DelayedCall(0, cb, value, True)
+            async.DelayedCall(0, cb, value, value=calvinresponse.CalvinResponse(True))
 
