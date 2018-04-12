@@ -367,15 +367,16 @@ class AppManager(object):
         for replication_id, replica_node_ids in application._replicas_node_final.items():
             for replica_node_id in replica_node_ids:
                 self._node.storage.remove_replica_node_force(replication_id, replica_node_id)
-        if all(application._destroy_node_ids.values()):
-            application.destroy_cb(status=response.CalvinResponse(True))
-        else:
-            # Missing is the actors that could not be found.
-            # FIXME retry? They could have moved
-            missing = []
-            for status in application._destroy_node_ids.values():
-                missing += [] if status.data is None else status.data
-            application.destroy_cb(status=response.CalvinResponse(False, data=missing))
+        if application.destroy_cb:
+            if all(application._destroy_node_ids.values()):
+                application.destroy_cb(status=response.CalvinResponse(True))
+            else:
+                # Missing is the actors that could not be found.
+                # FIXME retry? They could have moved
+                missing = []
+                for status in application._destroy_node_ids.values():
+                    missing += [] if status.data is None else status.data
+                application.destroy_cb(status=response.CalvinResponse(False, data=missing))
         self._node.control.log_application_destroy(application.id)
 
     def destroy_request(self, application_id, actor_ids):
@@ -875,7 +876,7 @@ class AppManager(object):
             heapify(orphan_actors)
 
         cost += (4*len(actor_ids) + len(app.runtimes_nbr))*(len(actor_ids) - len(weighted_actor_placement))
-        cost += 4*len(actor_ids)*len(app.runtimes_nbr)/len(set(weighted_actor_placement.values()))
+        cost += 4*len(actor_ids)*len(app.runtimes_nbr)/(len(set(weighted_actor_placement.values())) + 0.0001)
         print "Ending placing actors:..."
         return weighted_actor_placement,cost
 
@@ -950,7 +951,7 @@ class AppManager(object):
             orphan_actors = [(val, actor) for actor, val in neigh_actors.iteritems()]
             heapify(orphan_actors)
 
-        place_set[:] = [ (p, pcost + ((4*len(actor_ids) + len(app.runtimes_nbr))*(len(actor_ids) - len(p))) + (4*len(actor_ids)*len(app.runtimes_nbr)/len(set(p.values())))) for p, pcost in place_set]
+        place_set[:] = [ (p, pcost + ((4*len(actor_ids) + len(app.runtimes_nbr))*(len(actor_ids) - len(p))) + (4*len(actor_ids)*len(app.runtimes_nbr)/(len(set(p.values()))+0.0001))) for p, pcost in place_set]
 
         print "Ending placing actors:..."
         print place_set
@@ -982,14 +983,15 @@ class AppManager(object):
         # all possible actor placements derived
         _log.analyze(self._node.id, "+ ACTOR PLACEMENT", {'placement': app.actor_placement}, tb=True)
         status = response.CalvinResponse(True)
-        if any([not n for n in app.actor_placement.values()]):
-            # At least one actor have no required placement
-            # Let them stay on this node
-            app.actor_placement = {actor_id: set([self._node.id]) if placement is None else placement
-                                     for actor_id, placement in app.actor_placement.items()}
-            # Status will indicate success, but be different than the normal OK code
-            status = response.CalvinResponse(response.CREATED)
-            _log.analyze(self._node.id, "+ MISS PLACEMENT", {'app_id': app.id, 'placement': app.actor_placement}, tb=True)
+        # we want to return error if an actor cannot be placed
+        #if any([not n for n in app.actor_placement.values()]):
+        #    # At least one actor have no required placement
+        #    # Let them stay on this node
+        #    app.actor_placement = {actor_id: set([self._node.id]) if placement is None else placement
+        #                             for actor_id, placement in app.actor_placement.items()}
+        #    # Status will indicate success, but be different than the normal OK code
+        #    status = response.CalvinResponse(response.CREATED)
+        #    _log.analyze(self._node.id, "+ MISS PLACEMENT", {'app_id': app.id, 'placement': app.actor_placement}, tb=True)
 
         if any([not n for n in app.link_placement.values()]):
             # At least one link have no required placement
@@ -1021,6 +1023,16 @@ class AppManager(object):
         app.actor_placement.update(placement_best)
         print "FINAL"
         print app.actor_placement
+        if len(actor_ids) > len(placement_best):
+            print "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            print "It was impossible to place all actors(total: %d, placed: %d), aborting..." % (len(actor_ids), len(placement_best))
+            status = response.CalvinResponse(False, data='Impossible to place all actors')
+            app._org_cb(status=status, placement={})
+            del app._org_cb
+            _log.analyze(self._node.id, "+ DONE", {'app_id': app.id}, tb=True)
+            self._destroy(app, None)
+            return
+
 
         weighted_actor_placement = {}
         for actor_id in actor_ids:
