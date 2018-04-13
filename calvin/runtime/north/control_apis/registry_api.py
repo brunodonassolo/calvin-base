@@ -310,7 +310,7 @@ def handle_resource_bandwidth(self, handle, connection, match, data, hdr):
     Response status code: OK or INTERNAL_ERROR
     Response: none
     """
-    self.node.link_monitor.set_bandwidth(match.group(1), match.group(2), data['value'], CalvinCB(func=self.storage_cb, handle=handle, connection=connection))
+    self.node.link_monitor.set_bandwidth(match.group(1), match.group(2), data['value'], CalvinCB(self.index_cb, handle, connection))
 
 @handler(method="POST", path="/link/resource/latency/([0-9a-zA-Z\.\-/_]*)/([0-9a-zA-Z\.\-/_]*)")
 @authentication_decorator
@@ -325,4 +325,4 @@ def handle_resource_latency(self, handle, connection, match, data, hdr):
     Response status code: OK or INTERNAL_ERROR
     Response: none
     """
-    self.node.link_monitor.set_latency(match.group(1), match.group(2), data['value'], CalvinCB(func=self.storage_cb, handle=handle, connection=connection))
+    self.node.link_monitor.set_latency(match.group(1), match.group(2), data['value'], CalvinCB(self.index_cb, handle, connection))
