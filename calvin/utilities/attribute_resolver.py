@@ -55,6 +55,7 @@ cpuAvail_help = {"0": "No CPU available",
 cpuAffinity_keys = ["dedicated"]
 cpuAffinity_help = {"dedicated": "Runs in a unique CPU"}
 
+cpu_keys = ["1", "1000", "100000", "1000000", "10000000"]
 cpuTotal_keys = ["1", "1000", "100000", "1000000", "10000000"]
 cpuTotal_help = {"1": "One MIPS",
                  "1000": "One thousand MIPS",
@@ -70,6 +71,7 @@ memAvail_help = {"0": "No RAM available",
                  "75": "75% of RAM available",
                  "100":"100% of RAM available"}
 
+ram_keys = ["1000", "1000000", "100000000", "1000000000", "10000000000"]
 memTotal_keys = ["1K", "100K", "1M", "100M", "1G", "10G"]
 memTotal_help = {"1K": "1Kb of RAM",
                  "100K": "100Kb of RAM",
@@ -98,7 +100,7 @@ latency_help = {"1s":"1 second",
                 "1us": "1 microsecond"}
 
 # list of acceptable resources
-resource_list = ["cpuAvail", "memAvail"]
+resource_list = ["cpuAvail", "memAvail", "cpu", "ram"]
 
 # list of acceptable links
 links_list = ["bandwidth", "latency"]
@@ -246,6 +248,26 @@ class AttributeResolverHelper(object):
         return resolved
 
     @classmethod
+    def cpu_resolver(cls, attr):
+        idx = 0
+        for i, value in enumerate(cpu_keys):
+            if int(value) >= int(attr):
+                idx = i
+                break
+        resolved = map(cls._to_unicode, cpu_keys[:idx+1])
+        return resolved
+
+    @classmethod
+    def ram_resolver(cls, attr):
+        idx = 0
+        for i, value in enumerate(ram_keys):
+            if int(value) >= int(attr):
+                idx = i
+                break
+        resolved = map(cls._to_unicode, ram_keys[:idx + 1])
+        return resolved
+
+    @classmethod
     def cpu_affi_resolver(cls, attr):
         if attr not in cpuAffinity_keys:
             raise Exception('CPU affinity must be: %s' % cpuAffinity_keys)
@@ -345,6 +367,8 @@ attr_resolver = {"owner": AttributeResolverHelper.owner_resolver,
                  "node_name": AttributeResolverHelper.node_name_resolver,
                  "address": AttributeResolverHelper.address_resolver,
                  "cpuTotal" : AttributeResolverHelper.cpu_total_resolver,
+                 "cpu" : AttributeResolverHelper.cpu_resolver,
+                 "ram" : AttributeResolverHelper.ram_resolver,
                  "cpuAvail" : AttributeResolverHelper.cpu_avail_resolver,
                  "cpuAffinity" : AttributeResolverHelper.cpu_affi_resolver,
                  "memAvail" : AttributeResolverHelper.mem_avail_resolver,
@@ -357,6 +381,8 @@ attr_resolver = {"owner": AttributeResolverHelper.owner_resolver,
 keys = {"owner": owner_keys,
         "node_name": node_name_keys,
         "address": address_keys,
+        "cpu": cpu_keys,
+        "ram": ram_keys,
         "cpuTotal": cpuTotal_keys,
         "cpuAvail": cpuAvail_keys,
         "cpuAffinity": cpuAffinity_keys,

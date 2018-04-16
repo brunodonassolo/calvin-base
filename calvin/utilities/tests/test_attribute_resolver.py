@@ -193,3 +193,42 @@ class AttributeResolverTester(unittest.TestCase):
         self.assertEqual(att_list[0][2], 'latency')
 
         self.assertEqual(att.get_indexed_public()[0], '/links/resource/latency')
+
+    def test_ram(self):
+        """
+        Tests valid RAM resources in the indexed_public field
+        """
+        att = AttributeResolver({"indexed_public": {"ram": "10"}})
+        att_list = att.get_indexed_public(as_list=True)
+        self.assertEqual(att_list[0][2], 'ram')
+        self.assertEqual(att_list[0][3], '1000')
+
+        self.assertEqual(att.get_indexed_public()[0], '/node/resource/ram/1000')
+
+        att = AttributeResolver({"indexed_public": {"ram": "2000"}})
+        att_list = att.get_indexed_public(as_list=True)
+        self.assertEqual(att_list[0][2], 'ram')
+        self.assertEqual(att_list[0][3], '1000')
+        self.assertEqual(att_list[0][4], '1000000')
+
+        self.assertEqual(att.get_indexed_public()[0], '/node/resource/ram/1000/1000000')
+
+    def test_cpu(self):
+        """
+        Tests valid CPU resources in the indexed_public field
+        """
+        att = AttributeResolver({"indexed_public": {"cpu": "10"}})
+        att_list = att.get_indexed_public(as_list=True)
+        self.assertEqual(att_list[0][2], 'cpu')
+        self.assertEqual(att_list[0][3], '1')
+        self.assertEqual(att_list[0][4], '1000')
+
+        self.assertEqual(att.get_indexed_public()[0], '/node/resource/cpu/1/1000')
+
+        att = AttributeResolver({"indexed_public": {"cpu": "1000"}})
+        att_list = att.get_indexed_public(as_list=True)
+        self.assertEqual(att_list[0][2], 'cpu')
+        self.assertEqual(att_list[0][3], '1')
+        self.assertEqual(att_list[0][4], '1000')
+
+        self.assertEqual(att.get_indexed_public()[0], '/node/resource/cpu/1/1000')

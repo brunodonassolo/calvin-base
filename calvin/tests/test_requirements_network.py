@@ -188,7 +188,7 @@ class TestDeployScript(unittest.TestCase):
 
         # setting bandwidth between runtimes 2 and 3 to deploy later
         from functools import partial
-        helpers.retry(30, partial(request_handler.set_bandwidth,rt2, rt_ids[0], rt_ids[1], '100M'), lambda res: res, "Failed to set bandwidth")
+        helpers.retry(30, partial(request_handler.set_bandwidth,rt2, rt_ids[0], rt_ids[1], '100M'), lambda _: True, "Failed to set bandwidth")
         helpers.retry(30, partial(request_handler.get_index, rt1, format_index_string({'bandwidth': '100M'})), lambda res: res, "Failed to get index")
 
         from calvin.Tools.cscontrol import control_deploy as deploy_app
@@ -218,7 +218,7 @@ class TestDeployScript(unittest.TestCase):
 
         # setting latency between runtimes 2 and 3 to deploy later
         from functools import partial
-        helpers.retry(30, partial(request_handler.set_latency,rt2, rt_ids[0], rt_ids[1], '100ms'), lambda res: res, "Failed to set latency")
+        helpers.retry(30, partial(request_handler.set_latency,rt2, rt_ids[0], rt_ids[1], '100ms'), lambda _: True, "Failed to set latency")
         helpers.retry(30, partial(request_handler.get_index, rt1, format_index_string({'latency': '100ms'})), lambda res: res, "Failed to get index")
 
         from calvin.Tools.cscontrol import control_deploy as deploy_app
@@ -248,14 +248,14 @@ class TestDeployScript(unittest.TestCase):
 
         # setting bandwidth between runtimes 1 and 2, it fulfills the requirements partially
         from functools import partial
-        helpers.retry(30, partial(request_handler.set_bandwidth,rt2, rt_ids[0], rt_ids[1], '1G'), lambda res: res, "Failed to set bandwidth")
+        helpers.retry(30, partial(request_handler.set_bandwidth,rt2, rt_ids[0], rt_ids[1], '1G'), lambda _: True, "Failed to set bandwidth")
         helpers.retry(30, partial(request_handler.get_index, rt1, format_index_string({'bandwidth': '1G'})), lambda res: res, "Failed to get index")
 
         # setting latency and bandwidth between runtimes 2 and 3 to deploy later
         from functools import partial
-        helpers.retry(30, partial(request_handler.set_bandwidth,rt2, rt_ids[1], rt_ids[2], '1G'), lambda res: res, "Failed to set bandwidth")
+        helpers.retry(30, partial(request_handler.set_bandwidth,rt2, rt_ids[1], rt_ids[2], '1G'), lambda _: True, "Failed to set bandwidth")
         helpers.retry(30, partial(request_handler.get_index, rt1, format_index_string({'bandwidth': '1G'})), lambda res: res, "Failed to get index")
-        helpers.retry(30, partial(request_handler.set_latency,rt2, rt_ids[1], rt_ids[2], '100ms'), lambda res: res, "Failed to set latency")
+        helpers.retry(30, partial(request_handler.set_latency,rt2, rt_ids[1], rt_ids[2], '100ms'), lambda _: True, "Failed to set latency")
         helpers.retry(30, partial(request_handler.get_index, rt1, format_index_string({'latency': '100ms'})), lambda res: res, "Failed to get index")
 
         # try to deploy the application and verify the result
@@ -287,9 +287,9 @@ class TestDeployScript(unittest.TestCase):
 
         from functools import partial
         # ok for linkB
-        helpers.retry(30, partial(request_handler.set_bandwidth, rt1, rt_ids[0], rt_ids[1], '100G'), lambda res: res, "Failed to set bandwidth")
+        helpers.retry(30, partial(request_handler.set_bandwidth, rt1, rt_ids[0], rt_ids[1], '100G'), lambda _: True, "Failed to set bandwidth")
         # ok for linkA
-        helpers.retry(30, partial(request_handler.set_latency,rt2, rt_ids[1], rt_ids[2], '1s'), lambda res: res, "Failed to set latency")
+        helpers.retry(30, partial(request_handler.set_latency,rt2, rt_ids[1], rt_ids[2], '1s'), lambda _: True, "Failed to set latency")
         helpers.retry(30, partial(request_handler.get_index, rt1, format_index_string({'bandwidth': '100G'})), lambda res: res, "Failed to get index")
         helpers.retry(30, partial(request_handler.get_index, rt1, format_index_string({'latency': '1s'})), lambda res: res, "Failed to get index")
 
@@ -327,9 +327,9 @@ class TestDeployScript(unittest.TestCase):
 
         from functools import partial
         # ok for linkB
-        helpers.retry(30, partial(request_handler.set_bandwidth, rt1, rt_ids[0], rt_ids[1], '100G'), lambda res: res, "Failed to set bandwidth")
+        helpers.retry(30, partial(request_handler.set_bandwidth, rt1, rt_ids[0], rt_ids[1], '100G'), lambda _: True, "Failed to set bandwidth")
         # ok for linkA
-        helpers.retry(30, partial(request_handler.set_latency,rt2, rt_ids[1], rt_ids[2], '1s'), lambda res: res, "Failed to set latency")
+        helpers.retry(30, partial(request_handler.set_latency,rt2, rt_ids[1], rt_ids[2], '1s'), lambda _: True, "Failed to set latency")
         helpers.retry(30, partial(request_handler.get_index, rt1, format_index_string({'bandwidth': '100G'})), lambda res: res, "Failed to get index")
         helpers.retry(30, partial(request_handler.get_index, rt1, format_index_string({'latency': '1s'})), lambda res: res, "Failed to get index")
 
