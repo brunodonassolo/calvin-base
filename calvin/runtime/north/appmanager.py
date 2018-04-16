@@ -464,7 +464,7 @@ class AppManager(object):
         link_ids = app.get_links()
 
         app.runtime_cpu = {}
-        app.runtime_mem = {}
+        app.runtime_ram = {}
         app.phys_link_latency = {}
         app.phys_link_bandwidth = {}
         app.runtimes_nbr = set()
@@ -501,7 +501,7 @@ class AppManager(object):
             len(app.link_placement) == app.link_placement_nbr and
             set(app.phys_link_placement_runtimes.keys()) == app.phys_link_placement_runtimes_nbr and
             set(app.runtime_cpu.keys()) == app.runtimes_nbr and
-            set(app.runtime_mem.keys()) == app.runtimes_nbr and
+            set(app.runtime_ram.keys()) == app.runtimes_nbr and
             set(app.phys_link_latency.keys()) == app.phys_link_placement_runtimes_nbr and
             set(app.phys_link_bandwidth.keys()) == app.phys_link_placement_runtimes_nbr)
 
@@ -524,8 +524,8 @@ class AppManager(object):
                 app.runtimes_nbr.pop(candidate)
                 continue
 
-            self.storage.get("nodeCpuAvail-", candidate, cb=CalvinCB(func=self.collect_runtime_cpu, app=app))
-            self.storage.get("nodeMemAvail-", candidate, cb=CalvinCB(func=self.collect_runtime_mem, app=app))
+            self.storage.get("nodeCpu-", candidate, cb=CalvinCB(func=self.collect_runtime_cpu, app=app))
+            self.storage.get("nodeRam-", candidate, cb=CalvinCB(func=self.collect_runtime_ram, app=app))
 
         if self._verify_collect_placement(app):
             self.decide_placement(app)
@@ -539,11 +539,11 @@ class AppManager(object):
         if self._verify_collect_placement(app):
             self.decide_placement(app)
 
-    def collect_runtime_mem(self, key, value, app):
+    def collect_runtime_ram(self, key, value, app):
         if not value or value == response.NOT_FOUND:
             value = 0
 
-        app.runtime_mem[key] = value
+        app.runtime_ram[key] = value
 
         if self._verify_collect_placement(app):
             self.decide_placement(app)
@@ -818,14 +818,14 @@ class AppManager(object):
         print "Calculating cost for actor %s, runtime %s" % (actor_id, runtime)
         cost = 0.0
         for i in actor_attr:
-            if "cpuAvail" in i["kwargs"]["index"]:
-                print " Required CPU: %s" % i["kwargs"]["index"]["cpuAvail"]
+            if "cpu" in i["kwargs"]["index"]:
+                print " Required CPU: %s" % i["kwargs"]["index"]["cpu"]
                 print " Available CPU: %d" % app.runtime_cpu[runtime]
-                cost += float(i["kwargs"]["index"]["cpuAvail"])/(float(app.runtime_cpu[runtime]+0.0001))
-            if "memAvail" in i["kwargs"]["index"]:
-                print " Required RAM: %s" % i["kwargs"]["index"]["memAvail"]
-                print " Available RAM: %d" % app.runtime_mem[runtime]
-                cost += float(i["kwargs"]["index"]["memAvail"])/(float(app.runtime_mem[runtime]) + 0.0001)
+                cost += float(i["kwargs"]["index"]["cpu"])/(float(app.runtime_cpu[runtime]+0.0001))
+            if "ram" in i["kwargs"]["index"]:
+                print " Required RAM: %s" % i["kwargs"]["index"]["ram"]
+                print " Available RAM: %d" % app.runtime_ram[runtime]
+                cost += float(i["kwargs"]["index"]["ram"])/(float(app.runtime_ram[runtime]) + 0.0001)
         print "Total cost: %f" % cost
         return cost
 
