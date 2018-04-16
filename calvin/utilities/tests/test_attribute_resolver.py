@@ -36,16 +36,16 @@ class AttributeResolverTester(unittest.TestCase):
         """
         Tests valid CPU power in the indexed_public field
         """
-        att = AttributeResolver({"indexed_public": {"cpuTotal": "10000000"}})
+        att = AttributeResolver({"indexed_public": {"cpuTotal": "100000"}})
         att_list = att.get_indexed_public(as_list=True)
         self.assertEqual(att_list[0][2], 'cpuTotal')
         self.assertEqual(att_list[0][3], '1')
-        self.assertEqual(att_list[0][4], '1000')
-        self.assertEqual(att_list[0][5], '100000')
-        self.assertEqual(att_list[0][6], '1000000')
-        self.assertEqual(att_list[0][7], '10000000')
+        self.assertEqual(att_list[0][4], '100')
+        self.assertEqual(att_list[0][5], '1000')
+        self.assertEqual(att_list[0][6], '10000')
+        self.assertEqual(att_list[0][7], '100000')
 
-        self.assertEqual(att.get_indexed_public()[0], '/node/attribute/cpuTotal/1/1000/100000/1000000/10000000')
+        self.assertEqual(att.get_indexed_public()[0], '/node/attribute/cpuTotal/1/100/1000/10000/100000')
 
     def test_cpu_total_invalid_value(self):
         """
@@ -221,14 +221,14 @@ class AttributeResolverTester(unittest.TestCase):
         att_list = att.get_indexed_public(as_list=True)
         self.assertEqual(att_list[0][2], 'cpu')
         self.assertEqual(att_list[0][3], '1')
-        self.assertEqual(att_list[0][4], '1000')
+        self.assertEqual(att_list[0][4], '100')
 
-        self.assertEqual(att.get_indexed_public()[0], '/node/resource/cpu/1/1000')
+        self.assertEqual(att.get_indexed_public()[0], '/node/resource/cpu/1/100')
 
-        att = AttributeResolver({"indexed_public": {"cpu": "1000"}})
+        att = AttributeResolver({"indexed_public": {"cpu": "100"}})
         att_list = att.get_indexed_public(as_list=True)
         self.assertEqual(att_list[0][2], 'cpu')
         self.assertEqual(att_list[0][3], '1')
-        self.assertEqual(att_list[0][4], '1000')
+        self.assertEqual(att_list[0][4], '100')
 
-        self.assertEqual(att.get_indexed_public()[0], '/node/resource/cpu/1/1000')
+        self.assertEqual(att.get_indexed_public()[0], '/node/resource/cpu/1/100')

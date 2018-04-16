@@ -13,9 +13,11 @@ def cpu_avail_discretizer(cpu):
     return int(perc_rounded)
 
 def cpu_discretizer(cpu):
-    cpu_keys = [1, 1000, 100000, 1000000, 10000000]
-    if cpu == 0:
+    cpu_keys = [1, 100, 1000, 10000, 100000]
+    if cpu < 1:
         return 1
+    if cpu >= 100000:
+        return 100000
     idx = next(idx for idx, value in enumerate(cpu_keys) if int(value) > int(cpu))
     return cpu_keys[idx - 1]
 
