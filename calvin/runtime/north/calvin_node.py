@@ -138,8 +138,16 @@ class Node(object):
         self.app_manager = appmanager.AppManager(self)
         self.link_manager = linkmanager.LinkManager(self)
 
-        self.cpu_monitor = CpuMonitor(self.id, self.storage)
-        self.mem_monitor = MemMonitor(self.id, self.storage)
+        attrs = self.attributes.get_indexed_public(as_list=True)
+        cpuTotal = 0
+        memTotal = "1K"
+        for i in attrs:
+            if 'cpuTotal' in i:
+                cpuTotal = i[-1]
+            if 'memTotal' in i:
+                memTotal = i[-1]
+        self.cpu_monitor = CpuMonitor(self.id, self.storage, cpuTotal)
+        self.mem_monitor = MemMonitor(self.id, self.storage, memTotal)
         self.link_monitor = LinkMonitor(self.id, self.storage)
 
         self.proxy_handler = ProxyHandler(self)

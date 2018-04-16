@@ -39,7 +39,7 @@ class LinkMonitor(object):
         if not value:
             _log.error("LinkMonitor (%s, %s): Link not found for key: %s. Value %s not updated" % (link_prefix, link_prefix_index, key, str(link_value)))
             if org_cb:
-                async.DelayedCall(0, org_cb, link_value, value=calvinresponse.CalvinResponse(False))
+                async.DelayedCall(0, org_cb, link_value, value=None)
             return
 
         _log.debug("LinkMonitor (%s, %s): Link found (%s) for key: %s. Value %s will be updated" % (link_prefix, link_prefix_index, value, key, str(link_value)))
