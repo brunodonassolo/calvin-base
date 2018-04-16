@@ -103,7 +103,7 @@ class TestDeployScript(unittest.TestCase):
              attributes={'indexed_public':
                   {'owner':{'organization': 'org.testexample', 'personOrGroup': 'testOwner1'},
                    'node_name': {'organization': 'org.testexample', 'name': 'testNode1'},
-                   'address': {'country': 'SE', 'locality': 'testCity', 'street': 'testStreet', 'streetNumber': 1}, 'cpuTotal': '1000000', 'memTotal': '1G' }})
+                   'address': {'country': 'SE', 'locality': 'testCity', 'street': 'testStreet', 'streetNumber': 1}, 'cpuTotal': '100000', 'memTotal': '1G' }})
         helpers.wait_for_runtime(request_handler, rt1)
         calvin.runtime.north.storage._conf.set('global', 'storage_type', 'proxy')
         calvin.runtime.north.storage._conf.set('global', 'storage_proxy', "calvinip://%s:5000" % (ip_addr,))

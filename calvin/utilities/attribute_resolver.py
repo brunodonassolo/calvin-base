@@ -55,13 +55,12 @@ cpuAvail_help = {"0": "No CPU available",
 cpuAffinity_keys = ["dedicated"]
 cpuAffinity_help = {"dedicated": "Runs in a unique CPU"}
 
-cpu_keys = ["1", "1000", "100000", "1000000", "10000000"]
-cpuTotal_keys = ["1", "1000", "100000", "1000000", "10000000"]
+cpuTotal_keys = ["1", "100", "1000", "10000", "100000"]
 cpuTotal_help = {"1": "One MIPS",
+                 "100": "One hundred MIPS",
                  "1000": "One thousand MIPS",
-                 "100000": "One hundred thousand MIPS",
-                 "1000000": "One GIPS (billion instructions per second)",
-                 "10000000":"Ten GIPS (billion instructions per second)"}
+                 "10000": "Ten thousand MIPS",
+                 "100000":"One hundred thousand MIPS"}
 
 # Acceptable values for RAM parameter
 memAvail_keys =  ["0", "25", "50", "75", "100"]
@@ -250,11 +249,11 @@ class AttributeResolverHelper(object):
     @classmethod
     def cpu_resolver(cls, attr):
         idx = 0
-        for i, value in enumerate(cpu_keys):
+        for i, value in enumerate(cpuTotal_keys):
             if int(value) >= int(attr):
                 idx = i
                 break
-        resolved = map(cls._to_unicode, cpu_keys[:idx+1])
+        resolved = map(cls._to_unicode, cpuTotal_keys[:idx+1])
         return resolved
 
     @classmethod
@@ -381,7 +380,7 @@ attr_resolver = {"owner": AttributeResolverHelper.owner_resolver,
 keys = {"owner": owner_keys,
         "node_name": node_name_keys,
         "address": address_keys,
-        "cpu": cpu_keys,
+        "cpu": cpuTotal_keys,
         "ram": ram_keys,
         "cpuTotal": cpuTotal_keys,
         "cpuAvail": cpuAvail_keys,
