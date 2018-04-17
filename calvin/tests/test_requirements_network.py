@@ -248,13 +248,13 @@ class TestDeployScript(unittest.TestCase):
 
         # setting bandwidth between runtimes 1 and 2, it fulfills the requirements partially
         from functools import partial
-        helpers.retry(30, partial(request_handler.set_bandwidth,rt2, rt_ids[0], rt_ids[1], '1G'), lambda _: True, "Failed to set bandwidth")
-        helpers.retry(30, partial(request_handler.get_index, rt1, format_index_string({'bandwidth': '1G'})), lambda res: res, "Failed to get index")
+        helpers.retry(30, partial(request_handler.set_bandwidth,rt2, rt_ids[0], rt_ids[1], '10M'), lambda _: True, "Failed to set bandwidth")
+        helpers.retry(30, partial(request_handler.get_index, rt1, format_index_string({'bandwidth': '10M'})), lambda res: res, "Failed to get index")
 
         # setting latency and bandwidth between runtimes 2 and 3 to deploy later
         from functools import partial
-        helpers.retry(30, partial(request_handler.set_bandwidth,rt2, rt_ids[1], rt_ids[2], '1G'), lambda _: True, "Failed to set bandwidth")
-        helpers.retry(30, partial(request_handler.get_index, rt1, format_index_string({'bandwidth': '1G'})), lambda res: res, "Failed to get index")
+        helpers.retry(30, partial(request_handler.set_bandwidth,rt2, rt_ids[1], rt_ids[2], '10M'), lambda _: True, "Failed to set bandwidth")
+        helpers.retry(30, partial(request_handler.get_index, rt1, format_index_string({'bandwidth': '10M'})), lambda res: res, "Failed to get index")
         helpers.retry(30, partial(request_handler.set_latency,rt2, rt_ids[1], rt_ids[2], '100ms'), lambda _: True, "Failed to set latency")
         helpers.retry(30, partial(request_handler.get_index, rt1, format_index_string({'latency': '100ms'})), lambda res: res, "Failed to get index")
 
@@ -281,16 +281,16 @@ class TestDeployScript(unittest.TestCase):
     @pytest.mark.slow
     def testNetworkLine(self):
         #  sum  --- linkA  --- src --- linkB --- snk
-        #  rt1  --- 100G   --- rt2 --- 1s    --- rt3
+        #  rt1  --- 1G   --- rt2 --- 1s    --- rt3
         _log.analyze("TESTRUN", "+", {})
         rt_ids = wait_link_convergence([rt1, rt2, rt3])
 
         from functools import partial
         # ok for linkB
-        helpers.retry(30, partial(request_handler.set_bandwidth, rt1, rt_ids[0], rt_ids[1], '100G'), lambda _: True, "Failed to set bandwidth")
+        helpers.retry(30, partial(request_handler.set_bandwidth, rt1, rt_ids[0], rt_ids[1], '1G'), lambda _: True, "Failed to set bandwidth")
         # ok for linkA
         helpers.retry(30, partial(request_handler.set_latency,rt2, rt_ids[1], rt_ids[2], '1s'), lambda _: True, "Failed to set latency")
-        helpers.retry(30, partial(request_handler.get_index, rt1, format_index_string({'bandwidth': '100G'})), lambda res: res, "Failed to get index")
+        helpers.retry(30, partial(request_handler.get_index, rt1, format_index_string({'bandwidth': '1G'})), lambda res: res, "Failed to get index")
         helpers.retry(30, partial(request_handler.get_index, rt1, format_index_string({'latency': '1s'})), lambda res: res, "Failed to get index")
 
         from calvin.Tools.cscontrol import control_deploy as deploy_app
@@ -315,22 +315,18 @@ class TestDeployScript(unittest.TestCase):
     @pytest.mark.slow
     def testNetworkLineNoLink(self):
         #       --- linkA --- src,sum --- linkB --- snk
-        #  rt1  --- 100G  --- rt2     --- 1s    --- rt3
+        #  rt1  --- 1G  --- rt2     --- 1s    --- rt3
+        # connects src to sum and snk with different network requirements
+        # sum must be at rt2 and snk at rt3
         _log.analyze("TESTRUN", "+", {})
         rt_ids = wait_link_convergence([rt1, rt2, rt3])
-        with open('neighbors.json', 'w') as the_file:
-            the_file.write('{\n')
-            the_file.write('"%s" : [ "%s" ],\n' % (rt_ids[0], rt_ids[1]))
-            the_file.write('"%s" : [ "%s", "%s" ],\n' % (rt_ids[1], rt_ids[0], rt_ids[2]))
-            the_file.write('"%s" : [ "%s" ]\n' % (rt_ids[2], rt_ids[1]))
-            the_file.write('}\n')
 
         from functools import partial
         # ok for linkB
-        helpers.retry(30, partial(request_handler.set_bandwidth, rt1, rt_ids[0], rt_ids[1], '100G'), lambda _: True, "Failed to set bandwidth")
+        helpers.retry(30, partial(request_handler.set_bandwidth, rt1, rt_ids[0], rt_ids[1], '1G'), lambda _: True, "Failed to set bandwidth")
         # ok for linkA
         helpers.retry(30, partial(request_handler.set_latency,rt2, rt_ids[1], rt_ids[2], '1s'), lambda _: True, "Failed to set latency")
-        helpers.retry(30, partial(request_handler.get_index, rt1, format_index_string({'bandwidth': '100G'})), lambda res: res, "Failed to get index")
+        helpers.retry(30, partial(request_handler.get_index, rt1, format_index_string({'bandwidth': '1G'})), lambda res: res, "Failed to get index")
         helpers.retry(30, partial(request_handler.get_index, rt1, format_index_string({'latency': '1s'})), lambda res: res, "Failed to get index")
 
         from calvin.Tools.cscontrol import control_deploy as deploy_app
