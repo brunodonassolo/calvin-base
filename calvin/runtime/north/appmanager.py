@@ -744,7 +744,7 @@ class AppManager(object):
                         next_temp.append(n)
             levels -= 1
             next_runtimes = next_temp
-        print neighbors
+        _log.debug(str(neighbors))
 
     def incremental_filter_candidates_considering_neighbors(self, app, placement, actor_id, actor_placement):
         # filter possible runtimes considering already placed actors and links
@@ -754,7 +754,7 @@ class AppManager(object):
                 try:
                     neigh_id = self._node.pm._get_local_port(port_id=p[1]).owner.id
                 except:
-                    print "Didn't find neighbor actor"
+                    _log.debug("Didn't find neighbor actor")
                     continue
 
                 for link_id, phys_link_placements in app.link_placement.iteritems():
@@ -764,9 +764,9 @@ class AppManager(object):
                     if src_actor not in placement:
                         continue
                     if src_actor == neigh_id and dst_actor == actor_id:
-                        print "Found link connecting an actor already placed (%s) and our actor (%s), link_id: %s" % (src_actor, dst_actor, link_id)
+                        _log.debug("Found link connecting an actor already placed (%s) and our actor (%s), link_id: %s" % (src_actor, dst_actor, link_id))
                         if any([isinstance(n, dynops.InfiniteElement) for n in phys_link_placements]):
-                            print "Link can be any physical link"
+                            _log.debug("Link can be any physical link")
                             continue
 
                         # add runtime that hosts src_actor as acceptable runtimes
@@ -786,8 +786,8 @@ class AppManager(object):
                             elif rt2 == placement[src_actor]:
                                 accept_runtimes[rt1] += self.cost_for_link(app, actor_id, link_id, phy_link_id)
 
-                        print "Acceptable runtimes..."
-                        print accept_runtimes
+                        _log.debug("Acceptable runtimes...")
+                        _log.debug(str(accept_runtimes))
                         temp = { i : accept_runtimes[i] + actor_placement[i] for i in accept_runtimes if i in actor_placement }
                         actor_placement.clear()
                         actor_placement.update(temp)
@@ -798,35 +798,34 @@ class AppManager(object):
         actor = self._node.am.actors[actor_id]
         link_attr = [x for x in link.requirements_get() if x["op"] == "link_attr_match"]
         cost = 0.0
-        print "Calculating cost for actor %s, link %s, phys_link %s" % (actor_id, link_id, phy_link_id)
+        _log.debug("Calculating cost for actor %s, link %s, phys_link %s" % (actor_id, link_id, phy_link_id))
         for i in link_attr:
             if "latency" in i["kwargs"]["index"]:
-                print " Required latency: %s" % i["kwargs"]["index"]["latency"]
-                print " Available latency %d" % app.phys_link_latency[phy_link_id]
+                _log.debug(" Required latency: %s" % i["kwargs"]["index"]["latency"])
+                _log.debug(" Available latency %d" % app.phys_link_latency[phy_link_id])
                 cost += float(app.phys_link_latency[phy_link_id])/float(latency_text2number(i["kwargs"]["index"]["latency"]))
             if "bandwidth" in i["kwargs"]["index"]:
-                print " Required bandwidth: %s" % i["kwargs"]["index"]["bandwidth"]
-                print " Available bandwidth %d" % app.phys_link_bandwidth[phy_link_id]
+                _log.debug(" Required bandwidth: %s" % i["kwargs"]["index"]["bandwidth"])
+                _log.debug(" Available bandwidth %d" % app.phys_link_bandwidth[phy_link_id])
                 cost += float(bandwidth_text2number(i["kwargs"]["index"]["bandwidth"]))/float(app.phys_link_bandwidth[phy_link_id])
-        print "Total cost: %f" % cost
+        _log.debug("Total cost: %f" % cost)
         return cost
 
     def cost_for_runtime(self, app, actor_id, runtime):
         actor = self._node.am.actors[actor_id]
-        print actor.requirements_get()
         actor_attr = [x for x in actor.requirements_get() if x["op"] == "node_attr_match"]
-        print "Calculating cost for actor %s, runtime %s" % (actor_id, runtime)
+        _log.debug("Calculating cost for actor %s, runtime %s" % (actor_id, runtime))
         cost = 0.0
         for i in actor_attr:
             if "cpu" in i["kwargs"]["index"]:
-                print " Required CPU: %s" % i["kwargs"]["index"]["cpu"]
-                print " Available CPU: %d" % app.runtime_cpu[runtime]
+                _log.debug(" Required CPU: %s" % i["kwargs"]["index"]["cpu"])
+                _log.debug(" Available CPU: %d" % app.runtime_cpu[runtime])
                 cost += float(i["kwargs"]["index"]["cpu"])/(float(app.runtime_cpu[runtime]+0.0001))
             if "ram" in i["kwargs"]["index"]:
-                print " Required RAM: %s" % i["kwargs"]["index"]["ram"]
-                print " Available RAM: %d" % app.runtime_ram[runtime]
+                _log.debug(" Required RAM: %s" % i["kwargs"]["index"]["ram"])
+                _log.debug(" Available RAM: %d" % app.runtime_ram[runtime])
                 cost += float(i["kwargs"]["index"]["ram"])/(float(app.runtime_ram[runtime]) + 0.0001)
-        print "Total cost: %f" % cost
+        _log.debug("Total cost: %f" % cost)
         return cost
 
 
@@ -836,12 +835,12 @@ class AppManager(object):
         # filter possible runtimes considering already placed actors and links
         self.incremental_filter_candidates_considering_neighbors(app, placement, actor_id, actor_placement)
 
-        print "Summary placement for actor %s: " % actor_id
-        print actor_placement
+        _log.debug("Summary placement for actor %s: " % actor_id)
+        _log.debug(str(actor_placement))
         if len(actor_placement) > 0:
             import random
             placement[actor_id] = random.choice(tuple(actor_placement))
-            print "Setting placement for actor %s, runtime %s" % (actor_id, placement[actor_id])
+            _log.debug("Setting placement for actor %s, runtime %s" % (actor_id, placement[actor_id]))
             return actor_placement[placement[actor_id]]
 
         return 0.0
@@ -850,23 +849,23 @@ class AppManager(object):
         orphan_actors = []
         cost = 0.0
         for actor_id in actor_ids:
-            print ("Actor id: %s, name: %s") % (actor_id, app.actors[actor_id])
+            _log.debug("Actor id: %s, name: %s" % (actor_id, app.actors[actor_id]))
             if len(self._node.am.actors[actor_id].inports.values()) == 0:
                 heappush(orphan_actors, (-100000, actor_id))
 
-        print "Starting placing the actors..."
+        _log.debug("Starting placing the actors...")
         weighted_actor_placement = {}
         while len(orphan_actors) > 0:
             neigh_actors = {}
             for prio, actor_id in orphan_actors:
-                print ("Actor id: %s, name: %s, prio(orphan): %d") % (actor_id, app.actors[actor_id], prio)
+                _log.debug("Actor id: %s, name: %s, prio(orphan): %d" % (actor_id, app.actors[actor_id], prio))
                 cost += self.incremental_placement(app, weighted_actor_placement, actor_id)
                 for i in self._node.am.actors[actor_id].outports.values():
                     for p in i.get_peers():
                         try:
                             neigh_id = self._node.pm._get_local_port(port_id=p[1]).owner.id
                         except:
-                            print "Didn't find neighbor actor"
+                            _log.debug("Didn't find neighbor actor")
                             continue
                         if not neigh_id in neigh_actors:
                             neigh_actors[neigh_id] = -1
@@ -877,7 +876,7 @@ class AppManager(object):
 
         cost += (4*len(actor_ids) + len(app.runtimes_nbr))*(len(actor_ids) - len(weighted_actor_placement))
         cost += 4*len(actor_ids)*len(app.runtimes_nbr)/(len(set(weighted_actor_placement.values())) + 0.0001)
-        print "Ending placing actors:..."
+        _log.debug("Ending placing actors:...")
         return weighted_actor_placement,cost
 
     def random_placement(self, app, actor_ids, n_samples = 10):
@@ -902,25 +901,25 @@ class AppManager(object):
         # filter possible runtimes considering already placed actors and links
         self.incremental_filter_candidates_considering_neighbors(app, placement, actor_id, actor_placement)
 
-        print "Summary placement for actor %s: " % actor_id
+        _log.debug("Summary placement for actor %s: " % actor_id)
         actor_placement_sorted = sorted(actor_placement.items(), key=lambda k : k[1])
-        print actor_placement_sorted
+        _log.debug(str(actor_placement_sorted))
         return actor_placement_sorted[:min(len(actor_placement_sorted), n_samples)]
 
 
     def best_first_actor_placement(self, app, actor_ids, n_samples):
         orphan_actors = []
         for actor_id in actor_ids:
-            print ("Actor id: %s, name: %s") % (actor_id, app.actors[actor_id])
+            _log.debug("Actor id: %s, name: %s" % (actor_id, app.actors[actor_id]))
             if len(self._node.am.actors[actor_id].inports.values()) == 0:
                 heappush(orphan_actors, (-100000, actor_id))
 
-        print "Starting placing the actors..."
+        _log.debug("Starting placing the actors...")
         place_set = [ ({},0) ]
         while len(orphan_actors) > 0:
             neigh_actors = {}
             for prio, actor_id in orphan_actors:
-                print ("Actor id: %s, name: %s, prio(orphan): %d") % (actor_id, app.actors[actor_id], prio)
+                _log.debug("Actor id: %s, name: %s, prio(orphan): %d" % (actor_id, app.actors[actor_id], prio))
                 place_set_copy = place_set
                 place_set = []
                 for idx in range(0, len(place_set_copy)):
@@ -933,8 +932,8 @@ class AppManager(object):
                         new_actor_placement = copy.deepcopy(weighted_actor_placement)
                         new_actor_placement[actor_id] = opt
                         new_cost = plac_cost + actor_cost
-                        print "New best option generated: cost %f" % new_cost
-                        print new_actor_placement
+                        _log.debug("New best option generated: cost %f" % new_cost)
+                        _log.debug(str(new_actor_placement))
                         place_set.append((new_actor_placement, new_cost))
 
                 for i in self._node.am.actors[actor_id].outports.values():
@@ -942,7 +941,7 @@ class AppManager(object):
                         try:
                             neigh_id = self._node.pm._get_local_port(port_id=p[1]).owner.id
                         except:
-                            print "Didn't find neighbor actor"
+                            _log.debug("Didn't find neighbor actor")
                             continue
                         if not neigh_id in neigh_actors:
                             neigh_actors[neigh_id] = -1
@@ -953,8 +952,8 @@ class AppManager(object):
 
         place_set[:] = [ (p, pcost + ((4*len(actor_ids) + len(app.runtimes_nbr))*(len(actor_ids) - len(p))) + (4*len(actor_ids)*len(app.runtimes_nbr)/(len(set(p.values()))+0.0001))) for p, pcost in place_set]
 
-        print "Ending placing actors:..."
-        print place_set
+        _log.debug("Ending placing actors:...")
+        _log.debug(str(place_set))
         return place_set
 
     def best_first_placement(self, app, actor_ids, n_samples = 3):
@@ -1017,14 +1016,13 @@ class AppManager(object):
         #self.filter_link_placement(app, status)
 
         # Weight the actors possible placement with their connectivity matrix
-        placement_random = self.random_placement(app, actor_ids)
+        #placement_random = self.random_placement(app, actor_ids)
         placement_best = self.best_first_placement(app, actor_ids)
         #app.actor_placement.update(self.random_placement(app, actor_ids))
         app.actor_placement.update(placement_best)
         print "FINAL"
         print app.actor_placement
         if len(actor_ids) > len(placement_best):
-            print "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
             print "It was impossible to place all actors(total: %d, placed: %d), aborting..." % (len(actor_ids), len(placement_best))
             status = response.CalvinResponse(False, data='Impossible to place all actors')
             app._org_cb(status=status, placement={})
