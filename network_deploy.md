@@ -47,7 +47,7 @@ New operations:
 - *link_attr_match*: very similar to *node_attr_match*, it will match the links that satisfies the requirements described.
 
 New indexes:
-- *bandwidth*: Matches links that have at least the requested bandwidth. Acceptable values for bandwidth: {'1M', '100M', '1G', '10G', '100G'}
+- *bandwidth*: Matches links that have at least the requested bandwidth. Acceptable values for bandwidth: {'100K', '1M', '10M', '100M', '1G'}
 - *latency*: Matches links that have latency equal or lower to the requested. Acceptable values for latency: { '1s', '100ms', '1ms', '100us', '1us'}
 
 == Calvin attributes ==

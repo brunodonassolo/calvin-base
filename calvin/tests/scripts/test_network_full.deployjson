@@ -1,7 +1,7 @@
 {
     "requirements": {
         "linkA": [{"op": "link_attr_match",
-                                   "kwargs": {"index": {"bandwidth": "1G"}},
+                                   "kwargs": {"index": {"bandwidth": "10M"}},
                   "type": "+"},
                   {"op": "link_attr_match",
                                    "kwargs": {"index": {"latency" : "100ms"}},

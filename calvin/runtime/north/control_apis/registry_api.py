@@ -305,7 +305,7 @@ def handle_resource_bandwidth(self, handle, connection, match, data, hdr):
     Updates the links bandwitdh between 2 runtimes
     Body:
     {
-        "value": <bandwidth (1M, 100M, 1G, 10G, 100G)>
+        "value": <bandwidth (100K, 1M, 10M, 100M, 1G)>
     }
     Response status code: OK or INTERNAL_ERROR
     Response: none

@@ -135,17 +135,17 @@ class AttributeResolverTester(unittest.TestCase):
         """
         Tests valid bandwidth values in the indexed_public field
         """
-        att = AttributeResolver({"indexed_public": {"bandwidth": "100G"}})
+        att = AttributeResolver({"indexed_public": {"bandwidth": "1G"}})
         att_list = att.get_indexed_public(as_list=True)
         print str(att_list)
         self.assertEqual(att_list[0][2], 'bandwidth')
-        self.assertEqual(att_list[0][3], '1M')
-        self.assertEqual(att_list[0][4], '100M')
-        self.assertEqual(att_list[0][5], '1G')
-        self.assertEqual(att_list[0][6], '10G')
-        self.assertEqual(att_list[0][7], '100G')
+        self.assertEqual(att_list[0][3], '100K')
+        self.assertEqual(att_list[0][4], '1M')
+        self.assertEqual(att_list[0][5], '10M')
+        self.assertEqual(att_list[0][6], '100M')
+        self.assertEqual(att_list[0][7], '1G')
 
-        self.assertEqual(att.get_indexed_public()[0], '/links/resource/bandwidth/1M/100M/1G/10G/100G')
+        self.assertEqual(att.get_indexed_public()[0], '/links/resource/bandwidth/100K/1M/10M/100M/1G')
 
     def test_bandwidth_invalid_value(self):
         """

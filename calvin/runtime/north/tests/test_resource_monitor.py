@@ -395,8 +395,8 @@ class TestLinkMonitor(object):
         Test valid values for bandwidth.
         Verify if storage is as expected
         """
-        values = [1000, 100000, 1000000, 10000000, 100000000]
-        values_str = ['1M', '100M', '1G', '10G', '100G']
+        values = [100, 1000, 10000, 100000, 1000000]
+        values_str = ['100K', '1M', '10M', '100M', '1G']
         for i in values:
             # verify set return
             self.done = False
@@ -428,13 +428,13 @@ class TestLinkMonitor(object):
         yield wait_for(self._test_done)
         assert isinstance(self.get_ans, calvinresponse.CalvinResponse) and self.get_ans == calvinresponse.OK
         self.done = False
-        self.link.set_bandwidth(self.node.id, self.node2.id, '1000', CalvinCB(self.cb))
+        self.link.set_bandwidth(self.node.id, self.node2.id, '10000', CalvinCB(self.cb))
         yield wait_for(self._test_done)
         assert isinstance(self.get_ans, calvinresponse.CalvinResponse) and self.get_ans == calvinresponse.OK
 
-        # node id must not be present at level 100M, only at 1M
+        # node id must not be present at level 100M, only at 10M
         self.done = False
-        self.storage.get_index(index=self.BANDWIDTH_INDEX_BASE + ['1M', '100M'], root_prefix_level=2, cb=CalvinCB(self.cb2))
+        self.storage.get_index(index=self.BANDWIDTH_INDEX_BASE + ['100K', '1M', '10M', '100M'], root_prefix_level=2, cb=CalvinCB(self.cb2))
         yield wait_for(self._test_done)
         assert self.get_ans == []
 
@@ -505,12 +505,12 @@ class TestLinkMonitor(object):
         Verify if indexes are cleared after node stop
         Old value must be erased from indexes
         """
-        self.link.set_bandwidth(self.node.id, self.node2.id, '100M', CalvinCB(self.cb))
+        self.link.set_bandwidth(self.node.id, self.node2.id, '1M', CalvinCB(self.cb))
         yield wait_for(self._test_done)
         assert isinstance(self.get_ans, calvinresponse.CalvinResponse) and self.get_ans == calvinresponse.OK
 
         self.done = False
-        self.storage.get_index(index=self.BANDWIDTH_INDEX_BASE + ['1M', '100M'], root_prefix_level=2, cb=CalvinCB(self.cb2))
+        self.storage.get_index(index=self.BANDWIDTH_INDEX_BASE + ['100K', '1M'], root_prefix_level=2, cb=CalvinCB(self.cb2))
         yield wait_for(self._test_done)
         assert self.link_id in self.get_ans
 

@@ -83,12 +83,12 @@ memAffinity_keys = ["dedicated"]
 memAffinity_help = {"dedicated": "Uses a dedicated NUMA memory node"}
 
 # Acceptable values for network bandwidth
-bandwidth_keys = ["1M", "100M", "1G", "10G", "100G"]
-bandwidth_help = {"1M": "1Mb/s bandwidth",
+bandwidth_keys = ["100K", "1M", "10M", "100M", "1G"]
+bandwidth_help = {"100K": "100Kb/s bandwidth",
+                 "1M": "1Mb/s bandwidth",
+                 "10M": "10Mb/s bandwidth",
                  "100M": "100Mb/s bandwidth",
-                 "1G": "1Gb/s bandwidth",
-                 "10G": "10G/s bandwidth",
-                 "100G":"100G/s bandwidth"}
+                 "1G":"1Gb/s bandwidth"}
 
 # Acceptable values for network latency
 latency_keys = ["1s", "100ms", "1ms", "100us", "1us"]

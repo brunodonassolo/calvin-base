@@ -8,9 +8,9 @@ from calvin.requests import calvinresponse
 
 _log = get_logger(__name__)
 
-BAND_ACCEPTABLE = ['1M', '100M', '1G', '10G', '100G']
+BAND_ACCEPTABLE = ['100K', '1M', '10M', '100M', '1G']
 # valid values in kbits
-BAND_VALUES = [1000, 100000, 1000000, 10000000, 100000000]
+BAND_VALUES = [100, 1000, 10000, 100000, 1000000]
 LAT_ACCEPTABLE = ['1us', '100us', '1ms', '100ms', '1s']
 # valid values in microseconds
 LAT_VALUES = [1, 100, 1000, 100000, 1000000]
