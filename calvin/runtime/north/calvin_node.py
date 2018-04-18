@@ -107,7 +107,7 @@ class Node(object):
         except Exception as err:
             _log.debug("No runtime credentials, err={}".format(err))
             self.runtime_credentials = None
-            self.id = calvinuuid.uuid("Node")
+            self.id = _conf.get('ARGUMENTS', 'uuid') or calvinuuid.uuid("NODE")
         self.certificate_authority = certificate_authority.CertificateAuthority(self)
         self.authentication = authentication.Authentication(self)
         self.authorization = authorization.Authorization(self)
