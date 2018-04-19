@@ -879,7 +879,7 @@ class AppManager(object):
         _log.debug("Ending placing actors:...")
         return weighted_actor_placement,cost
 
-    def random_placement(self, app, actor_ids, n_samples = 10):
+    def random_placement(self, app, actor_ids, n_samples = 100):
 
         place_set = []
         for i in range(0,n_samples):
@@ -1016,9 +1016,8 @@ class AppManager(object):
         #self.filter_link_placement(app, status)
 
         # Weight the actors possible placement with their connectivity matrix
-        #placement_random = self.random_placement(app, actor_ids)
-        placement_best = self.best_first_placement(app, actor_ids)
-        #app.actor_placement.update(self.random_placement(app, actor_ids))
+        placement_best = self.random_placement(app, actor_ids)
+        #placement_best = self.best_first_placement(app, actor_ids)
         app.actor_placement.update(placement_best)
         print "FINAL"
         print app.actor_placement
