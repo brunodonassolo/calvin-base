@@ -27,9 +27,10 @@ from calvin.runtime.south.async import async
 from calvin.utilities.security import Security
 from calvin.utilities.requirement_matching import ReqMatch
 from heapq import heappush, heapify
+from calvin.utilities import calvinconfig
 
 _log = calvinlogger.get_logger(__name__)
-
+_conf = calvinconfig.get()
 
 class Application(object):
 
@@ -879,8 +880,8 @@ class AppManager(object):
         _log.debug("Ending placing actors:...")
         return weighted_actor_placement,cost
 
-    def random_placement(self, app, actor_ids, n_samples = 100):
-
+    def random_placement(self, app, actor_ids):
+        n_samples = _conf.get('global', 'deployment_n_samples')
         place_set = []
         for i in range(0,n_samples):
             place_set.append(self.random_actor_placement(app, actor_ids))
@@ -891,7 +892,7 @@ class AppManager(object):
         #place_set = sorted(place_set, key=len, reverse=True)
         #place_set = sorted(place_set, key=lambda k : len(set(k.values())), reverse=True)
         place_set = sorted(place_set, key=lambda k : k[1])
-        print "Ramdom placement cost: %f" % place_set[0][1]
+        print "Ramdom placement cost: %f, n_samples: %d" % (place_set[0][1], n_samples)
         print place_set[0][0]
         return place_set[0][0]
 
@@ -956,8 +957,8 @@ class AppManager(object):
         _log.debug(str(place_set))
         return place_set
 
-    def best_first_placement(self, app, actor_ids, n_samples = 3):
-
+    def best_first_placement(self, app, actor_ids):
+        n_samples = _conf.get('global', 'deployment_n_samples')
         place_set = self.best_first_actor_placement(app, actor_ids, n_samples)
 
         # get the placement that contains the largest number of actors
@@ -966,7 +967,7 @@ class AppManager(object):
         #place_set = sorted(place_set, key=len, reverse=True)
         #place_set = sorted(place_set, key=lambda k : len(set(k.values())), reverse=True)
         place_set = sorted(place_set, key=lambda k : k[1])
-        print "Best First placement cost: %f" % place_set[0][1]
+        print "Best First placement cost: %f, n_samples: %d" % (place_set[0][1], n_samples)
         print place_set[0][0]
         return place_set[0][0]
 
@@ -1016,8 +1017,11 @@ class AppManager(object):
         #self.filter_link_placement(app, status)
 
         # Weight the actors possible placement with their connectivity matrix
-        placement_best = self.random_placement(app, actor_ids)
-        #placement_best = self.best_first_placement(app, actor_ids)
+        if _conf.get('global', 'deployment_algorithm') == 'random':
+            placement_best = self.random_placement(app, actor_ids)
+        else:
+            placement_best = self.best_first_placement(app, actor_ids)
+
         app.actor_placement.update(placement_best)
         print "FINAL"
         print app.actor_placement

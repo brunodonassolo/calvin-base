@@ -101,7 +101,9 @@ class CalvinConfig(object):
                 'control_proxy': None,
                 'fcm_server_secret': None,
                 'compiled_actors_path': None,
-                "calvinsys_paths": ['calvin/runtime/south/calvinsys', 'calvinextras/calvinsys']
+                "calvinsys_paths": ['calvin/runtime/south/calvinsys', 'calvinextras/calvinsys'],
+                'deployment_algorithm': 'best',
+                'deployment_n_samples': 10
             },
             'testing': {
                 'comment': 'Test settings',
