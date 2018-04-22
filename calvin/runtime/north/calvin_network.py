@@ -133,7 +133,7 @@ class CalvinLink(CalvinBaseLink):
         """
         msg_id = calvinuuid.uuid("MSGID")
         self.replies[msg_id] = {'callback': callback, 'send_time': time.time()}
-        self.replies_timeout[msg_id] = async.DelayedCall(10.0, CalvinCB(self.reply_timeout, msg_id))
+        self.replies_timeout[msg_id] = async.DelayedCall(60.0, CalvinCB(self.reply_timeout, msg_id))
         msg['msg_uuid'] = msg_id
         self.send(msg, dest_peer_id)
 
