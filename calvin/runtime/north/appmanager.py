@@ -1035,23 +1035,23 @@ class AppManager(object):
             return
 
 
-        weighted_actor_placement = {}
-        for actor_id in actor_ids:
-            # actor matrix is symmetric, so independent if read horizontal or vertical
-            actor_weights = actor_matrix[actor_ids.index(actor_id)]
-            # Sum the actor weights for each actors possible nodes, matrix mult AA * AN,
-            # AA actor weights, AN actor * node with 1 when possible
-            weights = [sum([actor_weights[actor_ids.index(_id)] if node_id in app.actor_placement[actor_id] else 0
-                             for _id in actor_ids])
-                             for node_id in node_ids]
-            # Get first node with highest weight
-            # FIXME should verify that the node actually exist also
-            # TODO should select from a resource sharing perspective also, instead of picking first max
-            # TODO: should also ask authorization server before selecting node to migrate to.
-            _log.analyze(self._node.id, "+ WEIGHTS", {'actor_id': actor_id, 'weights': weights})
-            #weighted_actor_placement[actor_id] = node_ids[weights.index(max(weights))]
-            # Get a list of nodes in sorted weighted order
-            weighted_actor_placement[actor_id] = [n for (w, n) in sorted(zip(weights, node_ids), reverse=True)]
+        weighted_actor_placement = { actor_id: (node_id if isinstance(node_id, list) else [node_id]) for actor_id, node_id in app.actor_placement.iteritems() }
+        #for actor_id in actor_ids:
+        #    # actor matrix is symmetric, so independent if read horizontal or vertical
+        #    actor_weights = actor_matrix[actor_ids.index(actor_id)]
+        #    # Sum the actor weights for each actors possible nodes, matrix mult AA * AN,
+        #    # AA actor weights, AN actor * node with 1 when possible
+        #    weights = [sum([actor_weights[actor_ids.index(_id)] if node_id in app.actor_placement[actor_id] else 0
+        #                     for _id in actor_ids])
+        #                     for node_id in node_ids]
+        #    # Get first node with highest weight
+        #    # FIXME should verify that the node actually exist also
+        #    # TODO should select from a resource sharing perspective also, instead of picking first max
+        #    # TODO: should also ask authorization server before selecting node to migrate to.
+        #    _log.analyze(self._node.id, "+ WEIGHTS", {'actor_id': actor_id, 'weights': weights})
+        #    #weighted_actor_placement[actor_id] = node_ids[weights.index(max(weights))]
+        #    # Get a list of nodes in sorted weighted order
+        #    weighted_actor_placement[actor_id] = [n for (w, n) in sorted(zip(weights, node_ids), reverse=True)]
         for actor_id, node_id in weighted_actor_placement.iteritems():
             _log.debug("Actor deployment %s \t-> %s" % (app.actors[actor_id], node_id))
             # FIXME add callback that recreate the actor locally
