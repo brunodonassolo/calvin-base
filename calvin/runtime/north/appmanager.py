@@ -26,7 +26,7 @@ from calvin.actorstore.store import ActorStore, GlobalStore
 from calvin.runtime.south.async import async
 from calvin.utilities.security import Security
 from calvin.utilities.requirement_matching import ReqMatch
-from heapq import heappush, heapify
+from heapq import heappush, heapify, heappop
 from calvin.utilities import calvinconfig
 
 _log = calvinlogger.get_logger(__name__)
@@ -797,35 +797,35 @@ class AppManager(object):
         from calvin.runtime.north.resource_monitor.link import bandwidth_text2number, latency_text2number
         link = self._node.link_manager.links[link_id]
         actor = self._node.am.actors[actor_id]
-        link_attr = [x for x in link.requirements_get() if x["op"] == "link_attr_match"]
         cost = 0.0
         _log.debug("Calculating cost for actor %s, link %s, phys_link %s" % (actor_id, link_id, phy_link_id))
-        for i in link_attr:
-            if "latency" in i["kwargs"]["index"]:
-                _log.debug(" Required latency: %s" % i["kwargs"]["index"]["latency"])
-                _log.debug(" Available latency %d" % app.phys_link_latency[phy_link_id])
-                cost += float(app.phys_link_latency[phy_link_id])/float(latency_text2number(i["kwargs"]["index"]["latency"]))
-            if "bandwidth" in i["kwargs"]["index"]:
-                _log.debug(" Required bandwidth: %s" % i["kwargs"]["index"]["bandwidth"])
-                _log.debug(" Available bandwidth %d" % app.phys_link_bandwidth[phy_link_id])
-                cost += float(bandwidth_text2number(i["kwargs"]["index"]["bandwidth"]))/float(app.phys_link_bandwidth[phy_link_id])
+        for i in link.requirements_get():
+            if i["op"] == "link_attr_match":
+                if "latency" in i["kwargs"]["index"]:
+                    _log.debug(" Required latency: %s" % i["kwargs"]["index"]["latency"])
+                    _log.debug(" Available latency %d" % app.phys_link_latency[phy_link_id])
+                    cost += float(app.phys_link_latency[phy_link_id])/float(latency_text2number(i["kwargs"]["index"]["latency"]))
+                if "bandwidth" in i["kwargs"]["index"]:
+                    _log.debug(" Required bandwidth: %s" % i["kwargs"]["index"]["bandwidth"])
+                    _log.debug(" Available bandwidth %d" % app.phys_link_bandwidth[phy_link_id])
+                    cost += float(bandwidth_text2number(i["kwargs"]["index"]["bandwidth"]))/float(app.phys_link_bandwidth[phy_link_id])
         _log.debug("Total cost: %f" % cost)
         return cost
 
     def cost_for_runtime(self, app, actor_id, runtime):
         actor = self._node.am.actors[actor_id]
-        actor_attr = [x for x in actor.requirements_get() if x["op"] == "node_attr_match"]
         _log.debug("Calculating cost for actor %s, runtime %s" % (actor_id, runtime))
         cost = 0.0
-        for i in actor_attr:
-            if "cpu" in i["kwargs"]["index"]:
-                _log.debug(" Required CPU: %s" % i["kwargs"]["index"]["cpu"])
-                _log.debug(" Available CPU: %d" % app.runtime_cpu[runtime])
-                cost += float(i["kwargs"]["index"]["cpu"])/(float(app.runtime_cpu[runtime]+0.0001))
-            if "ram" in i["kwargs"]["index"]:
-                _log.debug(" Required RAM: %s" % i["kwargs"]["index"]["ram"])
-                _log.debug(" Available RAM: %d" % app.runtime_ram[runtime])
-                cost += float(i["kwargs"]["index"]["ram"])/(float(app.runtime_ram[runtime]) + 0.0001)
+        for i in actor.requirements_get():
+            if i["op"] == "node_attr_match":
+                if "cpu" in i["kwargs"]["index"]:
+                    _log.debug(" Required CPU: %s" % i["kwargs"]["index"]["cpu"])
+                    _log.debug(" Available CPU: %d" % app.runtime_cpu[runtime])
+                    cost += float(i["kwargs"]["index"]["cpu"])/(float(app.runtime_cpu[runtime]+0.0001))
+                if "ram" in i["kwargs"]["index"]:
+                    _log.debug(" Required RAM: %s" % i["kwargs"]["index"]["ram"])
+                    _log.debug(" Available RAM: %d" % app.runtime_ram[runtime])
+                    cost += float(i["kwargs"]["index"]["ram"])/(float(app.runtime_ram[runtime]) + 0.0001)
         _log.debug("Total cost: %f" % cost)
         return cost
 
@@ -918,40 +918,43 @@ class AppManager(object):
         _log.debug("Starting placing the actors...")
         place_set = [ ({},0) ]
         while len(orphan_actors) > 0:
+            next_actor = heappop(orphan_actors)
+            prio = next_actor[0]
+            actor_id = next_actor[1]
+
+            _log.debug("Actor id: %s, name: %s, prio(orphan): %d" % (actor_id, app.actors[actor_id], prio))
+            place_set_for_actor = []
+            for idx in range(0, len(place_set)):
+                weighted_actor_placement = place_set[idx][0]
+                plac_cost = place_set[idx][1]
+                options = self.best_first_incremental_placement(app, weighted_actor_placement, actor_id, n_samples)
+                if (len(options) == 0):
+                    place_set_for_actor.append((weighted_actor_placement, plac_cost))
+                for opt,actor_cost in options:
+                    new_actor_placement = copy.deepcopy(weighted_actor_placement)
+                    new_actor_placement[actor_id] = opt
+                    new_cost = plac_cost + actor_cost
+                    _log.debug("New best option generated: cost %f" % new_cost)
+                    _log.debug(str(new_actor_placement))
+                    place_set_for_actor.append((new_actor_placement, new_cost))
+
             neigh_actors = {}
-            for prio, actor_id in orphan_actors:
-                _log.debug("Actor id: %s, name: %s, prio(orphan): %d" % (actor_id, app.actors[actor_id], prio))
-                place_set_copy = place_set
-                place_set = []
-                for idx in range(0, len(place_set_copy)):
-                    weighted_actor_placement = place_set_copy[idx][0]
-                    plac_cost = place_set_copy[idx][1]
-                    options = self.best_first_incremental_placement(app, weighted_actor_placement, actor_id, n_samples)
-                    if (len(options) == 0):
-                        place_set.append((weighted_actor_placement, plac_cost))
-                    for opt,actor_cost in options:
-                        new_actor_placement = copy.deepcopy(weighted_actor_placement)
-                        new_actor_placement[actor_id] = opt
-                        new_cost = plac_cost + actor_cost
-                        _log.debug("New best option generated: cost %f" % new_cost)
-                        _log.debug(str(new_actor_placement))
-                        place_set.append((new_actor_placement, new_cost))
+            for i in self._node.am.actors[actor_id].outports.values():
+                for p in i.get_peers():
+                    try:
+                        neigh_id = self._node.pm._get_local_port(port_id=p[1]).owner.id
+                    except:
+                        _log.debug("Didn't find neighbor actor")
+                        continue
+                    if not neigh_id in neigh_actors:
+                        neigh_actors[neigh_id] = -1
+                    else:
+                        neigh_actors[neigh_id] -= 1
 
-                for i in self._node.am.actors[actor_id].outports.values():
-                    for p in i.get_peers():
-                        try:
-                            neigh_id = self._node.pm._get_local_port(port_id=p[1]).owner.id
-                        except:
-                            _log.debug("Didn't find neighbor actor")
-                            continue
-                        if not neigh_id in neigh_actors:
-                            neigh_actors[neigh_id] = -1
-                        else:
-                            neigh_actors[neigh_id] -= 1
-            orphan_actors = [(val, actor) for actor, val in neigh_actors.iteritems()]
-            heapify(orphan_actors)
+            for actor, val in neigh_actors.iteritems():
+                heappush(orphan_actors, (val, actor))
 
-        place_set[:] = [ (p, pcost + ((4*len(actor_ids) + len(app.runtimes_nbr))*(len(actor_ids) - len(p))) + (4*len(actor_ids)*len(app.runtimes_nbr)/(len(set(p.values()))+0.0001))) for p, pcost in place_set]
+            place_set = [ (p, pcost + ((4*len(actor_ids) + len(app.runtimes_nbr))*(len(actor_ids) - len(p))) + (4*len(actor_ids)*len(app.runtimes_nbr)/(len(set(p.values()))+0.0001))) for p, pcost in place_set_for_actor]
 
         _log.debug("Ending placing actors:...")
         _log.debug(str(place_set))
