@@ -287,10 +287,10 @@ class TestDeployScript(unittest.TestCase):
 
         from functools import partial
         # ok for linkB
-        helpers.retry(30, partial(request_handler.set_bandwidth, rt1, rt_ids[0], rt_ids[1], '1G'), lambda _: True, "Failed to set bandwidth")
+        helpers.retry(30, partial(request_handler.set_bandwidth, rt1, rt_ids[0], rt_ids[1], '100M'), lambda _: True, "Failed to set bandwidth")
         # ok for linkA
         helpers.retry(30, partial(request_handler.set_latency,rt2, rt_ids[1], rt_ids[2], '1s'), lambda _: True, "Failed to set latency")
-        helpers.retry(30, partial(request_handler.get_index, rt1, format_index_string({'bandwidth': '1G'})), lambda res: res, "Failed to get index")
+        helpers.retry(30, partial(request_handler.get_index, rt1, format_index_string({'bandwidth': '100M'})), lambda res: res, "Failed to get index")
         helpers.retry(30, partial(request_handler.get_index, rt1, format_index_string({'latency': '1s'})), lambda res: res, "Failed to get index")
 
         from calvin.Tools.cscontrol import control_deploy as deploy_app
