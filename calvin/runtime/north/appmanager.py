@@ -464,10 +464,14 @@ class AppManager(object):
         app.phys_link_placement_runtimes = {}  # Clean placement slate, saves the runtimes that the physical link connects
         link_ids = app.get_links()
 
-        app.runtime_cpu = {}
-        app.runtime_ram = {}
-        app.phys_link_latency = {}
-        app.phys_link_bandwidth = {}
+        app.cost_link_band = {}      # sum of requested cost by user for link, cache memory, it will be update in cost_for_link
+        app.cost_link_lat = {}      # sum of requested cost by user for link, cache memory, it will be update in cost_for_link
+        app.cost_runtime_cpu = {}   # sum of requested cost by user for runtime, update in cost_for_runtime
+        app.cost_runtime_ram = {}   # sum of requested cost by user for runtime, update in cost_for_runtime
+        app.runtime_cpu = {}    # available CPU in runtimes, runtime -> MIPS
+        app.runtime_ram = {}    # available RAM in runtimes, runtime -> MB
+        app.phys_link_latency = {}  # available latency in physical link
+        app.phys_link_bandwidth = {}# available bandwidth in physical link
         app.runtimes_nbr = set()
 
         app.link_placement_nbr = len(link_ids) # number of links that must be found
@@ -558,7 +562,7 @@ class AppManager(object):
         status: return status from ReqMatch
         """
         _log.debug("Collect possible placements: %s for link: %s" %(str(possible_placements), link_id))
-        app.link_placement[link_id] = copy.deepcopy(possible_placements)
+        app.link_placement[link_id] = copy.copy(possible_placements)
 
         # expect to receive all answers before continuing the placement
         app.phys_link_placement_runtimes_nbr.update(possible_placements)
@@ -783,9 +787,9 @@ class AppManager(object):
                             rt1 = app.phys_link_placement_runtimes[phy_link_id]['runtime1']
                             rt2 = app.phys_link_placement_runtimes[phy_link_id]['runtime2']
                             if rt1 == placement[src_actor]:
-                                accept_runtimes[rt2] += self.cost_for_link(app, actor_id, link_id, phy_link_id)
+                                accept_runtimes[rt2] += self.cost_for_link(app, link_id, phy_link_id)
                             elif rt2 == placement[src_actor]:
-                                accept_runtimes[rt1] += self.cost_for_link(app, actor_id, link_id, phy_link_id)
+                                accept_runtimes[rt1] += self.cost_for_link(app, link_id, phy_link_id)
 
                         _log.debug("Acceptable runtimes...")
                         _log.debug(str(accept_runtimes))
@@ -793,40 +797,73 @@ class AppManager(object):
                         actor_placement.clear()
                         actor_placement.update(temp)
 
-    def cost_for_link(self, app, actor_id, link_id, phy_link_id):
+    def parse_requirements(self, requirements):
+        parsed = []
+        for i in requirements:
+            if "requirements" in i:
+                parsed += self.parse_requirements(i["requirements"])
+            else:
+                parsed.append(i)
+        return parsed
+
+    def cost_for_link(self, app, link_id, phy_link_id):
         from calvin.runtime.north.resource_monitor.link import bandwidth_text2number, latency_text2number
+        # already in the cache, get value and returns...
+        if link_id in app.cost_link_band and link_id in app.cost_link_lat:
+            cost = app.cost_link_band[link_id]/float(app.phys_link_bandwidth[phy_link_id])
+            if app.cost_link_lat[link_id] > 0:
+                cost += float(app.phys_link_latency[phy_link_id])/app.cost_link_lat[link_id]
+            return cost
+
         link = self._node.link_manager.links[link_id]
-        actor = self._node.am.actors[actor_id]
         cost = 0.0
-        _log.debug("Calculating cost for actor %s, link %s, phys_link %s" % (actor_id, link_id, phy_link_id))
-        for i in link.requirements_get():
+        cost_band = 0.0
+        cost_lat = 0.0
+        _log.debug("Calculating cost for link %s, phys_link %s" % (link_id, phy_link_id))
+        for i in self.parse_requirements(link.requirements_get()):
             if i["op"] == "link_attr_match":
                 if "latency" in i["kwargs"]["index"]:
                     _log.debug(" Required latency: %s" % i["kwargs"]["index"]["latency"])
                     _log.debug(" Available latency %d" % app.phys_link_latency[phy_link_id])
+                    cost_lat += float(latency_text2number(i["kwargs"]["index"]["latency"]))
                     cost += float(app.phys_link_latency[phy_link_id])/float(latency_text2number(i["kwargs"]["index"]["latency"]))
                 if "bandwidth" in i["kwargs"]["index"]:
                     _log.debug(" Required bandwidth: %s" % i["kwargs"]["index"]["bandwidth"])
                     _log.debug(" Available bandwidth %d" % app.phys_link_bandwidth[phy_link_id])
+                    cost_band += float(bandwidth_text2number(i["kwargs"]["index"]["bandwidth"]))
                     cost += float(bandwidth_text2number(i["kwargs"]["index"]["bandwidth"]))/float(app.phys_link_bandwidth[phy_link_id])
         _log.debug("Total cost: %f" % cost)
+        app.cost_link_band[link_id] = cost_band
+        app.cost_link_lat[link_id] = cost_lat
         return cost
 
     def cost_for_runtime(self, app, actor_id, runtime):
-        actor = self._node.am.actors[actor_id]
+        if actor_id in app.cost_runtime_cpu and actor_id in app.cost_runtime_ram:
+            cost = app.cost_runtime_cpu[actor_id]/(float(app.runtime_cpu[runtime]+0.0001))
+            cost += app.cost_runtime_ram[actor_id]/(float(app.runtime_ram[runtime]+0.0001))
+            return cost
         _log.debug("Calculating cost for actor %s, runtime %s" % (actor_id, runtime))
         cost = 0.0
-        for i in actor.requirements_get():
+        cost_cpu = 0.0
+        cost_ram = 0.0
+        actor = self._node.am.actors[actor_id]
+        for i in self.parse_requirements(actor.requirements_get()):
             if i["op"] == "node_attr_match":
                 if "cpu" in i["kwargs"]["index"]:
                     _log.debug(" Required CPU: %s" % i["kwargs"]["index"]["cpu"])
                     _log.debug(" Available CPU: %d" % app.runtime_cpu[runtime])
+                    cost_cpu += float(i["kwargs"]["index"]["cpu"])
                     cost += float(i["kwargs"]["index"]["cpu"])/(float(app.runtime_cpu[runtime]+0.0001))
                 if "ram" in i["kwargs"]["index"]:
                     _log.debug(" Required RAM: %s" % i["kwargs"]["index"]["ram"])
                     _log.debug(" Available RAM: %d" % app.runtime_ram[runtime])
+                    cost_ram += float(i["kwargs"]["index"]["ram"])
                     cost += float(i["kwargs"]["index"]["ram"])/(float(app.runtime_ram[runtime]) + 0.0001)
         _log.debug("Total cost: %f" % cost)
+        app.cost_runtime_cpu[actor_id] = cost_cpu
+        app.cost_runtime_ram[actor_id] = cost_ram
+        cost2 = app.cost_runtime_cpu[actor_id]/(float(app.runtime_cpu[runtime]+0.0001))
+        cost2 += app.cost_runtime_ram[actor_id]/(float(app.runtime_ram[runtime]+0.0001))
         return cost
 
 
@@ -931,7 +968,7 @@ class AppManager(object):
                 if (len(options) == 0):
                     place_set_for_actor.append((weighted_actor_placement, plac_cost))
                 for opt,actor_cost in options:
-                    new_actor_placement = copy.deepcopy(weighted_actor_placement)
+                    new_actor_placement = weighted_actor_placement.copy()
                     new_actor_placement[actor_id] = opt
                     new_cost = plac_cost + actor_cost
                     _log.debug("New best option generated: cost %f" % new_cost)
@@ -1413,7 +1450,7 @@ class Deployer(object):
                     dst_id = self.actor_map[dst_name]
                     link_name_deploy = link_name.split(':', 1)[1] # get only link name to search in requirements list
                     deploy_req = self.deploy_info['requirements'].get(link_name_deploy, [])
-                    link_id = self.node.link_manager.new(link_name, src_id, dst_id, copy.deepcopy(deploy_req))
+                    link_id = self.node.link_manager.new(link_name, src_id, dst_id, deploy_req)
                     self.node.app_manager.add_link(self.app_id, link_id)
                     _log.debug("App Mgr: Creating link: name %s id %s. Between actor: %s and %s. Deployment rules: %s" % (link_name, link_id, src_name, dst_name, str(deploy_req)))
                 except:

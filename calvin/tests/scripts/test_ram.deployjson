@@ -1,10 +1,5 @@
 {
     "requirements": {
-        "src": [{"op": "union_group", 
-                 "requirements": [{"op": "node_attr_match", 
-                                   "kwargs": {"index": {"ram": 100000000}}
-                                   }],
-                 "type": "+"
-                }]
-                }
+        "src": [{"op": "node_attr_match", "kwargs": {"index": {"ram": 100000000}}, "type": "+"}]
+    }
 }
