@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import time
 import os
 import copy
 from calvin.utilities.calvin_callback import CalvinCB
@@ -456,6 +457,8 @@ class AppManager(object):
 
         _log.analyze(self._node.id, "+ APP REQ", {}, tb=True)
 
+        app.start_time = time.time()
+        _log.info("Deployment: app: %s: start deploying: time %d" % (application_id, app.start_time))
         app.actor_placement = {}  # Clean placement slate
         actor_ids = app.get_actors()
         app.actor_placement_nbr = len(actor_ids)
@@ -1018,6 +1021,7 @@ class AppManager(object):
             return
         app.placement_done = True
 
+        _log.info("Deployment: app: %s: finished filter phase: elapsed time %d" % (app.id, time.time() - app.start_time))
         _log.analyze(self._node.id, "+ BEGIN", {}, tb=True)
 
         # all possible actor placements derived
@@ -1100,6 +1104,7 @@ class AppManager(object):
         app._org_cb(status=status, placement=weighted_actor_placement)
         del app._org_cb
         _log.analyze(self._node.id, "+ DONE", {'app_id': app.id}, tb=True)
+        _log.info("Deployment: app: %s: finished placement: total elapsed time %d" % (app.id, time.time() - app.start_time))
 
     def _actor_connectivity(self, app):
         """ Matrix of weights between actors how close they want to be
