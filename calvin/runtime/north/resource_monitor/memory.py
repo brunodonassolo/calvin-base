@@ -45,7 +45,7 @@ class MemMonitor(object):
         if avail > 100:
             avail = 100
 
-        self.helper.set(ident=self.node_id, prefix="nodeMemAvail-", prefix_index="memAvail", value=avail, discretizer= memory_discretizer, cb=cb)
+        self.helper.set(ident=self.node_id, prefix="nodeMemAvail-", prefix_index="memAvail", value=avail, discretizer= memory_discretizer, cb=None)
 
         self.helper.set(ident=self.node_id, prefix="nodeRam-", prefix_index="ram", value=int(avail*(self.ram_total/100)), discretizer=ram_discretizer, cb=cb)
 
