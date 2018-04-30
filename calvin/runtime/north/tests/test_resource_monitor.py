@@ -61,17 +61,6 @@ class TestCpuMonitor(object):
         self.done = True
 
     @pytest.inlineCallbacks
-    def test_avail_invalid(self):
-        """
-        Verify invalid values for CPU avail
-        """
-        for i in [-1, 101]:
-            self.done = False
-            self.cpu.set_avail(i, CalvinCB(self.cb))
-            yield wait_for(self._test_done)
-            assert self.get_ans == None
-
-    @pytest.inlineCallbacks
     def test_avail_valid(self):
         """
         Test valid values for CPU avail.
@@ -219,17 +208,6 @@ class TestMemMonitor(object):
     def cb2(self, value):
         self.get_ans = value
         self.done = True
-
-    @pytest.inlineCallbacks
-    def test_avail_invalid(self):
-        """
-        Verify invalid values for RAM avail
-        """
-        for i in [-1, 101]:
-            self.done = False
-            self.mem.set_avail(i, CalvinCB(self.cb))
-            yield wait_for(self._test_done)
-            assert self.get_ans == None
 
     @pytest.inlineCallbacks
     def test_avail_valid(self):
