@@ -39,7 +39,7 @@ class CpuMonitor(object):
         if avail > 100:
             avail = 100
 
-        self.helper.set(ident=self.node_id, prefix="nodeCpuAvail-", prefix_index="cpuAvail", value=avail, discretizer=cpu_avail_discretizer, cb=cb)
+        self.helper.set(ident=self.node_id, prefix="nodeCpuAvail-", prefix_index="cpuAvail", value=avail, discretizer=cpu_avail_discretizer, cb=None)
 
         self.helper.set(ident=self.node_id, prefix="nodeCpu-", prefix_index="cpu", value=int(avail*(self.cpu_total/100)), discretizer=cpu_discretizer, cb=cb)
 
