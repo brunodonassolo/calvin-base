@@ -525,8 +525,9 @@ class AppManager(object):
         _log.debug("Collect possible placements: %s for actor: %s" %(str(possible_placements), actor_id))
         app.actor_placement[actor_id] = possible_placements
 
+        runtimes_not_in_set = possible_placements - app.runtimes_nbr
         app.runtimes_nbr.update(possible_placements)
-        for candidate in possible_placements:
+        for candidate in runtimes_not_in_set:
             if isinstance(candidate, dynops.InfiniteElement):
                 _log.debug("Skipping InfiniteElement in placement")
                 app.runtimes_nbr.pop(candidate)
@@ -567,9 +568,10 @@ class AppManager(object):
         _log.debug("Collect possible placements: %s for link: %s" %(str(possible_placements), link_id))
         app.link_placement[link_id] = copy.copy(possible_placements)
 
+        physical_links_not_in_set = possible_placements - app.phys_link_placement_runtimes_nbr
         # expect to receive all answers before continuing the placement
         app.phys_link_placement_runtimes_nbr.update(possible_placements)
-        for candidate in possible_placements:
+        for candidate in physical_links_not_in_set:
             if isinstance(candidate, dynops.InfiniteElement):
                 _log.debug("Skipping InfiniteElement in link placement")
                 app.phys_link_placement_runtimes_nbr.discard(candidate)
