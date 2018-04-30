@@ -40,12 +40,10 @@ class MemMonitor(object):
         Sets the RAM availability of a node.
         Acceptable range: [0, 25, 50, 75, 100]
         """
-#        if avail not in self.acceptable_avail:
-        if avail < 0 or avail > 100:
-            _log.error("Invalid RAM avail value: " + str(avail))
-            if cb:
-                async.DelayedCall(0, cb, avail, value=None)
-            return
+        if avail < 0:
+            avail = 0
+        if avail > 100:
+            avail = 100
 
         self.helper.set(ident=self.node_id, prefix="nodeMemAvail-", prefix_index="memAvail", value=avail, discretizer= memory_discretizer, cb=cb)
 
