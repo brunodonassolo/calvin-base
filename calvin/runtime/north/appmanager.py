@@ -996,7 +996,7 @@ class AppManager(object):
             for actor, val in neigh_actors.iteritems():
                 heappush(orphan_actors, (val, actor))
 
-            place_set = [ (p, pcost + ((4*len(actor_ids) + len(app.runtimes_nbr))*(len(actor_ids) - len(p))) + (4*len(actor_ids)*len(app.runtimes_nbr)/(len(set(p.values()))+0.0001))) for p, pcost in place_set_for_actor]
+            place_set = [ (p, pcost + ((4*len(actor_ids) + len(app.runtimes_nbr))*(len(actor_ids) - len(p))) + (4*len(actor_ids)*len(app.runtimes_nbr)/(len(set(p.values()))+0.0001))) for p, pcost in place_set_for_actor[:n_samples]]
 
         _log.debug("Ending placing actors:...")
         _log.debug(str(place_set))
