@@ -15,6 +15,7 @@
 # limitations under the License.
 
 import time
+import collections
 import os
 import copy
 from calvin.utilities.calvin_callback import CalvinCB
@@ -32,6 +33,19 @@ from calvin.utilities import calvinconfig
 
 _log = calvinlogger.get_logger(__name__)
 _conf = calvinconfig.get()
+
+
+class ActorPlacement():
+    def __init__(self, runtime, link, phys_link):
+        self.runtime = runtime
+        self.link = link
+        self.phys_link = phys_link
+    def __str__(self):
+        return '(Runtime: %s, Link: %s, Phys: %s)' % (self.runtime, self.link, self.phys_link)
+    def __repr__(self):
+        return self.__str__()
+    def __eq__(self, other):
+        return self.runtime == other.runtime
 
 class Application(object):
 
@@ -168,6 +182,7 @@ class AppManager(object):
         self._node = node
         self.storage = node.storage
         self.applications = {}
+        self.phys_link_placement_runtimes = {}  # This information is quite stable, save it here to avoid collecting it each app deployment. Clean placement slate, saves the runtimes that the physical link connects
 
     def new(self, name):
         application_id = calvinuuid.uuid("APP")
@@ -507,11 +522,7 @@ class AppManager(object):
     def _verify_collect_placement(self, app):
         return (len(app.actor_placement) == app.actor_placement_nbr and
             len(app.link_placement) == app.link_placement_nbr and
-            set(app.phys_link_placement_runtimes.keys()) == app.phys_link_placement_runtimes_nbr and
-            set(app.runtime_cpu.keys()) == app.runtimes_nbr and
-            set(app.runtime_ram.keys()) == app.runtimes_nbr and
-            set(app.phys_link_latency.keys()) == app.phys_link_placement_runtimes_nbr and
-            set(app.phys_link_bandwidth.keys()) == app.phys_link_placement_runtimes_nbr)
+            set(app.phys_link_placement_runtimes.keys()) == app.phys_link_placement_runtimes_nbr)
 
     def collect_actor_placement(self, app, actor_id, possible_placements, status):
         """
@@ -525,37 +536,30 @@ class AppManager(object):
         _log.debug("Collect possible placements: %s for actor: %s" %(str(possible_placements), actor_id))
         app.actor_placement[actor_id] = possible_placements
 
-        runtimes_not_in_set = possible_placements - app.runtimes_nbr
         app.runtimes_nbr.update(possible_placements)
-        for candidate in runtimes_not_in_set:
-            if isinstance(candidate, dynops.InfiniteElement):
-                _log.debug("Skipping InfiniteElement in placement")
-                app.runtimes_nbr.pop(candidate)
-                continue
-
-            self.storage.get("nodeCpu-", candidate, cb=CalvinCB(func=self.collect_runtime_cpu, app=app))
-            self.storage.get("nodeRam-", candidate, cb=CalvinCB(func=self.collect_runtime_ram, app=app))
 
         if self._verify_collect_placement(app):
             self.decide_placement(app)
 
-    def collect_runtime_cpu(self, key, value, app):
+    def collect_runtime_cpu(self, key, value, app, update_cb):
         if not value or value == response.NOT_FOUND:
             value = 0
 
         app.runtime_cpu[key] = value
+        app.dynamic_capabilities.subtract({key : 1})
 
-        if self._verify_collect_placement(app):
-            self.decide_placement(app)
+        if self._calculate_cost_for_placement_verify(app):
+            update_cb()
 
-    def collect_runtime_ram(self, key, value, app):
+    def collect_runtime_ram(self, key, value, app, update_cb):
         if not value or value == response.NOT_FOUND:
             value = 0
 
         app.runtime_ram[key] = value
+        app.dynamic_capabilities.subtract({key : 1})
 
-        if self._verify_collect_placement(app):
-            self.decide_placement(app)
+        if self._calculate_cost_for_placement_verify(app):
+            update_cb()
 
     def collect_link_placement(self, app, link_id, possible_placements, status):
         """
@@ -576,32 +580,36 @@ class AppManager(object):
                 _log.debug("Skipping InfiniteElement in link placement")
                 app.phys_link_placement_runtimes_nbr.discard(candidate)
                 continue
-            # requesting the runtimes that this physical link connects
-            self._node.link_monitor.get_info(candidate, cb=CalvinCB(func=self.collect_link_placement_runtime, app=app, link=link_id))
-            #FIXME [donassolo]: put in resource_monitor/link.py
-            self.storage.get("linkBandwidth-", candidate, cb=CalvinCB(func=self.collect_phys_link_bandwidth, app=app))
-            self.storage.get("linkLatency-", candidate, cb=CalvinCB(func=self.collect_phys_link_latency, app=app))
+
+            if candidate in self.phys_link_placement_runtimes:
+                # we already know which runtimes this link connects
+                app.phys_link_placement_runtimes[candidate] = self.phys_link_placement_runtimes[candidate]
+            else:
+                # requesting the runtimes that this physical link connects
+                self._node.link_monitor.get_info(candidate, cb=CalvinCB(func=self.collect_link_placement_runtime, app=app, link=link_id))
 
         if self._verify_collect_placement(app):
             self.decide_placement(app)
 
-    def collect_phys_link_bandwidth(self, key, value, app):
+    def collect_phys_link_bandwidth(self, key, value, app, update_cb):
         if not value or value == response.NOT_FOUND:
             value = 0
 
         app.phys_link_bandwidth[key] = value
+        app.dynamic_capabilities.subtract({key : 1})
 
-        if self._verify_collect_placement(app):
-            self.decide_placement(app)
+        if self._calculate_cost_for_placement_verify(app):
+            update_cb()
 
-    def collect_phys_link_latency(self, key, value, app):
+    def collect_phys_link_latency(self, key, value, app, update_cb):
         if not value or value == response.NOT_FOUND:
             value = 0
 
         app.phys_link_latency[key] = value
+        app.dynamic_capabilities.subtract({key : 1})
 
-        if self._verify_collect_placement(app):
-            self.decide_placement(app)
+        if self._calculate_cost_for_placement_verify(app):
+            update_cb()
 
     def collect_link_placement_runtime(self, key, value, app, link):
         """
@@ -615,12 +623,11 @@ class AppManager(object):
         if not value:
             _log.error("Error collecting placement for physical link %s. Application placement is probably incomplete" % (key))
             app.link_placement[link].remove(key)
-            app.phys_link_latency.pop(key, None)
-            app.phys_link_bandwidth.pop(key, None)
             app.phys_link_placement_runtimes_nbr.discard(key)
         else:
             _log.debug("Collect runtimes for physical link: %s, source: %s, dst: %s" % (key, value['runtime1'], value['runtime2']))
             app.phys_link_placement_runtimes[key] = value
+            self.phys_link_placement_runtimes[key] = value
 
         if self._verify_collect_placement(app):
             self.decide_placement(app)
@@ -780,9 +787,8 @@ class AppManager(object):
                             continue
 
                         # add runtime that hosts src_actor as acceptable runtimes
-                        from collections import defaultdict
-                        accept_runtimes = defaultdict(float)
-                        accept_runtimes[placement[src_actor]] = 0
+                        accept_runtimes = {}
+                        accept_runtimes[placement[src_actor].runtime] = placement[src_actor]
 
                         link = self._node.link_manager.links[link_id]
 
@@ -791,14 +797,14 @@ class AppManager(object):
 
                             rt1 = app.phys_link_placement_runtimes[phy_link_id]['runtime1']
                             rt2 = app.phys_link_placement_runtimes[phy_link_id]['runtime2']
-                            if rt1 == placement[src_actor]:
-                                accept_runtimes[rt2] += self.cost_for_link(app, link_id, phy_link_id)
-                            elif rt2 == placement[src_actor]:
-                                accept_runtimes[rt1] += self.cost_for_link(app, link_id, phy_link_id)
+                            if rt1 == placement[src_actor].runtime:
+                                accept_runtimes[rt2] = ActorPlacement(rt2, link_id, phy_link_id)
+                            elif rt2 == placement[src_actor].runtime:
+                                accept_runtimes[rt1] = ActorPlacement(rt1, link_id, phy_link_id)
 
                         _log.debug("Acceptable runtimes...")
                         _log.debug(str(accept_runtimes))
-                        temp = { i : accept_runtimes[i] + actor_placement[i] for i in accept_runtimes if i in actor_placement }
+                        temp = { i : accept_runtimes[i] for i in accept_runtimes if i in actor_placement }
                         actor_placement.clear()
                         actor_placement.update(temp)
 
@@ -813,7 +819,12 @@ class AppManager(object):
 
     def cost_for_link(self, app, link_id, phy_link_id):
         from calvin.runtime.north.resource_monitor.link import bandwidth_text2number, latency_text2number
-        # already in the cache, get value and returns...
+
+        # no link, just returns
+        if link_id == "" or phy_link_id == "":
+            return 0.0
+
+        # cost already calculated and  in the cache, get value and returns...
         if link_id in app.cost_link_band and link_id in app.cost_link_lat:
             cost = app.cost_link_band[link_id]/float(app.phys_link_bandwidth[phy_link_id])
             if app.cost_link_lat[link_id] > 0:
@@ -872,9 +883,9 @@ class AppManager(object):
         return cost
 
 
-    def incremental_placement(self, app, placement, actor_id):
+    def random_incremental_placement(self, app, placement, actor_id):
 
-        actor_placement = { i : self.cost_for_runtime(app, actor_id, i) for i in app.actor_placement[actor_id] }
+        actor_placement = { i : ActorPlacement(i, "", "") for i in app.actor_placement[actor_id] }
         # filter possible runtimes considering already placed actors and links
         self.incremental_filter_candidates_considering_neighbors(app, placement, actor_id, actor_placement)
 
@@ -882,27 +893,24 @@ class AppManager(object):
         _log.debug(str(actor_placement))
         if len(actor_placement) > 0:
             import random
-            placement[actor_id] = random.choice(tuple(actor_placement))
+            placement[actor_id] = actor_placement[random.choice(tuple(actor_placement))]
             _log.debug("Setting placement for actor %s, runtime %s" % (actor_id, placement[actor_id]))
-            return actor_placement[placement[actor_id]]
 
-        return 0.0
 
     def random_actor_placement(self, app, actor_ids):
         orphan_actors = []
-        cost = 0.0
         for actor_id in actor_ids:
             _log.debug("Actor id: %s, name: %s" % (actor_id, app.actors[actor_id]))
             if len(self._node.am.actors[actor_id].inports.values()) == 0:
                 heappush(orphan_actors, (-100000, actor_id))
 
         _log.debug("Starting placing the actors...")
-        weighted_actor_placement = {}
+        actor_placement = {}
         while len(orphan_actors) > 0:
             neigh_actors = {}
             for prio, actor_id in orphan_actors:
                 _log.debug("Actor id: %s, name: %s, prio(orphan): %d" % (actor_id, app.actors[actor_id], prio))
-                cost += self.incremental_placement(app, weighted_actor_placement, actor_id)
+                self.random_incremental_placement(app, actor_placement, actor_id)
                 for i in self._node.am.actors[actor_id].outports.values():
                     for p in i.get_peers():
                         try:
@@ -917,40 +925,174 @@ class AppManager(object):
             orphan_actors = [(val, actor) for actor, val in neigh_actors.iteritems()]
             heapify(orphan_actors)
 
-        cost += (4*len(actor_ids) + len(app.runtimes_nbr))*(len(actor_ids) - len(weighted_actor_placement))
-        cost += 4*len(actor_ids)*len(app.runtimes_nbr)/(len(set(weighted_actor_placement.values())) + 0.0001)
         _log.debug("Ending placing actors:...")
-        return weighted_actor_placement,cost
+        return actor_placement
 
     def random_placement(self, app, actor_ids):
         n_samples = _conf.get('global', 'deployment_n_samples')
         place_set = []
         for i in range(0,n_samples):
-            place_set.append(self.random_actor_placement(app, actor_ids))
+            place_set.append((self.random_actor_placement(app, actor_ids), 0.0))
 
-        # get the placement that contains the largest number of actors
-        # and prefers the placement where actors are spread between runtimes
-        # otherwise we would always put everybody in the same runtime
-        #place_set = sorted(place_set, key=len, reverse=True)
-        #place_set = sorted(place_set, key=lambda k : len(set(k.values())), reverse=True)
-        place_set = sorted(place_set, key=lambda k : k[1])
-        print "Ramdom placement cost: %f, n_samples: %d" % (place_set[0][1], n_samples)
+        self._calculate_cost_for_placement(app, actor_ids, place_set, cb_cost_calculated=CalvinCB(self.random_placement_finish, app, actor_ids, n_samples))
+
+    def random_placement_finish(self, app, actor_ids, n_samples, place_set):
+        _log.debug("Ending placing actors:...")
+        _log.debug(str(place_set))
+        print "Random placement cost: %f, n_samples: %d" % (place_set[0][1], n_samples)
         print place_set[0][0]
-        return place_set[0][0]
+        placement_best = { actor: plac.runtime for actor,plac in place_set[0][0].iteritems() }
+        app.actor_placement.update(placement_best)
+        print "FINAL"
+        print app.actor_placement
+        status = response.CalvinResponse(True)
+        if len(actor_ids) > len(placement_best):
+            print "It was impossible to place all actors(total: %d, placed: %d), aborting..." % (len(actor_ids), len(placement_best))
+            status = response.CalvinResponse(False, data='Impossible to place all actors')
+            app._org_cb(status=status, placement={})
+            del app._org_cb
+            _log.analyze(self._node.id, "+ DONE", {'app_id': app.id}, tb=True)
+            self._destroy(app, None)
+            return
 
-    def best_first_incremental_placement(self, app, placement, actor_id, n_samples):
 
-        actor_placement = { i : self.cost_for_runtime(app, actor_id, i) for i in app.actor_placement[actor_id] }
+        actor_placement = { actor_id: (node_id if isinstance(node_id, list) else [node_id]) for actor_id, node_id in app.actor_placement.iteritems() }
+        for actor_id, node_id in actor_placement.iteritems():
+            _log.debug("Actor deployment %s \t-> %s" % (app.actors[actor_id], node_id))
+            self._node.am.robust_migrate(actor_id, node_id[:], None)
+
+        app._org_cb(status=status, placement=actor_placement)
+        del app._org_cb
+        _log.analyze(self._node.id, "+ DONE", {'app_id': app.id}, tb=True)
+        _log.info("Deployment: app: %s: finished placement: total elapsed time %d" % (app.id, time.time() - app.start_time))
+
+    def best_first_incremental_placement(self, app, placement, actor_id):
+
+        actor_placement = { i : ActorPlacement(i, "", "") for i in app.actor_placement[actor_id] }
         # filter possible runtimes considering already placed actors and links
         self.incremental_filter_candidates_considering_neighbors(app, placement, actor_id, actor_placement)
 
         _log.debug("Summary placement for actor %s: " % actor_id)
-        actor_placement_sorted = sorted(actor_placement.items(), key=lambda k : k[1])
-        _log.debug(str(actor_placement_sorted))
-        return actor_placement_sorted[:min(len(actor_placement_sorted), n_samples)]
+        _log.debug(str(actor_placement))
+        return actor_placement
 
 
-    def best_first_actor_placement(self, app, actor_ids, n_samples):
+    def _calculate_cost_for_placement_verify(self, app):
+        app.dynamic_capabilities += collections.Counter() # remove empty entries
+        return len(app.dynamic_capabilities) == 0
+
+    def _calculate_cost_for_placement(self, app, actor_ids, place_set, cb_cost_calculated):
+
+        app.dynamic_capabilities = collections.Counter()
+        # request for unnkown values needed by cost functions
+        for opt,old_cost in place_set:
+            for actor, actorPlac in opt.iteritems():
+                if actorPlac.runtime not in app.runtime_cpu or actorPlac.runtime not in app.runtime_ram:
+                    if actorPlac.runtime not in app.dynamic_capabilities:
+                        app.dynamic_capabilities.update({actorPlac.runtime : 2 })
+                        self.storage.get("nodeCpu-", actorPlac.runtime, cb=CalvinCB(func=self.collect_runtime_cpu, app=app, update_cb=CalvinCB(self._calculate_cost_for_placement_finish, app, actor_ids, place_set, cb_cost_calculated)))
+                        self.storage.get("nodeRam-", actorPlac.runtime, cb=CalvinCB(func=self.collect_runtime_ram, app=app, update_cb=CalvinCB(self._calculate_cost_for_placement_finish, app, actor_ids, place_set, cb_cost_calculated)))
+                if actorPlac.phys_link not in app.phys_link_bandwidth or actorPlac.phys_link not in app.phys_link_latency:
+                    if actorPlac.phys_link != "" and actorPlac.phys_link not in app.dynamic_capabilities:
+                        app.dynamic_capabilities.update({actorPlac.phys_link : 2 })
+                        self.storage.get("linkBandwidth-", actorPlac.phys_link, cb=CalvinCB(func=self.collect_phys_link_bandwidth, app=app, update_cb=CalvinCB(self._calculate_cost_for_placement_finish, app, actor_ids, place_set, cb_cost_calculated)))
+                        self.storage.get("linkLatency-", actorPlac.phys_link, cb=CalvinCB(func=self.collect_phys_link_latency, app=app, update_cb=CalvinCB(self._calculate_cost_for_placement_finish, app, actor_ids, place_set, cb_cost_calculated)))
+
+        if self._calculate_cost_for_placement_verify(app):
+            self._calculate_cost_for_placement_finish(app, actor_ids, place_set, cb_cost_calculated)
+
+
+    def _calculate_cost_for_placement_finish(self, app, actor_ids, place_set, cb_cost_calculated):
+        place_set_sorted = []
+        for opt,old_cost in place_set:
+            cost = (4*len(actor_ids) + len(app.runtimes_nbr))*(len(actor_ids) - len(opt))
+            runtimes_set = set()
+            for actor, actorPlac in opt.iteritems():
+                cost += self.cost_for_runtime(app, actor, actorPlac.runtime) + self.cost_for_link(app, actorPlac.link, actorPlac.phys_link)
+                runtimes_set.add(actorPlac.runtime)
+            cost += 4*len(actor_ids)*len(app.runtimes_nbr)/(len(runtimes_set)+0.0001)
+            place_set_sorted.append((opt, cost))
+        place_set_sorted = sorted(place_set_sorted, key=lambda k : k[1])
+        cb_cost_calculated(place_set_sorted)
+
+
+    def best_first_actor_placement(self, app, actor_ids, n_samples, orphan_actors, place_set, cb_finish_placement):
+
+        place_set = place_set[:n_samples]
+        # all actors places... call finished callback
+        if len(orphan_actors) == 0:
+            cb_finish_placement(place_set)
+            return
+
+        next_actor = heappop(orphan_actors)
+        prio = next_actor[0]
+        actor_id = next_actor[1]
+
+        _log.debug("Actor id: %s, name: %s, prio(orphan): %d" % (actor_id, app.actors[actor_id], prio))
+        place_set_for_actor = []
+        for idx in range(0, len(place_set)):
+            actor_placement = place_set[idx][0]
+            plac_cost = place_set[idx][1]
+            options = self.best_first_incremental_placement(app, actor_placement, actor_id)
+            if (len(options) == 0):
+                place_set_for_actor.append((actor_placement, plac_cost))
+            for opt in options:
+                new_actor_placement = copy.copy(actor_placement)
+                new_actor_placement[actor_id] = options[opt]
+                _log.debug(str(new_actor_placement))
+                place_set_for_actor.append((new_actor_placement, 0.0))
+
+        # update next actors to be placed
+        neigh_actors = {}
+        for i in self._node.am.actors[actor_id].outports.values():
+            for p in i.get_peers():
+                try:
+                    neigh_id = self._node.pm._get_local_port(port_id=p[1]).owner.id
+                except:
+                    _log.debug("Didn't find neighbor actor")
+                    continue
+                if not neigh_id in neigh_actors:
+                    neigh_actors[neigh_id] = -1
+                else:
+                    neigh_actors[neigh_id] -= 1
+        for actor, val in neigh_actors.iteritems():
+            heappush(orphan_actors, (val, actor))
+
+        # get cost to next step of loop
+        self._calculate_cost_for_placement(app, actor_ids, place_set_for_actor, cb_cost_calculated=CalvinCB(self.best_first_actor_placement, app, actor_ids, n_samples, orphan_actors, cb_finish_placement = cb_finish_placement))
+
+    def best_first_placement_finish(self, app, actor_ids, n_samples, place_set):
+        _log.debug("Ending placing actors:...")
+        _log.debug(str(place_set))
+        print "Best First placement cost: %f, n_samples: %d" % (place_set[0][1], n_samples)
+        placement_best = { actor: plac.runtime for actor,plac in place_set[0][0].iteritems() }
+        print placement_best
+        app.actor_placement.update(placement_best)
+        print "FINAL"
+        print app.actor_placement
+        status = response.CalvinResponse(True)
+        if len(actor_ids) > len(placement_best):
+            print "It was impossible to place all actors(total: %d, placed: %d), aborting..." % (len(actor_ids), len(placement_best))
+            status = response.CalvinResponse(False, data='Impossible to place all actors')
+            app._org_cb(status=status, placement={})
+            del app._org_cb
+            _log.analyze(self._node.id, "+ DONE", {'app_id': app.id}, tb=True)
+            self._destroy(app, None)
+            return
+
+
+        actor_placement = { actor_id: (node_id if isinstance(node_id, list) else [node_id]) for actor_id, node_id in app.actor_placement.iteritems() }
+        for actor_id, node_id in actor_placement.iteritems():
+            _log.debug("Actor deployment %s \t-> %s" % (app.actors[actor_id], node_id))
+            self._node.am.robust_migrate(actor_id, node_id[:], None)
+
+        app._org_cb(status=status, placement=actor_placement)
+        del app._org_cb
+        _log.analyze(self._node.id, "+ DONE", {'app_id': app.id}, tb=True)
+        _log.info("Deployment: app: %s: finished placement: total elapsed time %d" % (app.id, time.time() - app.start_time))
+
+    def best_first_placement(self, app, actor_ids):
+        n_samples = _conf.get('global', 'deployment_n_samples')
         orphan_actors = []
         for actor_id in actor_ids:
             _log.debug("Actor id: %s, name: %s" % (actor_id, app.actors[actor_id]))
@@ -958,63 +1100,9 @@ class AppManager(object):
                 heappush(orphan_actors, (-100000, actor_id))
 
         _log.debug("Starting placing the actors...")
-        place_set = [ ({},0) ]
-        while len(orphan_actors) > 0:
-            next_actor = heappop(orphan_actors)
-            prio = next_actor[0]
-            actor_id = next_actor[1]
+        place_set = [({}, 0.0)]
+        self.best_first_actor_placement(app, actor_ids, n_samples, orphan_actors, place_set, cb_finish_placement=CalvinCB(self.best_first_placement_finish, app, actor_ids, n_samples))
 
-            _log.debug("Actor id: %s, name: %s, prio(orphan): %d" % (actor_id, app.actors[actor_id], prio))
-            place_set_for_actor = []
-            for idx in range(0, len(place_set)):
-                weighted_actor_placement = place_set[idx][0]
-                plac_cost = place_set[idx][1]
-                options = self.best_first_incremental_placement(app, weighted_actor_placement, actor_id, n_samples)
-                if (len(options) == 0):
-                    place_set_for_actor.append((weighted_actor_placement, plac_cost))
-                for opt,actor_cost in options:
-                    new_actor_placement = weighted_actor_placement.copy()
-                    new_actor_placement[actor_id] = opt
-                    new_cost = plac_cost + actor_cost
-                    _log.debug("New best option generated: cost %f" % new_cost)
-                    _log.debug(str(new_actor_placement))
-                    place_set_for_actor.append((new_actor_placement, new_cost))
-
-            neigh_actors = {}
-            for i in self._node.am.actors[actor_id].outports.values():
-                for p in i.get_peers():
-                    try:
-                        neigh_id = self._node.pm._get_local_port(port_id=p[1]).owner.id
-                    except:
-                        _log.debug("Didn't find neighbor actor")
-                        continue
-                    if not neigh_id in neigh_actors:
-                        neigh_actors[neigh_id] = -1
-                    else:
-                        neigh_actors[neigh_id] -= 1
-
-            for actor, val in neigh_actors.iteritems():
-                heappush(orphan_actors, (val, actor))
-
-            place_set = [ (p, pcost + ((4*len(actor_ids) + len(app.runtimes_nbr))*(len(actor_ids) - len(p))) + (4*len(actor_ids)*len(app.runtimes_nbr)/(len(set(p.values()))+0.0001))) for p, pcost in place_set_for_actor[:n_samples]]
-
-        _log.debug("Ending placing actors:...")
-        _log.debug(str(place_set))
-        return place_set
-
-    def best_first_placement(self, app, actor_ids):
-        n_samples = _conf.get('global', 'deployment_n_samples')
-        place_set = self.best_first_actor_placement(app, actor_ids, n_samples)
-
-        # get the placement that contains the largest number of actors
-        # and prefers the placement where actors are spread between runtimes
-        # otherwise we would always put everybody in the same runtime
-        #place_set = sorted(place_set, key=len, reverse=True)
-        #place_set = sorted(place_set, key=lambda k : len(set(k.values())), reverse=True)
-        place_set = sorted(place_set, key=lambda k : k[1])
-        print "Best First placement cost: %f, n_samples: %d" % (place_set[0][1], n_samples)
-        print place_set[0][0]
-        return place_set[0][0]
 
     def decide_placement(self, app):
         # this method can be called more than once depending on collect_* callbacks execution order (inlined calls)
@@ -1068,45 +1156,32 @@ class AppManager(object):
         else:
             placement_best = self.best_first_placement(app, actor_ids)
 
-        app.actor_placement.update(placement_best)
-        print "FINAL"
-        print app.actor_placement
-        if len(actor_ids) > len(placement_best):
-            print "It was impossible to place all actors(total: %d, placed: %d), aborting..." % (len(actor_ids), len(placement_best))
-            status = response.CalvinResponse(False, data='Impossible to place all actors')
-            app._org_cb(status=status, placement={})
-            del app._org_cb
-            _log.analyze(self._node.id, "+ DONE", {'app_id': app.id}, tb=True)
-            self._destroy(app, None)
-            return
+        #weighted_actor_placement = { actor_id: (node_id if isinstance(node_id, list) else [node_id]) for actor_id, node_id in app.actor_placement.iteritems() }
+        ##for actor_id in actor_ids:
+        ##    # actor matrix is symmetric, so independent if read horizontal or vertical
+        ##    actor_weights = actor_matrix[actor_ids.index(actor_id)]
+        ##    # Sum the actor weights for each actors possible nodes, matrix mult AA * AN,
+        ##    # AA actor weights, AN actor * node with 1 when possible
+        ##    weights = [sum([actor_weights[actor_ids.index(_id)] if node_id in app.actor_placement[actor_id] else 0
+        ##                     for _id in actor_ids])
+        ##                     for node_id in node_ids]
+        ##    # Get first node with highest weight
+        ##    # FIXME should verify that the node actually exist also
+        ##    # TODO should select from a resource sharing perspective also, instead of picking first max
+        ##    # TODO: should also ask authorization server before selecting node to migrate to.
+        ##    _log.analyze(self._node.id, "+ WEIGHTS", {'actor_id': actor_id, 'weights': weights})
+        ##    #weighted_actor_placement[actor_id] = node_ids[weights.index(max(weights))]
+        ##    # Get a list of nodes in sorted weighted order
+        ##    weighted_actor_placement[actor_id] = [n for (w, n) in sorted(zip(weights, node_ids), reverse=True)]
+        #for actor_id, node_id in weighted_actor_placement.iteritems():
+        #    _log.debug("Actor deployment %s \t-> %s" % (app.actors[actor_id], node_id))
+        #    # FIXME add callback that recreate the actor locally
+        #    self._node.am.robust_migrate(actor_id, node_id[:], None)
 
-
-        weighted_actor_placement = { actor_id: (node_id if isinstance(node_id, list) else [node_id]) for actor_id, node_id in app.actor_placement.iteritems() }
-        #for actor_id in actor_ids:
-        #    # actor matrix is symmetric, so independent if read horizontal or vertical
-        #    actor_weights = actor_matrix[actor_ids.index(actor_id)]
-        #    # Sum the actor weights for each actors possible nodes, matrix mult AA * AN,
-        #    # AA actor weights, AN actor * node with 1 when possible
-        #    weights = [sum([actor_weights[actor_ids.index(_id)] if node_id in app.actor_placement[actor_id] else 0
-        #                     for _id in actor_ids])
-        #                     for node_id in node_ids]
-        #    # Get first node with highest weight
-        #    # FIXME should verify that the node actually exist also
-        #    # TODO should select from a resource sharing perspective also, instead of picking first max
-        #    # TODO: should also ask authorization server before selecting node to migrate to.
-        #    _log.analyze(self._node.id, "+ WEIGHTS", {'actor_id': actor_id, 'weights': weights})
-        #    #weighted_actor_placement[actor_id] = node_ids[weights.index(max(weights))]
-        #    # Get a list of nodes in sorted weighted order
-        #    weighted_actor_placement[actor_id] = [n for (w, n) in sorted(zip(weights, node_ids), reverse=True)]
-        for actor_id, node_id in weighted_actor_placement.iteritems():
-            _log.debug("Actor deployment %s \t-> %s" % (app.actors[actor_id], node_id))
-            # FIXME add callback that recreate the actor locally
-            self._node.am.robust_migrate(actor_id, node_id[:], None)
-
-        app._org_cb(status=status, placement=weighted_actor_placement)
-        del app._org_cb
-        _log.analyze(self._node.id, "+ DONE", {'app_id': app.id}, tb=True)
-        _log.info("Deployment: app: %s: finished placement: total elapsed time %d" % (app.id, time.time() - app.start_time))
+        #app._org_cb(status=status, placement=weighted_actor_placement)
+        #del app._org_cb
+        #_log.analyze(self._node.id, "+ DONE", {'app_id': app.id}, tb=True)
+        #_log.info("Deployment: app: %s: finished placement: total elapsed time %d" % (app.id, time.time() - app.start_time))
 
     def _actor_connectivity(self, app):
         """ Matrix of weights between actors how close they want to be
