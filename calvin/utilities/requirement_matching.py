@@ -38,7 +38,6 @@ class ReqMatch(object):
         """ Helper function for matching locally found actors """
         if actor_id not in self.node.am.actors:
             # Can only migrate actors from our node
-            _log.analyze(self.node.id, "+ NO ACTOR", {'actor_id': actor_id})
             if callable(self.callback):
                 self.callback(status=response.CalvinResponse(False), possible_placements=set([]))
             return
@@ -79,7 +78,6 @@ class ReqMatch(object):
         """
         if not isinstance(requirements, (list, tuple)):
             # Requirements need to be list
-            _log.analyze(self.node.id, "+ NO REQ LIST", {'reqs': requirements})
             if callable(self.callback):
                 self.callback(status=response.CalvinResponse(response.BAD_REQUEST), possible_placements=set([]))
             return
@@ -93,10 +91,8 @@ class ReqMatch(object):
         self.possible_placements = set([])
         self.done = False
         self.node_iter.set_cb(self._collect_placements)
-        _log.analyze(self.node.id, "+ CALL CB", {'actor_id': self.actor_id, 'node_iter': str(self.node_iter)})
         # Must call it since the triggers might already have released before cb set
         self._collect_placements()
-        _log.analyze(self.node.id, "+ END", {'actor_id': self.actor_id, 'node_iter': str(self.node_iter)})
 
     def _build_match(self):
         intersection_iters = []
@@ -108,7 +104,6 @@ class ReqMatch(object):
                 intersection_iters.append(self._build_union_match(req=req).set_name("SActor" + str(self.actor_id)))
             else:
                 try:
-                    _log.analyze(self.node.id, "+ REQ OP", {'op': req['op'], 'kwargs': req['kwargs']})
                     it = req_operations[req['op']].req_op(self.node,
                                             actor_id=self.actor_id,
                                             component=self.component_ids,
@@ -141,7 +136,6 @@ class ReqMatch(object):
         return dynops.Union(*union_iters)
 
     def _collect_placements(self):
-        _log.analyze(self.node.id, "+ BEGIN", {}, tb=True)
         if self._collect_placement_cb:
             self._collect_placement_cb.cancel()
             self._collect_placement_cb = None
@@ -149,14 +143,9 @@ class ReqMatch(object):
             return
         try:
             while True:
-                _log.analyze(self.node.id, "+ ITER", {})
                 node_id = self.node_iter.next()
                 self.possible_placements.add(node_id)
         except dynops.PauseIteration:
-            _log.analyze(self.node.id, "+ PAUSED",
-                    {'counter': self._collect_placement_counter,
-                     'last_value': self._collect_placement_last_value,
-                     'diff': self._collect_placement_counter - self._collect_placement_last_value})
             # FIXME the dynops should be self triggering, but is not...
             # This is a temporary fix by keep trying
             delay = 0.0 if self._collect_placement_counter > self._collect_placement_last_value + 100 else 0.2
@@ -165,7 +154,6 @@ class ReqMatch(object):
             return
         except StopIteration:
             # All possible actor placements derived
-            _log.analyze(self.node.id, "+ ALL", {})
             self.done = True
             if self.replace_infinite:
                 # Replace Infinte Element with all known real ids
@@ -179,7 +167,6 @@ class ReqMatch(object):
                 status = response.CalvinResponse(True if self.possible_placements else False)
                 self.callback(possible_placements=self.possible_placements, status=status)
                 return
-            _log.analyze(self.node.id, "+ END", {})
         except:
             _log.exception("ReqMatch:_collect_placements")
 
