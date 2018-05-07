@@ -103,7 +103,7 @@ class CalvinConfig(object):
                 'compiled_actors_path': None,
                 "calvinsys_paths": ['calvin/runtime/south/calvinsys', 'extras/calvinsys'],
                 'deployment_algorithm': 'best',
-                'deployment_n_samples': 10
+                'deployment_n_samples': 50
             },
             'testing': {
                 'comment': 'Test settings',

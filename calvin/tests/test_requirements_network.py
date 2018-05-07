@@ -281,7 +281,7 @@ class TestDeployScript(unittest.TestCase):
     @pytest.mark.slow
     def testNetworkLine(self):
         #  sum  --- linkA  --- src --- linkB --- snk
-        #  rt1  --- 1G   --- rt2 --- 1s    --- rt3
+        #  rt1  --- 100M   --- rt2 --- 1s    --- rt3
         _log.analyze("TESTRUN", "+", {})
         rt_ids = wait_link_convergence([rt1, rt2, rt3])
 
