@@ -16,6 +16,9 @@
 
 from calvin.actor.actor import Actor, manage, condition
 import time  # NEVER DO THIS OUTSIDE OF TEST
+from calvin.utilities.calvinlogger import get_logger
+
+_log = get_logger(__name__)
 
 class DumbBurn(Actor):
     """
@@ -32,7 +35,7 @@ class DumbBurn(Actor):
         self.duration = duration
 
     def log(self, data):
-        print "%s<%s,%s>: %s" % (self.__class__.__name__, self.name, self.id, data)
+        _log.info("%s<%s>: %s" % (self.__class__.__name__, self.id, str(data).strip()))
 
     @condition(['token'], ['token'])
     def donothing(self, input):
