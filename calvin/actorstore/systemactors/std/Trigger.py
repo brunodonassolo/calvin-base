@@ -15,6 +15,9 @@
 # limitations under the License.
 
 from calvin.actor.actor import Actor, manage, condition, stateguard, calvinsys
+from calvin.utilities.calvinlogger import get_logger
+
+_log = get_logger(__name__)
 
 
 class Trigger(Actor):
@@ -49,6 +52,7 @@ class Trigger(Actor):
     @condition([], ['data'])
     def trigger(self):
         calvinsys.read(self.timer) # Ack
+        _log.info("%s<%s>: %s" % (self.__class__.__name__, self.id, str(self.data).strip()))
         return (self.data, )
 
     action_priority = (start_timer, trigger)
