@@ -247,10 +247,12 @@ class TwistedCalvinTransport(base_transport.CalvinTransportBase):
 
     def _disconnected(self, reason):
         _log.debug("%s, %s, %s" % (self, 'disconnected', reason))
+        _log.info("%s, %s, %s" % (self, 'disconnected', reason))
         self._callback_execute('disconnected', reason)
 
     def _connection_failed(self, addr, reason):
         _log.debug("%s, %s, %s" % (self, 'connection_failed', reason))
+        _log.info("%s, %s, %s" % (self, 'connection_failed', reason))
         self._callback_execute('connection_failed', reason)
 
     def _data(self, data):
@@ -258,7 +260,7 @@ class TwistedCalvinTransport(base_transport.CalvinTransportBase):
         self._callback_execute('data', data)
 
 
-class TCPClientFactory(protocol.ClientFactory, CalvinCBClass):
+class TCPClientFactory(protocol.ReconnectingClientFactory, CalvinCBClass):
     protocol = StringProtocol
 
     def __init__(self, callbacks):
@@ -270,10 +272,12 @@ class TCPClientFactory(protocol.ClientFactory, CalvinCBClass):
         _log.info('Connection failed. reason: %s, dest %s', reason, connector.getDestination())
         addr = (connector.getDestination().host, connector.getDestination().port)
         self._callback_execute('connection_failed', addr, reason)
+        protocol.ReconnectingClientFactory.clientConnectionFailed(self, connector, reason)
 
     def startedConnecting(self, connector):
         pass
 
     def buildProtocol(self, addr):
         proto = self.protocol(self._callbacks)
+        self.resetDelay()
         return proto
