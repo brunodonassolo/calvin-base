@@ -16,7 +16,7 @@
 
 from twisted.protocols import basic
 from twisted.internet import reactor
-from twisted.internet.protocol import Protocol, ReconnectingClientFactory
+from twisted.internet.protocol import Protocol, ClientFactory
 from twisted.internet.protocol import DatagramProtocol
 
 from calvin.utilities.calvinlogger import get_logger
@@ -94,7 +94,7 @@ class DelimiterProtocol(CalvinCBClass, basic.LineReceiver):
         self._callback_execute('data_received', data)
 
 
-class BaseClientProtocolFactory(CalvinCBClass, ReconnectingClientFactory):
+class BaseClientProtocolFactory(CalvinCBClass, ClientFactory):
     def __init__(self, callbacks=None):
         super(BaseClientProtocolFactory, self).__init__(callbacks)
         self._callbacks = callbacks
@@ -116,7 +116,6 @@ class BaseClientProtocolFactory(CalvinCBClass, ReconnectingClientFactory):
                                                delimiter=self._delimiter, host=self._addr, port=self._port,
                                                factory=self)
         reactor.callLater(0, self._callback_execute, 'connected', addr)
-        self.resetDelay()
         return self.protocol
 
     def disconnect(self):
@@ -131,12 +130,10 @@ class BaseClientProtocolFactory(CalvinCBClass, ReconnectingClientFactory):
 
     def clientConnectionLost(self, connector, reason):
         self._callback_execute('connection_lost', (self._addr, self._port), reason.getErrorMessage())
-        ReconnectingClientFactory.clientConnectionLost(self, connector, reason)
 
     # TODO: returns defered ?!?
     def clientConnectionFailed(self, connector, reason):
         self._callback_execute('connection_failed', (self._addr, self._port), reason.getErrorMessage())
-        ReconnectingClientFactory.clientConnectionFailed(self, connector, reason)
 
 
 class UDPClientProtocolFactory(BaseClientProtocolFactory):
