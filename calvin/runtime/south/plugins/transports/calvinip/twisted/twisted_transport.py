@@ -268,10 +268,10 @@ class TCPClientFactory(protocol.ReconnectingClientFactory, CalvinCBClass):
         self._callbacks = callbacks
         super(TCPClientFactory, self).__init__(callbacks)
 
-    def clientConnectionFailed(self, connector, reason):
-        _log.info('Connection failed. reason: %s, dest %s', reason, connector.getDestination())
-        addr = (connector.getDestination().host, connector.getDestination().port)
-        self._callback_execute('connection_failed', addr, reason)
+#    def clientConnectionFailed(self, connector, reason):
+#        _log.info('Connection failed. reason: %s, dest %s', reason, connector.getDestination())
+#        addr = (connector.getDestination().host, connector.getDestination().port)
+#        self._callback_execute('connection_failed', addr, reason)
 
     def startedConnecting(self, connector):
         pass
