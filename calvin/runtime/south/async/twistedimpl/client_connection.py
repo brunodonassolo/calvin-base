@@ -129,13 +129,13 @@ class BaseClientProtocolFactory(CalvinCBClass, ReconnectingClientFactory):
         self.protocol.send(data)
 
     def clientConnectionLost(self, connector, reason):
-        self._callback_execute('connection_lost', (self._addr, self._port), reason.getErrorMessage())
+        #self._callback_execute('connection_lost', (self._addr, self._port), reason.getErrorMessage())
         _log.info('Lost connection.  Reason: %s' % reason)
         ReconnectingClientFactory.clientConnectionLost(self, connector, reason) 
 
     # TODO: returns defered ?!?
     def clientConnectionFailed(self, connector, reason):
-        self._callback_execute('connection_failed', (self._addr, self._port), reason.getErrorMessage())
+        #self._callback_execute('connection_failed', (self._addr, self._port), reason.getErrorMessage())
         _log.info('Connection failed. Reason: %s' % reason)
         ReconnectingClientFactory.clientConnectionFailed(self, connector, reason) 
 
