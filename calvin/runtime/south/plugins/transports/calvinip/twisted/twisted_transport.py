@@ -262,6 +262,8 @@ class TwistedCalvinTransport(base_transport.CalvinTransportBase):
 
 class TCPClientFactory(protocol.ReconnectingClientFactory, CalvinCBClass):
     protocol = StringProtocol
+    maxDelay = 10
+    initialDelay = 0.1
 
     def __init__(self, callbacks):
         # For the protocol
