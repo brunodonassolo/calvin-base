@@ -95,6 +95,8 @@ class DelimiterProtocol(CalvinCBClass, basic.LineReceiver):
 
 
 class BaseClientProtocolFactory(CalvinCBClass, ReconnectingClientFactory):
+    maxDelay = 10
+    initialDelay = 0.1
     def __init__(self, callbacks=None):
         super(BaseClientProtocolFactory, self).__init__(callbacks)
         self._callbacks = callbacks
