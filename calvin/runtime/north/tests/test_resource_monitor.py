@@ -67,7 +67,7 @@ class TestCpuMonitor(object):
         Verify if storage is as expected
         """
         values = [0, 25, 50, 75, 100]
-        cpu_values = [1, 100, 1000, 3000, 6000, 10000, 100000]
+        cpu_values = [1, 100, 500, 1000, 3000, 6000, 10000, 100000]
         for i in values:
             # verify set return
             self.done = False
@@ -160,7 +160,7 @@ class TestCpuMonitor(object):
         Test valid values for CPU power.
         Verify if storage is as expected
         """
-        values = ["1", "100", "1000", "3000", "6000", "10000", "100000"]
+        values = ["1", "100", "500", "1000", "3000", "6000", "10000", "100000"]
         for i in values:
             # verify set return
             self.done = False
