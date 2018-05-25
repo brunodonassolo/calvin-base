@@ -977,13 +977,9 @@ class AppManager(object):
             runtimes_set = set()
             for actor, actorPlac in opt.iteritems():
                 runtimes_set.add(actorPlac.runtime)
-            if len(runtimes_set) == 0:
-                cost = float('inf')
-            else:
-                multiplier = 4*len(actor_ids)
-                cost += multiplier*(len(app.runtimes_nbr) - len(runtimes_set))
-            if len(actor_ids) != len(opt):
-                cost = float('inf') # not all actors places, worst placement possible
+            multiplier = 4*len(actor_ids)
+            cost += multiplier*(len(app.runtimes_nbr) - len(runtimes_set))
+            cost += multiplier*len(app.runtimes_nbr)*(len(actor_ids) - len(opt))
             place_set_sorted.append((opt, cost))
         place_set_sorted = sorted(place_set_sorted, key=lambda k : k[1])
         cb_cost_calculated(place_set_sorted)
@@ -1012,13 +1008,9 @@ class AppManager(object):
                 if actorPlac.phys_link != "":
                     cost += float(app.phys_link_latency[actorPlac.phys_link])
                 runtimes_set.add(actorPlac.runtime)
-            if len(runtimes_set) == 0:
-                cost = float('inf')
-            else:
-                multiplier = 1000000*app.link_placement_nbr
-                cost += multiplier*(len(app.runtimes_nbr) - len(runtimes_set))
-            if len(actor_ids) != len(opt):
-                cost = float('inf') # not all actors places, worst placement possible
+            multiplier = 1000000*app.link_placement_nbr
+            cost += multiplier*(len(app.runtimes_nbr) - len(runtimes_set))
+            cost += multiplier*len(app.runtimes_nbr)*(len(actor_ids) - len(opt))
             place_set_sorted.append((opt, cost))
         place_set_sorted = sorted(place_set_sorted, key=lambda k : k[1])
         print place_set_sorted
@@ -1053,13 +1045,9 @@ class AppManager(object):
             for actor, actorPlac in opt.iteritems():
                 cost += self.cost_for_runtime(app, actor, actorPlac.runtime) + self.cost_for_link(app, actorPlac.link, actorPlac.phys_link)
                 runtimes_set.add(actorPlac.runtime)
-            if len(runtimes_set) == 0:
-                cost = float('inf')
-            else:
-                multiplier = 4*(len(actor_ids)+app.link_placement_nbr)
-                cost += multiplier*(len(app.runtimes_nbr) - len(runtimes_set))
-            if len(actor_ids) != len(opt):
-                cost = float('inf') # not all actors places, worst placement possible
+            multiplier = 4*(len(actor_ids)+app.link_placement_nbr)
+            cost += multiplier*(len(app.runtimes_nbr) - len(runtimes_set))
+            cost += multiplier*len(app.runtimes_nbr)*(len(actor_ids) - len(opt))
             place_set_sorted.append((opt, cost))
         place_set_sorted = sorted(place_set_sorted, key=lambda k : k[1])
         cb_cost_calculated(place_set_sorted)
