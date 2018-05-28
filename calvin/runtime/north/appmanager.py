@@ -1016,7 +1016,7 @@ class AppManager(object):
         print place_set_sorted
         cb_cost_calculated(place_set_sorted)
 
-    def best_calculate_cost_for_placement(self, app, actor_ids, place_set, cb_cost_calculated):
+    def best_calculate_cost_for_placement(self, app, actor_ids, place_set, cb_cost_calculated, worst):
 
         app.dynamic_capabilities = collections.Counter()
         # request for unnkown values needed by cost functions
@@ -1025,19 +1025,19 @@ class AppManager(object):
                 if actorPlac.runtime not in app.runtime_cpu or actorPlac.runtime not in app.runtime_ram:
                     if actorPlac.runtime not in app.dynamic_capabilities:
                         app.dynamic_capabilities.update({actorPlac.runtime : 2 })
-                        self.storage.get("nodeCpu-", actorPlac.runtime, cb=CalvinCB(func=self.collect_runtime_cpu, app=app, update_cb=CalvinCB(self.best_calculate_cost_for_placement_finish, app, actor_ids, place_set, cb_cost_calculated)))
-                        self.storage.get("nodeRam-", actorPlac.runtime, cb=CalvinCB(func=self.collect_runtime_ram, app=app, update_cb=CalvinCB(self.best_calculate_cost_for_placement_finish, app, actor_ids, place_set, cb_cost_calculated)))
+                        self.storage.get("nodeCpu-", actorPlac.runtime, cb=CalvinCB(func=self.collect_runtime_cpu, app=app, update_cb=CalvinCB(self.best_calculate_cost_for_placement_finish, app, actor_ids, place_set, cb_cost_calculated, worst)))
+                        self.storage.get("nodeRam-", actorPlac.runtime, cb=CalvinCB(func=self.collect_runtime_ram, app=app, update_cb=CalvinCB(self.best_calculate_cost_for_placement_finish, app, actor_ids, place_set, cb_cost_calculated, worst)))
                 if actorPlac.phys_link not in app.phys_link_bandwidth or actorPlac.phys_link not in app.phys_link_latency:
                     if actorPlac.phys_link != "" and actorPlac.phys_link not in app.dynamic_capabilities:
                         app.dynamic_capabilities.update({actorPlac.phys_link : 2 })
-                        self.storage.get("linkBandwidth-", actorPlac.phys_link, cb=CalvinCB(func=self.collect_phys_link_bandwidth, app=app, update_cb=CalvinCB(self.best_calculate_cost_for_placement_finish, app, actor_ids, place_set, cb_cost_calculated)))
-                        self.storage.get("linkLatency-", actorPlac.phys_link, cb=CalvinCB(func=self.collect_phys_link_latency, app=app, update_cb=CalvinCB(self.best_calculate_cost_for_placement_finish, app, actor_ids, place_set, cb_cost_calculated)))
+                        self.storage.get("linkBandwidth-", actorPlac.phys_link, cb=CalvinCB(func=self.collect_phys_link_bandwidth, app=app, update_cb=CalvinCB(self.best_calculate_cost_for_placement_finish, app, actor_ids, place_set, cb_cost_calculated, worst)))
+                        self.storage.get("linkLatency-", actorPlac.phys_link, cb=CalvinCB(func=self.collect_phys_link_latency, app=app, update_cb=CalvinCB(self.best_calculate_cost_for_placement_finish, app, actor_ids, place_set, cb_cost_calculated, worst)))
 
         if self._calculate_cost_for_placement_verify(app):
-            self.best_calculate_cost_for_placement_finish(app, actor_ids, place_set, cb_cost_calculated)
+            self.best_calculate_cost_for_placement_finish(app, actor_ids, place_set, cb_cost_calculated, worst)
 
 
-    def best_calculate_cost_for_placement_finish(self, app, actor_ids, place_set, cb_cost_calculated):
+    def best_calculate_cost_for_placement_finish(self, app, actor_ids, place_set, cb_cost_calculated, worst):
         place_set_sorted = []
         for opt,old_cost in place_set:
             cost = 0.0
@@ -1046,14 +1046,18 @@ class AppManager(object):
                 cost += self.cost_for_runtime(app, actor, actorPlac.runtime) + self.cost_for_link(app, actorPlac.link, actorPlac.phys_link)
                 runtimes_set.add(actorPlac.runtime)
             multiplier = 4*(len(actor_ids)+app.link_placement_nbr)
-            cost += multiplier*(len(app.runtimes_nbr) - len(runtimes_set))
-            cost += multiplier*len(app.runtimes_nbr)*(len(actor_ids) - len(opt))
+            if not worst:
+                cost += multiplier*(len(app.runtimes_nbr) - len(runtimes_set))
+                cost += multiplier*len(app.runtimes_nbr)*(len(actor_ids) - len(opt))
+            else:
+                cost += multiplier*(len(runtimes_set)/len(app.runtimes_nbr))
+                cost += multiplier*len(app.runtimes_nbr)*(len(opt)/len(actor_ids))
             place_set_sorted.append((opt, cost))
-        place_set_sorted = sorted(place_set_sorted, key=lambda k : k[1])
+        place_set_sorted = sorted(place_set_sorted, key=lambda k : k[1], reverse=worst)
         cb_cost_calculated(place_set_sorted)
 
 
-    def best_first_actor_placement(self, app, actor_ids, n_samples, orphan_actors, place_set, cb_finish_placement):
+    def best_first_actor_placement(self, app, actor_ids, n_samples, orphan_actors, place_set, cb_finish_placement, worst):
 
         place_set = place_set[:n_samples]
         # all actors places... call finished callback
@@ -1096,7 +1100,7 @@ class AppManager(object):
             heappush(orphan_actors, (val, actor))
 
         # get cost to next step of loop
-        self.best_calculate_cost_for_placement(app, actor_ids, place_set_for_actor, cb_cost_calculated=CalvinCB(self.best_first_actor_placement, app, actor_ids, n_samples, orphan_actors, cb_finish_placement = cb_finish_placement))
+        self.best_calculate_cost_for_placement(app, actor_ids, place_set_for_actor, cb_cost_calculated=CalvinCB(self.best_first_actor_placement, app, actor_ids, n_samples, orphan_actors, cb_finish_placement = cb_finish_placement, worst=worst), worst=worst)
 
     def best_first_placement_finish(self, app, actor_ids, n_samples, place_set):
         _log.debug("Ending placing actors:...")
@@ -1138,7 +1142,19 @@ class AppManager(object):
 
         _log.debug("Starting placing the actors...")
         place_set = [({}, 0.0)]
-        self.best_first_actor_placement(app, actor_ids, n_samples, orphan_actors, place_set, cb_finish_placement=CalvinCB(self.best_first_placement_finish, app, actor_ids, n_samples))
+        self.best_first_actor_placement(app, actor_ids, n_samples, orphan_actors, place_set, cb_finish_placement=CalvinCB(self.best_first_placement_finish, app, actor_ids, n_samples), worst=False)
+
+    def worst_placement(self, app, actor_ids):
+        n_samples = _conf.get('global', 'deployment_n_samples')
+        orphan_actors = []
+        for actor_id in actor_ids:
+            _log.debug("Actor id: %s, name: %s" % (actor_id, app.actors[actor_id]))
+            if len(self._node.am.actors[actor_id].inports.values()) == 0:
+                heappush(orphan_actors, (-100000, actor_id))
+
+        _log.debug("Starting placing the actors...")
+        place_set = [({}, 0.0)]
+        self.best_first_actor_placement(app, actor_ids, n_samples, orphan_actors, place_set, cb_finish_placement=CalvinCB(self.worst_placement_finish, app, actor_ids, n_samples), worst=True)
 
     def latency_actor_placement(self, app, actor_ids, n_samples, orphan_actors, place_set, cb_finish_placement):
 
@@ -1197,6 +1213,36 @@ class AppManager(object):
         status = response.CalvinResponse(True)
         if len(actor_ids) > len(placement_lat):
             print "It was impossible to place all actors(total: %d, placed: %d), aborting..." % (len(actor_ids), len(placement_lat))
+            status = response.CalvinResponse(False, data='Impossible to place all actors')
+            app._org_cb(status=status, placement={})
+            del app._org_cb
+            _log.analyze(self._node.id, "+ DONE", {'app_id': app.id}, tb=True)
+            self._destroy(app, None)
+            return
+
+
+        actor_placement = { actor_id: (node_id if isinstance(node_id, list) else [node_id]) for actor_id, node_id in app.actor_placement.iteritems() }
+        for actor_id, node_id in actor_placement.iteritems():
+            _log.debug("Actor deployment %s \t-> %s" % (app.actors[actor_id], node_id))
+            self._node.am.robust_migrate(actor_id, node_id[:], None)
+
+        app._org_cb(status=status, placement=actor_placement)
+        del app._org_cb
+        _log.analyze(self._node.id, "+ DONE", {'app_id': app.id}, tb=True)
+        _log.info("Deployment: app: %s: finished placement: total elapsed time %d" % (app.id, time.time() - app.start_time))
+
+    def worst_placement_finish(self, app, actor_ids, n_samples, place_set):
+        _log.debug("Ending placing actors:...")
+        _log.debug(str(place_set))
+        print "Worst First placement cost: %f, n_samples: %d" % (place_set[0][1], n_samples)
+        placement_best = { actor: plac.runtime for actor,plac in place_set[0][0].iteritems() }
+        print placement_best
+        app.actor_placement.update(placement_best)
+        print "FINAL"
+        print app.actor_placement
+        status = response.CalvinResponse(True)
+        if len(actor_ids) > len(placement_best):
+            print "It was impossible to place all actors(total: %d, placed: %d), aborting..." % (len(actor_ids), len(placement_best))
             status = response.CalvinResponse(False, data='Impossible to place all actors')
             app._org_cb(status=status, placement={})
             del app._org_cb
@@ -1279,6 +1325,8 @@ class AppManager(object):
             placement_best = self.random_placement(app, actor_ids)
         elif _conf.get('global', 'deployment_algorithm') == 'latency':
             placement_best = self.latency_placement(app, actor_ids)
+        elif _conf.get('global', 'deployment_algorithm') == 'worst':
+            placement_best = self.worst_placement(app, actor_ids)
         else:
             placement_best = self.best_first_placement(app, actor_ids)
 
