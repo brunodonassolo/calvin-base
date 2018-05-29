@@ -1046,12 +1046,12 @@ class AppManager(object):
                 cost += self.cost_for_runtime(app, actor, actorPlac.runtime) + self.cost_for_link(app, actorPlac.link, actorPlac.phys_link)
                 runtimes_set.add(actorPlac.runtime)
             multiplier = 4*(len(actor_ids)+app.link_placement_nbr)
-            if not worst:
+            if worst:
+                cost += multiplier*len(runtimes_set)
+                cost += multiplier*len(app.runtimes_nbr)*len(opt)
+            else:
                 cost += multiplier*(len(app.runtimes_nbr) - len(runtimes_set))
                 cost += multiplier*len(app.runtimes_nbr)*(len(actor_ids) - len(opt))
-            else:
-                cost += multiplier*(len(runtimes_set)/len(app.runtimes_nbr))
-                cost += multiplier*len(app.runtimes_nbr)*(len(opt)/len(actor_ids))
             place_set_sorted.append((opt, cost))
         place_set_sorted = sorted(place_set_sorted, key=lambda k : k[1], reverse=worst)
         cb_cost_calculated(place_set_sorted)
