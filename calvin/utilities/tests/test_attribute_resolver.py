@@ -41,14 +41,21 @@ class AttributeResolverTester(unittest.TestCase):
         self.assertEqual(att_list[0][2], 'cpuTotal')
         self.assertEqual(att_list[0][3], '1')
         self.assertEqual(att_list[0][4], '100')
-        self.assertEqual(att_list[0][5], '500')
-        self.assertEqual(att_list[0][6], '1000')
-        self.assertEqual(att_list[0][7], '3000')
-        self.assertEqual(att_list[0][8], '6000')
-        self.assertEqual(att_list[0][9], '10000')
-        self.assertEqual(att_list[0][10], '100000')
+        self.assertEqual(att_list[0][5], '200')
+        self.assertEqual(att_list[0][6], '300')
+        self.assertEqual(att_list[0][7], '400')
+        self.assertEqual(att_list[0][8], '500')
+        self.assertEqual(att_list[0][9], '600')
+        self.assertEqual(att_list[0][10], '700')
+        self.assertEqual(att_list[0][11], '800')
+        self.assertEqual(att_list[0][12], '900')
+        self.assertEqual(att_list[0][13], '1000')
+        self.assertEqual(att_list[0][14], '3000')
+        self.assertEqual(att_list[0][15], '6000')
+        self.assertEqual(att_list[0][16], '10000')
+        self.assertEqual(att_list[0][17], '100000')
 
-        self.assertEqual(att.get_indexed_public()[0], '/node/attribute/cpuTotal/1/100/500/1000/3000/6000/10000/100000')
+        self.assertEqual(att.get_indexed_public()[0], '/node/attribute/cpuTotal/1/100/200/300/400/500/600/700/800/900/1000/3000/6000/10000/100000')
 
     def test_cpu_total_invalid_value(self):
         """
