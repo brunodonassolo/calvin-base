@@ -158,6 +158,7 @@ class TestDeployScript(unittest.TestCase):
         assert helpers.retry(30, partial(request_handler.get_index, rt2, format_index_string(['node_name', {'organization': 'org.testexample', 'name': 'testNode3'}])), lambda _: True, "Failed to get index")
 
     @pytest.mark.slow
+    @pytest.mark.skip
     def testNetworkNoLink(self):
         _log.analyze("TESTRUN", "+", {})
 
@@ -313,6 +314,7 @@ class TestDeployScript(unittest.TestCase):
         request_handler.delete_application(rt1, result['application_id'])
 
     @pytest.mark.slow
+    @pytest.mark.skip
     def testNetworkLineNoLink(self):
         #       --- linkA --- src,sum --- linkB --- snk
         #  rt1  --- 1G  --- rt2     --- 1s    --- rt3
