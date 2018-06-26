@@ -928,9 +928,6 @@ class AppManager(object):
     def random_placement_finish(self, app, actor_ids, n_samples, place_set):
         _log.debug("Ending placing actors:...")
         _log.debug(str(place_set))
-        if len(place_set) == 0:
-            self.impossible_to_place_app_cleanup(app)
-            return
         print "Random placement cost: %f, n_samples: %d" % (place_set[0][1], n_samples)
         print place_set[0][0]
         placement_best = { actor: plac.runtime for actor,plac in place_set[0][0].iteritems() }
@@ -940,7 +937,11 @@ class AppManager(object):
         status = response.CalvinResponse(True)
         if len(actor_ids) > len(placement_best):
             print "It was impossible to place all actors(total: %d, placed: %d), aborting..." % (len(actor_ids), len(placement_best))
-            self.impossible_to_place_app_cleanup(app)
+            status = response.CalvinResponse(False, data='Impossible to place all actors')
+            app._org_cb(status=status, placement={})
+            del app._org_cb
+            _log.analyze(self._node.id, "+ DONE", {'app_id': app.id}, tb=True)
+            self._destroy(app, None)
             return
 
 
@@ -969,24 +970,16 @@ class AppManager(object):
         app.dynamic_capabilities += collections.Counter() # remove empty entries
         return len(app.dynamic_capabilities) == 0
 
-    def update_runtimes_set(self, opt, runtimes_set):
-        good_placement = True
-        for actor, actorPlac in opt.iteritems():
-            if actorPlac.runtime in runtimes_set:
-                good_placement = False
-            runtimes_set.add(actorPlac.runtime)
-        return good_placement
-
     def random_calculate_cost_for_placement(self, app, actor_ids, place_set, cb_cost_calculated):
         place_set_sorted = []
         for opt,old_cost in place_set:
             cost = 0.0
             runtimes_set = set()
-            if not self.update_runtimes_set(opt, runtimes_set):
-                continue
-            #multiplier = 4*len(actor_ids)
-            #cost += multiplier*(len(app.runtimes_nbr) - len(runtimes_set))
-            #cost += multiplier*len(app.runtimes_nbr)*(len(actor_ids) - len(opt))
+            for actor, actorPlac in opt.iteritems():
+                runtimes_set.add(actorPlac.runtime)
+            multiplier = 4*len(actor_ids)
+            cost += multiplier*(len(app.runtimes_nbr) - len(runtimes_set))
+            cost += multiplier*len(app.runtimes_nbr)*(len(actor_ids) - len(opt))
             place_set_sorted.append((opt, cost))
         place_set_sorted = sorted(place_set_sorted, key=lambda k : k[1])
         cb_cost_calculated(place_set_sorted)
@@ -1011,14 +1004,13 @@ class AppManager(object):
         for opt,old_cost in place_set:
             cost = 0.0
             runtimes_set = set()
-            if not self.update_runtimes_set(opt, runtimes_set):
-                continue
             for actor, actorPlac in opt.iteritems():
                 if actorPlac.phys_link != "":
                     cost += float(app.phys_link_latency[actorPlac.phys_link])
-            #multiplier = 1000000*app.link_placement_nbr
-            #cost += multiplier*(len(app.runtimes_nbr) - len(runtimes_set))
-            #cost += multiplier*len(app.runtimes_nbr)*(len(actor_ids) - len(opt))
+                runtimes_set.add(actorPlac.runtime)
+            multiplier = 1000000*app.link_placement_nbr
+            cost += multiplier*(len(app.runtimes_nbr) - len(runtimes_set))
+            cost += multiplier*len(app.runtimes_nbr)*(len(actor_ids) - len(opt))
             place_set_sorted.append((opt, cost))
         place_set_sorted = sorted(place_set_sorted, key=lambda k : k[1])
         print place_set_sorted
@@ -1050,17 +1042,16 @@ class AppManager(object):
         for opt,old_cost in place_set:
             cost = 0.0
             runtimes_set = set()
-            if not self.update_runtimes_set(opt, runtimes_set):
-                continue
             for actor, actorPlac in opt.iteritems():
                 cost += self.cost_for_runtime(app, actor, actorPlac.runtime) + self.cost_for_link(app, actorPlac.link, actorPlac.phys_link)
-            #multiplier = 4*(len(actor_ids)+app.link_placement_nbr)
-            #if worst:
-            #    cost += multiplier*len(runtimes_set)
-            #    cost += multiplier*len(app.runtimes_nbr)*len(opt)
-            #else:
-            #    cost += multiplier*(len(app.runtimes_nbr) - len(runtimes_set))
-            #    cost += multiplier*len(app.runtimes_nbr)*(len(actor_ids) - len(opt))
+                runtimes_set.add(actorPlac.runtime)
+            multiplier = 4*(len(actor_ids)+app.link_placement_nbr)
+            if worst:
+                cost += multiplier*len(runtimes_set)
+                cost += multiplier*len(app.runtimes_nbr)*len(opt)
+            else:
+                cost += multiplier*(len(app.runtimes_nbr) - len(runtimes_set))
+                cost += multiplier*len(app.runtimes_nbr)*(len(actor_ids) - len(opt))
             place_set_sorted.append((opt, cost))
         place_set_sorted = sorted(place_set_sorted, key=lambda k : k[1], reverse=worst)
         cb_cost_calculated(place_set_sorted)
@@ -1111,19 +1102,9 @@ class AppManager(object):
         # get cost to next step of loop
         self.best_calculate_cost_for_placement(app, actor_ids, place_set_for_actor, cb_cost_calculated=CalvinCB(self.best_first_actor_placement, app, actor_ids, n_samples, orphan_actors, cb_finish_placement = cb_finish_placement, worst=worst), worst=worst)
 
-    def impossible_to_place_app_cleanup(self, app):
-        status = response.CalvinResponse(False, data='Impossible to place all actors')
-        app._org_cb(status=status, placement={})
-        del app._org_cb
-        _log.analyze(self._node.id, "+ DONE", {'app_id': app.id}, tb=True)
-        self._destroy(app, None)
-
     def best_first_placement_finish(self, app, actor_ids, n_samples, place_set):
         _log.debug("Ending placing actors:...")
         _log.debug(str(place_set))
-        if len(place_set) == 0:
-            self.impossible_to_place_app_cleanup(app)
-            return
         print "Best First placement cost: %f, n_samples: %d" % (place_set[0][1], n_samples)
         placement_best = { actor: plac.runtime for actor,plac in place_set[0][0].iteritems() }
         print placement_best
@@ -1133,7 +1114,11 @@ class AppManager(object):
         status = response.CalvinResponse(True)
         if len(actor_ids) > len(placement_best):
             print "It was impossible to place all actors(total: %d, placed: %d), aborting..." % (len(actor_ids), len(placement_best))
-            self.impossible_to_place_app_cleanup(app)
+            status = response.CalvinResponse(False, data='Impossible to place all actors')
+            app._org_cb(status=status, placement={})
+            del app._org_cb
+            _log.analyze(self._node.id, "+ DONE", {'app_id': app.id}, tb=True)
+            self._destroy(app, None)
             return
 
 
@@ -1219,9 +1204,6 @@ class AppManager(object):
     def latency_placement_finish(self, app, actor_ids, n_samples, place_set):
         _log.debug("Ending placing actors:...")
         _log.debug(str(place_set))
-        if len(place_set) == 0:
-            self.impossible_to_place_app_cleanup(app)
-            return
         print "Latency placement cost: %f, n_samples: %d" % (place_set[0][1], n_samples)
         placement_lat = { actor: plac.runtime for actor,plac in place_set[0][0].iteritems() }
         print placement_lat
@@ -1231,7 +1213,11 @@ class AppManager(object):
         status = response.CalvinResponse(True)
         if len(actor_ids) > len(placement_lat):
             print "It was impossible to place all actors(total: %d, placed: %d), aborting..." % (len(actor_ids), len(placement_lat))
-            self.impossible_to_place_app_cleanup(app)
+            status = response.CalvinResponse(False, data='Impossible to place all actors')
+            app._org_cb(status=status, placement={})
+            del app._org_cb
+            _log.analyze(self._node.id, "+ DONE", {'app_id': app.id}, tb=True)
+            self._destroy(app, None)
             return
 
 
@@ -1248,9 +1234,6 @@ class AppManager(object):
     def worst_placement_finish(self, app, actor_ids, n_samples, place_set):
         _log.debug("Ending placing actors:...")
         _log.debug(str(place_set))
-        if len(place_set) == 0:
-            self.impossible_to_place_app_cleanup(app)
-            return
         print "Worst First placement cost: %f, n_samples: %d" % (place_set[0][1], n_samples)
         placement_best = { actor: plac.runtime for actor,plac in place_set[0][0].iteritems() }
         print placement_best
@@ -1260,7 +1243,11 @@ class AppManager(object):
         status = response.CalvinResponse(True)
         if len(actor_ids) > len(placement_best):
             print "It was impossible to place all actors(total: %d, placed: %d), aborting..." % (len(actor_ids), len(placement_best))
-            self.impossible_to_place_app_cleanup(app)
+            status = response.CalvinResponse(False, data='Impossible to place all actors')
+            app._org_cb(status=status, placement={})
+            del app._org_cb
+            _log.analyze(self._node.id, "+ DONE", {'app_id': app.id}, tb=True)
+            self._destroy(app, None)
             return
 
 
