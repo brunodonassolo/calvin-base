@@ -13,7 +13,7 @@ def cpu_avail_discretizer(cpu):
     return int(perc_rounded)
 
 def cpu_discretizer(cpu):
-    cpu_keys = [1, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 3000, 6000, 10000, 100000]
+    cpu_keys = [1, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000, 100000]
     if cpu < 1:
         return 1
     if cpu >= 100000:

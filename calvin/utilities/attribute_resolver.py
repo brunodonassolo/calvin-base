@@ -55,7 +55,7 @@ cpuAvail_help = {"0": "No CPU available",
 cpuAffinity_keys = ["dedicated"]
 cpuAffinity_help = {"dedicated": "Runs in a unique CPU"}
 
-cpuTotal_keys = ["1", "100", "200", "300", "400", "500", "600", "700", "800", "900", "1000", "3000", "6000", "10000", "100000"]
+cpuTotal_keys = ["1", "100", "200", "300", "400", "500", "600", "700", "800", "900", "1000", "2000", "3000", "4000", "5000", "6000", "7000", "8000", "9000", "10000", "100000"]
 cpuTotal_help = {"1": "One MIPS",
                  "100": "One hundred MIPS",
                  "200": "Two hundred MIPS",
@@ -67,8 +67,14 @@ cpuTotal_help = {"1": "One MIPS",
                  "800": "Eight hundreds MIPS",
                  "900": "Nine hundreds MIPS",
                  "1000": "One thousand MIPS",
+                 "2000": "Two thousand MIPS",
                  "3000": "Three thousands MIPS",
+                 "4000": "Four thousands MIPS",
+                 "5000": "Five thousands MIPS",
                  "6000": "Six thousands MIPS",
+                 "7000": "Seven thousands MIPS",
+                 "8000": "Eight thousands MIPS",
+                 "9000": "Nine thousands MIPS",
                  "10000": "Ten thousand MIPS",
                  "100000":"One hundred thousand MIPS"}
 

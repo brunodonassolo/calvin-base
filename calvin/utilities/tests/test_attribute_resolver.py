@@ -50,12 +50,18 @@ class AttributeResolverTester(unittest.TestCase):
         self.assertEqual(att_list[0][11], '800')
         self.assertEqual(att_list[0][12], '900')
         self.assertEqual(att_list[0][13], '1000')
-        self.assertEqual(att_list[0][14], '3000')
-        self.assertEqual(att_list[0][15], '6000')
-        self.assertEqual(att_list[0][16], '10000')
-        self.assertEqual(att_list[0][17], '100000')
+        self.assertEqual(att_list[0][14], '2000')
+        self.assertEqual(att_list[0][15], '3000')
+        self.assertEqual(att_list[0][16], '4000')
+        self.assertEqual(att_list[0][17], '5000')
+        self.assertEqual(att_list[0][18], '6000')
+        self.assertEqual(att_list[0][19], '7000')
+        self.assertEqual(att_list[0][20], '8000')
+        self.assertEqual(att_list[0][21], '9000')
+        self.assertEqual(att_list[0][22], '10000')
+        self.assertEqual(att_list[0][23], '100000')
 
-        self.assertEqual(att.get_indexed_public()[0], '/node/attribute/cpuTotal/1/100/200/300/400/500/600/700/800/900/1000/3000/6000/10000/100000')
+        self.assertEqual(att.get_indexed_public()[0], '/node/attribute/cpuTotal/1/100/200/300/400/500/600/700/800/900/1000/2000/3000/4000/5000/6000/7000/8000/9000/10000/100000')
 
     def test_cpu_total_invalid_value(self):
         """
