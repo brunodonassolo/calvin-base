@@ -34,6 +34,7 @@ from calvin.utilities import calvinconfig
 _log = calvinlogger.get_logger(__name__)
 _conf = calvinconfig.get()
 
+COST_LINK=0.01
 
 class ActorPlacement():
     def __init__(self, runtime, link, phys_link):
@@ -491,6 +492,8 @@ class AppManager(object):
         app.runtime_ram = {}    # available RAM in runtimes, runtime -> MB
         app.phys_link_latency = {}  # available latency in physical link
         app.phys_link_bandwidth = {}# available bandwidth in physical link
+        app.monetary_cost_ram = {}
+        app.monetary_cost_cpu = {}
         app.runtimes_nbr = set()
 
         app.link_placement_nbr = len(link_ids) # number of links that must be found
@@ -547,6 +550,19 @@ class AppManager(object):
             value = 0
 
         app.runtime_cpu[key] = value
+        app.dynamic_capabilities.subtract({key : 1})
+
+        if self._calculate_cost_for_placement_verify(app):
+            update_cb()
+
+    def collect_monetary_costs(self, key, value, app, update_cb):
+        try:
+            app.monetary_cost_ram[key] = value['attributes']['public']['cost_ram']
+            app.monetary_cost_cpu[key] = value['attributes']['public']['cost_cpu']
+        except:
+            app.monetary_cost_ram[key] = 0
+            app.monetary_cost_cpu[key] = 0
+
         app.dynamic_capabilities.subtract({key : 1})
 
         if self._calculate_cost_for_placement_verify(app):
@@ -818,71 +834,84 @@ class AppManager(object):
                 parsed.append(i)
         return parsed
 
-    def cost_for_link(self, app, link_id, phy_link_id):
+    def update_cache_cost_link(self, app, link_id):
         from calvin.runtime.north.resource_monitor.link import bandwidth_text2number, latency_text2number
+        link = self._node.link_manager.links[link_id]
+        cost_band = 0.0
+        cost_lat = 0.0
+        for i in self.parse_requirements(link.requirements_get()):
+            if i["op"] == "link_attr_match":
+                if "latency" in i["kwargs"]["index"]:
+                    cost_lat += float(latency_text2number(i["kwargs"]["index"]["latency"]))
+                if "bandwidth" in i["kwargs"]["index"]:
+                    cost_band += float(bandwidth_text2number(i["kwargs"]["index"]["bandwidth"]))
+        app.cost_link_band[link_id] = cost_band
+        app.cost_link_lat[link_id] = cost_lat
+
+    def cost_for_link_v2(self, app, link_id, phy_link_id):
 
         # no link, just returns
         if link_id == "" or phy_link_id == "":
             return 0.0
 
         # cost already calculated and  in the cache, get value and returns...
-        if link_id in app.cost_link_band and link_id in app.cost_link_lat:
-            cost = app.cost_link_band[link_id]/float(app.phys_link_bandwidth[phy_link_id])
-            if app.cost_link_lat[link_id] > 0:
-                cost += float(app.phys_link_latency[phy_link_id])/app.cost_link_lat[link_id]
-            return cost
+        if link_id not in app.cost_link_band or link_id not in app.cost_link_lat:
+            self.update_cache_cost_link(app, link_id)
 
-        link = self._node.link_manager.links[link_id]
-        cost = 0.0
-        cost_band = 0.0
-        cost_lat = 0.0
-        _log.debug("Calculating cost for link %s, phys_link %s" % (link_id, phy_link_id))
-        for i in self.parse_requirements(link.requirements_get()):
-            if i["op"] == "link_attr_match":
-                if "latency" in i["kwargs"]["index"]:
-                    _log.debug(" Required latency: %s" % i["kwargs"]["index"]["latency"])
-                    _log.debug(" Available latency %d" % app.phys_link_latency[phy_link_id])
-                    cost_lat += float(latency_text2number(i["kwargs"]["index"]["latency"]))
-                    cost += float(app.phys_link_latency[phy_link_id])/float(latency_text2number(i["kwargs"]["index"]["latency"]))
-                if "bandwidth" in i["kwargs"]["index"]:
-                    _log.debug(" Required bandwidth: %s" % i["kwargs"]["index"]["bandwidth"])
-                    _log.debug(" Available bandwidth %d" % app.phys_link_bandwidth[phy_link_id])
-                    cost_band += float(bandwidth_text2number(i["kwargs"]["index"]["bandwidth"]))
-                    cost += float(bandwidth_text2number(i["kwargs"]["index"]["bandwidth"]))/float(app.phys_link_bandwidth[phy_link_id])
-        _log.debug("Total cost: %f" % cost)
-        app.cost_link_band[link_id] = cost_band
-        app.cost_link_lat[link_id] = cost_lat
+        _log.debug("Calculating cost v2 for link %s, phys_link %s" % (link_id, phy_link_id))
+        cost = app.cost_link_band[link_id]*COST_LINK
+        _log.debug("Total cost v2: %f" % cost)
         return cost
 
-    def cost_for_runtime(self, app, actor_id, runtime):
-        if actor_id in app.cost_runtime_cpu and actor_id in app.cost_runtime_ram:
-            cost = app.cost_runtime_cpu[actor_id]/(float(app.runtime_cpu[runtime]+0.0001))
-            cost += app.cost_runtime_ram[actor_id]/(float(app.runtime_ram[runtime]+0.0001))
-            return cost
-        _log.debug("Calculating cost for actor %s, runtime %s" % (actor_id, runtime))
-        cost = 0.0
+    def cost_for_link(self, app, link_id, phy_link_id):
+        # no link, just returns
+        if link_id == "" or phy_link_id == "":
+            return 0.0
+
+        # cost already calculated and  in the cache, get value and returns...
+        if (link_id not in app.cost_link_band) or (link_id not in app.cost_link_lat):
+            self.update_cache_cost_link(app, link_id)
+
+        _log.debug("Calculating cost for link %s, phys_link %s" % (link_id, phy_link_id))
+        cost = app.cost_link_band[link_id]/float(app.phys_link_bandwidth[phy_link_id])
+        if app.cost_link_lat[link_id] > 0:
+            cost += float(app.phys_link_latency[phy_link_id])/app.cost_link_lat[link_id]
+        _log.debug("Total cost: %f" % cost)
+        return cost
+
+    def update_cache_cost_actor(self, app, actor_id):
+        _log.debug("Calculating cost for actor %s" % (actor_id))
         cost_cpu = 0.0
         cost_ram = 0.0
         actor = self._node.am.actors[actor_id]
         for i in self.parse_requirements(actor.requirements_get()):
             if i["op"] == "node_attr_match":
                 if "cpu" in i["kwargs"]["index"]:
-                    _log.debug(" Required CPU: %s" % i["kwargs"]["index"]["cpu"])
-                    _log.debug(" Available CPU: %d" % app.runtime_cpu[runtime])
                     cost_cpu += float(i["kwargs"]["index"]["cpu"])
-                    cost += float(i["kwargs"]["index"]["cpu"])/(float(app.runtime_cpu[runtime]+0.0001))
                 if "ram" in i["kwargs"]["index"]:
-                    _log.debug(" Required RAM: %s" % i["kwargs"]["index"]["ram"])
-                    _log.debug(" Available RAM: %d" % app.runtime_ram[runtime])
                     cost_ram += float(i["kwargs"]["index"]["ram"])
-                    cost += float(i["kwargs"]["index"]["ram"])/(float(app.runtime_ram[runtime]) + 0.0001)
-        _log.debug("Total cost: %f" % cost)
         app.cost_runtime_cpu[actor_id] = cost_cpu
         app.cost_runtime_ram[actor_id] = cost_ram
-        cost2 = app.cost_runtime_cpu[actor_id]/(float(app.runtime_cpu[runtime]+0.0001))
-        cost2 += app.cost_runtime_ram[actor_id]/(float(app.runtime_ram[runtime]+0.0001))
+
+    def cost_for_runtime_v2(self, app, actor_id, runtime):
+        if (actor_id not in app.cost_runtime_cpu) or (actor_id not in app.cost_runtime_ram):
+            self.update_cache_cost_actor(app, actor_id)
+
+        _log.debug("Calculating cost v2 for actor %s, runtime %s" % (actor_id, runtime))
+        cost = app.cost_runtime_cpu[actor_id]*app.monetary_cost_cpu[runtime]
+        cost += app.cost_runtime_ram[actor_id]*app.monetary_cost_ram[runtime]
+        _log.debug("Total cost v2: %f" % cost)
         return cost
 
+    def cost_for_runtime(self, app, actor_id, runtime):
+        if (actor_id not in app.cost_runtime_cpu) or (actor_id not in app.cost_runtime_ram):
+            self.update_cache_cost_actor(app, actor_id)
+
+        _log.debug("Calculating cost for actor %s, runtime %s" % (actor_id, runtime))
+        cost = app.cost_runtime_cpu[actor_id]/(float(app.runtime_cpu[runtime]+0.0001))
+        cost += app.cost_runtime_ram[actor_id]/(float(app.runtime_ram[runtime]+0.0001))
+        _log.debug("Total cost: %f" % cost)
+        return cost
 
     def random_actor_placement(self, app, actor_ids):
         orphan_actors = []
@@ -1054,6 +1083,40 @@ class AppManager(object):
             place_set_sorted.append((opt, cost))
         place_set_sorted = sorted(place_set_sorted, key=lambda k : k[1])
         print place_set_sorted
+        cb_cost_calculated(place_set_sorted)
+
+    def money_calculate_cost_for_placement(self, app, actor_ids, place_set, cb_cost_calculated):
+        app.dynamic_capabilities = collections.Counter()
+        # request for unnkown values needed by cost functions
+        for opt,old_cost in place_set:
+            for actor, actorPlac in opt.iteritems():
+                if actorPlac.runtime not in app.runtime_cpu or actorPlac.runtime not in app.runtime_ram:
+                    if actorPlac.runtime not in app.dynamic_capabilities:
+                        app.dynamic_capabilities.update({actorPlac.runtime : 3 })
+                        self.storage.get("nodeCpu-", actorPlac.runtime, cb=CalvinCB(func=self.collect_runtime_cpu, app=app, update_cb=CalvinCB(self.money_calculate_cost_for_placement_finish, app, actor_ids, place_set, cb_cost_calculated)))
+                        self.storage.get("nodeRam-", actorPlac.runtime, cb=CalvinCB(func=self.collect_runtime_ram, app=app, update_cb=CalvinCB(self.money_calculate_cost_for_placement_finish, app, actor_ids, place_set, cb_cost_calculated)))
+                        self.storage.get_node(actorPlac.runtime, cb=CalvinCB(func=self.collect_monetary_costs, app=app, update_cb=CalvinCB(self.money_calculate_cost_for_placement_finish, app, actor_ids, place_set, cb_cost_calculated)))
+                if actorPlac.phys_link not in app.phys_link_bandwidth or actorPlac.phys_link not in app.phys_link_latency:
+                    if actorPlac.phys_link != "" and actorPlac.phys_link not in app.dynamic_capabilities:
+                        app.dynamic_capabilities.update({actorPlac.phys_link : 1 })
+                        self.storage.get("linkBandwidth-", actorPlac.phys_link, cb=CalvinCB(func=self.collect_phys_link_bandwidth, app=app, update_cb=CalvinCB(self.money_calculate_cost_for_placement_finish, app, actor_ids, place_set, cb_cost_calculated)))
+
+        if self._calculate_cost_for_placement_verify(app):
+            self.money_calculate_cost_for_placement_finish(app, actor_ids, place_set, cb_cost_calculated)
+
+    def money_calculate_cost_for_placement_finish(self, app, actor_ids, place_set, cb_cost_calculated):
+        place_set_sorted = []
+        for opt,old_cost in place_set:
+            cost = 0.0
+            runtimes_set = set()
+            for actor, actorPlac in opt.iteritems():
+                cost += self.cost_for_runtime_v2(app, actor, actorPlac.runtime) + self.cost_for_link_v2(app, actorPlac.link, actorPlac.phys_link)
+                runtimes_set.add(actorPlac.runtime)
+            multiplier = 1000000*COST_LINK*(len(actor_ids)+app.link_placement_nbr) # 1000000 max bandwidth value
+            cost += multiplier*(len(app.runtimes_nbr) - len(runtimes_set))
+            cost += multiplier*len(app.runtimes_nbr)*(len(actor_ids) - len(opt))
+            place_set_sorted.append((opt, cost))
+        place_set_sorted = sorted(place_set_sorted, key=lambda k : k[1])
         cb_cost_calculated(place_set_sorted)
 
     def best_calculate_cost_for_placement(self, app, actor_ids, place_set, cb_cost_calculated, worst):
@@ -1241,6 +1304,51 @@ class AppManager(object):
         # get cost to next step of loop
         self.latency_calculate_cost_for_placement(app, actor_ids, place_set_for_actor, cb_cost_calculated=CalvinCB(self.latency_actor_placement, app, actor_ids, n_samples, orphan_actors, cb_finish_placement = cb_finish_placement))
 
+    def money_actor_placement(self, app, actor_ids, n_samples, orphan_actors, place_set, cb_finish_placement):
+
+        place_set = place_set[:n_samples]
+        # all actors places... call finished callback
+        if len(orphan_actors) == 0:
+            cb_finish_placement(place_set)
+            return
+
+        next_actor = heappop(orphan_actors)
+        prio = next_actor[0]
+        actor_id = next_actor[1]
+
+        _log.debug("Actor id: %s, name: %s, prio(orphan): %d" % (actor_id, app.actors[actor_id], prio))
+        place_set_for_actor = []
+        for idx in range(0, len(place_set)):
+            actor_placement = place_set[idx][0]
+            plac_cost = place_set[idx][1]
+            options = self.incremental_placement(app, actor_placement, actor_id)
+            if (len(options) == 0):
+                place_set_for_actor.append((actor_placement, plac_cost))
+            for opt in options:
+                new_actor_placement = copy.copy(actor_placement)
+                new_actor_placement[actor_id] = options[opt]
+                _log.debug(str(new_actor_placement))
+                place_set_for_actor.append((new_actor_placement, 0.0))
+
+        # update next actors to be placed
+        neigh_actors = {}
+        for i in self._node.am.actors[actor_id].outports.values():
+            for p in i.get_peers():
+                try:
+                    neigh_id = self._node.pm._get_local_port(port_id=p[1]).owner.id
+                except:
+                    _log.debug("Didn't find neighbor actor")
+                    continue
+                if not neigh_id in neigh_actors:
+                    neigh_actors[neigh_id] = -1
+                else:
+                    neigh_actors[neigh_id] -= 1
+        for actor, val in neigh_actors.iteritems():
+            heappush(orphan_actors, (val, actor))
+
+        # get cost to next step of loop
+        self.money_calculate_cost_for_placement(app, actor_ids, place_set_for_actor, cb_cost_calculated=CalvinCB(self.money_actor_placement, app, actor_ids, n_samples, orphan_actors, cb_finish_placement = cb_finish_placement))
+
     def green_actor_placement(self, app, actor_ids, n_samples, orphan_actors, place_set, cb_finish_placement):
 
         place_set = place_set[:n_samples]
@@ -1316,6 +1424,34 @@ class AppManager(object):
         _log.analyze(self._node.id, "+ DONE", {'app_id': app.id}, tb=True)
         _log.info("Deployment: app: %s: finished placement: total elapsed time %d" % (app.id, time.time() - app.start_time))
 
+    def money_placement_finish(self, app, actor_ids, n_samples, place_set):
+        _log.debug("Ending placing actors:...")
+        _log.debug(str(place_set))
+        print "Money placement cost: %f, n_samples: %d" % (place_set[0][1], n_samples)
+        placement_lat = { actor: plac.runtime for actor,plac in place_set[0][0].iteritems() }
+        print placement_lat
+        app.actor_placement.update(placement_lat)
+        print "FINAL"
+        print app.actor_placement
+        status = response.CalvinResponse(True)
+        if len(actor_ids) > len(placement_lat):
+            print "It was impossible to place all actors(total: %d, placed: %d), aborting..." % (len(actor_ids), len(placement_lat))
+            status = response.CalvinResponse(False, data='Impossible to place all actors')
+            app._org_cb(status=status, placement={})
+            del app._org_cb
+            _log.analyze(self._node.id, "+ DONE", {'app_id': app.id}, tb=True)
+            self._destroy(app, None)
+            return
+
+        actor_placement = { actor_id: (node_id if isinstance(node_id, list) else [node_id]) for actor_id, node_id in app.actor_placement.iteritems() }
+        for actor_id, node_id in actor_placement.iteritems():
+            _log.debug("Actor deployment %s \t-> %s" % (app.actors[actor_id], node_id))
+            self._node.am.robust_migrate(actor_id, node_id[:], None)
+
+        app._org_cb(status=status, placement=actor_placement)
+        del app._org_cb
+        _log.analyze(self._node.id, "+ DONE", {'app_id': app.id}, tb=True)
+        _log.info("Deployment: app: %s: finished placement: total elapsed time %d" % (app.id, time.time() - app.start_time))
 
     def worst_placement_finish(self, app, actor_ids, n_samples, place_set):
         _log.debug("Ending placing actors:...")
@@ -1391,6 +1527,18 @@ class AppManager(object):
         place_set = [({}, 0.0)]
         self.latency_actor_placement(app, actor_ids, n_samples, orphan_actors, place_set, cb_finish_placement=CalvinCB(self.latency_placement_finish, app, actor_ids, n_samples))
 
+    def money_placement(self, app, actor_ids):
+        n_samples = _conf.get('global', 'deployment_n_samples')
+        orphan_actors = []
+        for actor_id in actor_ids:
+            _log.debug("Actor id: %s, name: %s" % (actor_id, app.actors[actor_id]))
+            if len(self._node.am.actors[actor_id].inports.values()) == 0:
+                heappush(orphan_actors, (-100000, actor_id))
+
+        _log.debug("Starting placing the actors...")
+        place_set = [({}, 0.0)]
+        self.money_actor_placement(app, actor_ids, n_samples, orphan_actors, place_set, cb_finish_placement=CalvinCB(self.money_placement_finish, app, actor_ids, n_samples))
+
     def green_placement(self, app, actor_ids):
         n_samples = _conf.get('global', 'deployment_n_samples')
         orphan_actors = []
@@ -1459,8 +1607,12 @@ class AppManager(object):
             placement_best = self.green_placement(app, actor_ids)
         elif _conf.get('global', 'deployment_algorithm') == 'worst':
             placement_best = self.worst_placement(app, actor_ids)
-        else:
+        elif _conf.get('global', 'deployment_algorithm') == 'best':
             placement_best = self.best_first_placement(app, actor_ids)
+        elif _conf.get('global', 'deployment_algorithm') == 'money':
+            placement_best = self.money_placement(app, actor_ids)
+        else:
+            placement_best = self.money_placement(app, actor_ids)
 
         #weighted_actor_placement = { actor_id: (node_id if isinstance(node_id, list) else [node_id]) for actor_id, node_id in app.actor_placement.iteritems() }
         ##for actor_id in actor_ids:
