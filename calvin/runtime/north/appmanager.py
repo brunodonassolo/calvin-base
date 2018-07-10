@@ -1020,6 +1020,11 @@ class AppManager(object):
         # request for unnkown values needed by cost functions
         for opt,old_cost in place_set:
             for actor, actorPlac in opt.iteritems():
+                if actorPlac.runtime not in app.runtime_cpu or actorPlac.runtime not in app.runtime_ram:
+                    if actorPlac.runtime not in app.dynamic_capabilities:
+                        app.dynamic_capabilities.update({actorPlac.runtime : 2 })
+                        self.storage.get("nodeCpu-", actorPlac.runtime, cb=CalvinCB(func=self.collect_runtime_cpu, app=app, update_cb=CalvinCB(self.latency_calculate_cost_for_placement_finish, app, actor_ids, place_set, cb_cost_calculated)))
+                        self.storage.get("nodeRam-", actorPlac.runtime, cb=CalvinCB(func=self.collect_runtime_ram, app=app, update_cb=CalvinCB(self.latency_calculate_cost_for_placement_finish, app, actor_ids, place_set, cb_cost_calculated)))
                 if actorPlac.phys_link not in app.phys_link_latency:
                     if actorPlac.phys_link != "" and actorPlac.phys_link not in app.dynamic_capabilities:
                         app.dynamic_capabilities.update({actorPlac.phys_link : 1 })
@@ -1032,6 +1037,8 @@ class AppManager(object):
     def latency_calculate_cost_for_placement_finish(self, app, actor_ids, place_set, cb_cost_calculated):
         place_set_sorted = []
         for opt,old_cost in place_set:
+            if not self.is_resource_usage_in_placement_ok(app, opt):
+                continue
             cost = 0.0
             runtimes_set = set()
             for actor, actorPlac in opt.iteritems():
@@ -1060,26 +1067,28 @@ class AppManager(object):
         if self._calculate_cost_for_placement_verify(app):
             self.green_calculate_cost_for_placement_finish(app, actor_ids, place_set, cb_cost_calculated)
 
+    def is_resource_usage_in_placement_ok(self, app, opt):
+        runtimes_set = {}
+        for actor, actorPlac in opt.iteritems():
+            self.update_cache_cost_actor(app, actor)
+            runtimes_set.setdefault(actorPlac.runtime, {"cpu": 0, "ram": 0})
+            runtimes_set[actorPlac.runtime]["cpu"] += app.cost_runtime_cpu[actor]
+            runtimes_set[actorPlac.runtime]["ram"] += app.cost_runtime_ram[actor]
+            if (runtimes_set[actorPlac.runtime]["cpu"] > app.runtime_cpu.setdefault(actorPlac.runtime, 0) or
+                    runtimes_set[actorPlac.runtime]["ram"] > app.runtime_ram.setdefault(actorPlac.runtime, 0)):
+                return False
+        return True
 
     def green_calculate_cost_for_placement_finish(self, app, actor_ids, place_set, cb_cost_calculated):
         place_set_sorted = []
         for opt,old_cost in place_set:
-            cost = 0.0
-            runtimes_set = {}
-            good = True
-            for actor, actorPlac in opt.iteritems():
-                self.cost_for_runtime(app, actor, actorPlac.runtime)
-                runtimes_set.setdefault(actorPlac.runtime, {"cpu": 0, "ram": 0})
-                runtimes_set[actorPlac.runtime]["cpu"] += app.cost_runtime_cpu[actor]
-                runtimes_set[actorPlac.runtime]["ram"] += app.cost_runtime_ram[actor]
-                if (runtimes_set[actorPlac.runtime]["cpu"] > app.runtime_cpu[actorPlac.runtime] or
-                        runtimes_set[actorPlac.runtime]["ram"] > app.runtime_ram[actorPlac.runtime]):
-                    good = False
-
-            if not good:
+            if not self.is_resource_usage_in_placement_ok(app, opt):
                 continue
+            runtimes_set = set()
+            for actor, actorPlac in opt.iteritems():
+                runtimes_set.add(actorPlac.runtime)
 
-            cost += len(runtimes_set.viewkeys()) - len(runtimes_set.viewkeys() & self.actor_by_runtime.viewkeys())
+            cost = len(runtimes_set) - len(runtimes_set & self.actor_by_runtime.viewkeys())
             place_set_sorted.append((opt, cost))
         place_set_sorted = sorted(place_set_sorted, key=lambda k : k[1])
         print place_set_sorted
@@ -1107,6 +1116,8 @@ class AppManager(object):
     def money_calculate_cost_for_placement_finish(self, app, actor_ids, place_set, cb_cost_calculated):
         place_set_sorted = []
         for opt,old_cost in place_set:
+            if not self.is_resource_usage_in_placement_ok(app, opt):
+                continue
             cost = 0.0
             runtimes_set = set()
             for actor, actorPlac in opt.iteritems():
@@ -1143,6 +1154,8 @@ class AppManager(object):
     def best_calculate_cost_for_placement_finish(self, app, actor_ids, place_set, cb_cost_calculated, worst):
         place_set_sorted = []
         for opt,old_cost in place_set:
+            if not self.is_resource_usage_in_placement_ok(app, opt):
+                continue
             cost = 0.0
             runtimes_set = set()
             for actor, actorPlac in opt.iteritems():
