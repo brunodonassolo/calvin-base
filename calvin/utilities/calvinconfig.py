@@ -102,7 +102,7 @@ class CalvinConfig(object):
                 'fcm_server_secret': None,
                 'compiled_actors_path': None,
                 "calvinsys_paths": ['calvin/runtime/south/calvinsys', 'calvinextras/calvinsys'],
-                'deployment_algorithm': 'best',
+                'deployment_algorithm': 'money',
                 'deployment_n_samples': 50
             },
             'testing': {
