@@ -1,5 +1,5 @@
 {
     "requirements": {
-        "linkA": [{"op": "link_attr_match", "kwargs": {"index": {"latency": "1s"}}, "type": "+"}]
+        "linkA": [{"op": "link_attr_match", "kwargs": {"index": {"latency": "100ms"}}, "type": "+"}]
     }
 }

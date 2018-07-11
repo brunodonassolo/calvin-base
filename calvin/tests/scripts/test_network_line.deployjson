@@ -4,6 +4,6 @@
                     "requirements": [{"op": "link_attr_match", "kwargs": {"index": {"bandwidth": "100M"}}
                                     }],
                     "type": "+"}],
-        "linkB": [{"op": "link_attr_match", "kwargs": {"index": {"latency": "1s"}}, "type": "+"}]
+        "linkB": [{"op": "link_attr_match", "kwargs": {"index": {"latency": "100ms"}}, "type": "+"}]
     }
 }
