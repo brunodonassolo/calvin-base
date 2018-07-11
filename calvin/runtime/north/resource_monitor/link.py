@@ -139,6 +139,10 @@ class LinkMonitor(object):
                 "runtime2" : rt}
         from calvin.utilities import calvinuuid
         link_id = calvinuuid.uuid("Link")
+        # set default values for bandwidth (max possible) and latency (0)
+        self.helper.set(link_id, "linkBandwidth-", "bandwidth", value=BAND_VALUES[-1], discretizer=bandwidth_number2text, cb=None)
+        self.helper.set(link_id, "linkLatency-", "latency", value=0, discretizer=latency_number2text, cb=None)
+
         self.storage.set(prefix="phyLink-", key=link_id, value=data, cb = None)
         # search link id by its origin/dst runtimes
         self.storage.set(prefix="rt-link-", key=self.node_id + rt, value=link_id, cb=None)
