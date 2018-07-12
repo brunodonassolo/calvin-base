@@ -6,7 +6,7 @@
                                    }],
                  "type": "+",
                  "requirements": [{"op": "link_attr_match",
-                                   "kwargs": {"index": {"latency" : "1us"}}
+                                   "kwargs": {"index": {"latency" : "100us"}}
                                    }],
                  "type": "+"
                 }]

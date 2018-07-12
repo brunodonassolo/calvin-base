@@ -434,8 +434,8 @@ class TestLinkMonitor(object):
         Test valid values for latency.
         Verify if storage is as expected
         """
-        values = [1000000, 100000, 1000, 100, 1]
-        values_str = ['1s', '100ms', '1ms', '100us', '1us']
+        values = [1000000, 100000, 50000, 10000, 1000, 100]
+        values_str = ['1s', '100ms', '50ms', '10ms', '1ms', '100us']
         for i in values:
             # verify set return
             self.done = False
@@ -530,8 +530,7 @@ class TestLinkMonitor(object):
         yield wait_for(self._test_done)
         assert isinstance(self.get_ans, calvinresponse.CalvinResponse) and self.get_ans == calvinresponse.NOT_FOUND
 
-        # link id must not be present at level 100M
         self.done = False
-        self.storage.get_index(index=self.LATENCY_INDEX_BASE + ['1us', '100us'], root_prefix_level=2, cb=CalvinCB(self.cb2))
+        self.storage.get_index(index=self.LATENCY_INDEX_BASE + ['100us', '1ms', '10ms', '50ms'], root_prefix_level=2, cb=CalvinCB(self.cb2))
         yield wait_for(self._test_done)
         assert self.get_ans == []

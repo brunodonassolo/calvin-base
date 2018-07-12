@@ -320,7 +320,7 @@ def handle_resource_latency(self, handle, connection, match, data, hdr):
     Updates the links bandwitdh between 2 runtimes
     Body:
     {
-        "value": <latency (1us, 100us, 1ms, 100ms, 1s)>
+        "value": <latency (100us, 1ms, 10ms, 50ms, 100ms, 1s)>
     }
     Response status code: OK or INTERNAL_ERROR
     Response: none

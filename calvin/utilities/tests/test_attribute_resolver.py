@@ -189,22 +189,23 @@ class AttributeResolverTester(unittest.TestCase):
         """
         Tests valid latency values in the indexed_public field
         """
-        att = AttributeResolver({"indexed_public": {"latency": "1us"}})
+        att = AttributeResolver({"indexed_public": {"latency": "100us"}})
         att_list = att.get_indexed_public(as_list=True)
         self.assertEqual(att_list[0][2], 'latency')
         self.assertEqual(att_list[0][3], '1s')
         self.assertEqual(att_list[0][4], '100ms')
-        self.assertEqual(att_list[0][5], '1ms')
-        self.assertEqual(att_list[0][6], '100us')
-        self.assertEqual(att_list[0][7], '1us')
+        self.assertEqual(att_list[0][5], '50ms')
+        self.assertEqual(att_list[0][6], '10ms')
+        self.assertEqual(att_list[0][7], '1ms')
+        self.assertEqual(att_list[0][8], '100us')
 
-        self.assertEqual(att.get_indexed_public()[0], '/links/resource/latency/1s/100ms/1ms/100us/1us')
+        self.assertEqual(att.get_indexed_public()[0], '/links/resource/latency/1s/100ms/50ms/10ms/1ms/100us')
 
     def test_latency_invalid_value(self):
         """
         Tests invalid latency in the indexed_public field
         """
-        att = AttributeResolver({"indexed_public": {"latency": "10ms"}})
+        att = AttributeResolver({"indexed_public": {"latency": "20ms"}})
         att_list = att.get_indexed_public(as_list=True)
         self.assertEqual(att_list[0][2], 'latency')
 

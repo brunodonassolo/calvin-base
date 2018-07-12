@@ -11,9 +11,9 @@ _log = get_logger(__name__)
 BAND_ACCEPTABLE = ['100K', '1M', '10M', '100M', '1G']
 # valid values in kbits
 BAND_VALUES = [100, 1000, 10000, 100000, 1000000]
-LAT_ACCEPTABLE = ['1us', '100us', '1ms', '100ms', '1s']
+LAT_ACCEPTABLE = ['100us', '1ms', '10ms', '50ms', '100ms', '1s']
 # valid values in microseconds
-LAT_VALUES = [1, 100, 1000, 100000, 1000000]
+LAT_VALUES = [100, 1000, 10000, 50000, 100000, 1000000]
 
 def latency_number2text(lat):
     minus = [abs(i - lat) for i in LAT_VALUES]
@@ -27,7 +27,16 @@ def bandwidth_text2number(text):
     return BAND_VALUES[BAND_ACCEPTABLE.index(text)]
 
 def latency_text2number(text):
-    return LAT_VALUES[LAT_ACCEPTABLE.index(text)]
+    if text in LAT_ACCEPTABLE:
+        return LAT_VALUES[LAT_ACCEPTABLE.index(text)]
+    else:
+        for idx, value in enumerate(LAT_VALUES):
+            if int(text) < value:
+                break
+        if idx == 0 or idx == len(LAT_VALUES) - 1:
+            return LAT_VALUES[idx]
+        else:
+            return LAT_VALUES[idx - 1]
 
 class LinkMonitor(object):
     def __init__(self, node_id, storage):
@@ -65,7 +74,7 @@ class LinkMonitor(object):
     def set_latency(self, runtime1, runtime2, latency, cb=None):
         """
         Sets the link latency
-        Acceptable range: ['1us', '100us', '1ms', '100ms', '1s']
+        Acceptable range: ['100us', '1ms', '10ms', '50ms', '100ms', '1s']
         """
         #if latency.lower() not in self.lat_acceptable:
         #    _log.error("Invalid latency value: " + str(latency))

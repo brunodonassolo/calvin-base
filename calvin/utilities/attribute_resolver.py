@@ -107,12 +107,14 @@ bandwidth_help = {"100K": "100Kb/s bandwidth",
                  "1G":"1Gb/s bandwidth"}
 
 # Acceptable values for network latency
-latency_keys = ["1s", "100ms", "1ms", "100us", "1us"]
+latency_numerical_keys = ["1000000", "100000", "50000", "10000" "1000", "100"]
+latency_keys = ["1s", "100ms", "50ms", "10ms", "1ms", "100us"]
 latency_help = {"1s":"1 second",
                 "100ms": "100 milliseconds",
+                "50ms": "5O milliseconds",
+                "10ms": "10 milliseconds",
                 "1ms": "1 millisecond",
-                "100us": "100 microseconds",
-                "1us": "1 microsecond"}
+                "100us": "100 microseconds"}
 
 # list of acceptable resources
 resource_list = ["cpuAvail", "memAvail", "cpu", "ram"]
@@ -319,9 +321,15 @@ class AttributeResolverHelper(object):
 
     @classmethod
     def latency_resolver(cls, attr):
-        if attr not in latency_keys:
-            raise Exception('Latency must be: %s' % latency_keys)
-        resolved = map(cls._to_unicode, latency_keys[:latency_keys.index(attr) + 1])
+        if attr in latency_keys:
+            resolved = map(cls._to_unicode, latency_keys[:latency_keys.index(attr) + 1])
+        else:
+            idx = 0
+            for i, value in enumerate(latency_numerical_keys):
+                if int(value) >= int(attr):
+                    idx = i
+                    break
+            resolved = map(cls._to_unicode, latency_keys[:idx + 1])
         return resolved
 
     @classmethod
