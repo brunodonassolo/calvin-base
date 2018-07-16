@@ -326,7 +326,7 @@ class AttributeResolverHelper(object):
         else:
             idx = 0
             for i, value in enumerate(latency_numerical_keys):
-                if int(value) >= int(attr):
+                if int(value) <= int(attr):
                     idx = i
                     break
             resolved = map(cls._to_unicode, latency_keys[:idx + 1])
