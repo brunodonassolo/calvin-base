@@ -38,7 +38,7 @@ class DateTimeOnce(Actor):
 
     def setup(self):
         rng = calvinlib.use("math.random")
-        delay = rng.random_number(lower=0, upper=1)
+        delay = rng.random_number(lower=120, upper=150)
         self.timer = calvinsys.open(self, "sys.timer.once")
         calvinsys.write(self.timer, delay)
 
