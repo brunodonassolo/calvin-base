@@ -38,16 +38,15 @@ class DateTimeOnce(Actor):
 
     def setup(self):
         rng = calvinlib.use("math.random")
-        delay = rng.random_number(lower=120, upper=150)
-        self.timer = calvinsys.open(self, "sys.timer.once")
+        delay = rng.random_number(lower=60, upper=90)
+        self.timer = calvinsys.open(self, "sys.timer.repeating")
         calvinsys.write(self.timer, delay)
 
     @stateguard(lambda self: self.timer != None and calvinsys.can_read(self.timer))
     @condition(action_input=[], action_output=['token'])
     def send(self):
         calvinsys.read(self.timer)
-        calvinsys.close(self.timer)
-        self.timer = None
+        calvinsys.write(self.timer, 1)
         return (str(datetime.datetime.now()),)
 
     action_priority = (send, )
