@@ -45,7 +45,7 @@ class ElapsedTime(Actor):
 
     @condition(action_input=['base', 'token'])
     def log(self, base, token):
-        elapsed = datetime.datetime.now() - datetime.datetime.strptime(base, "%Y-%m-%d %H:%M:%S.%f")
+        elapsed = datetime.datetime.now() - datetime.datetime.strptime(token, "%Y-%m-%d %H:%M:%S.%f")
         _log.info("%s<%s>: %f" % (self.__class__.__name__, self.id, elapsed.total_seconds()))
 
     action_priority = (log, )
