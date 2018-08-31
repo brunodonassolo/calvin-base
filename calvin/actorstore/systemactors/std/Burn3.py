@@ -46,9 +46,10 @@ class Burn3(Actor):
         self.last = input
         # Burn cycles
         t = time.time()
+        timestamps = sorted([token_1, token_2, token_3])
         while time.time() - t < self.duration:
             pass
-        return (token_1, )
+        return (timestamps[0], )
 
     def report(self, **kwargs):
         self.duration = kwargs.get('duration', self.duration)

@@ -32,7 +32,10 @@ class DropMerge(Actor):
 
     @condition(['token_1', 'token_2'], ['token'])
     def donothing(self, token_1, token_2):
-        return (token_1, )
+        if token_1 > token_2:
+            return (token_1, )
+        else:
+            return (token_2, )
 
     action_priority = (donothing, )
 
