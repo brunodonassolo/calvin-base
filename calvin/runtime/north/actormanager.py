@@ -317,12 +317,64 @@ class ActorManager(object):
         actor.requirements_add(requirements, extend)
         self.node.storage.add_actor(actor, self.node.id)  # Update requirements in registry
         r = ReqMatch(self.node,
-                     callback=CalvinCB(self._update_requirements_placements, actor_id=actor_id, move=move, cb=callback))
+                     callback=CalvinCB(self._update_requirements_placements_0, actor_id=actor_id, move=move, cb=callback))
         r.match_for_actor(actor_id)
         _log.analyze(self.node.id, "+ END", {'actor_id': actor_id})
 
+    def _update_requirements_placements_0(self, actor_id, possible_placements, status=None, move=False, cb=None):
+        self.monetary_cost_ram = {}
+        self.monetary_cost_cpu = {}
+        self.runtimes_cost_nbr = 0
+        for i in possible_placements:
+            self.runtimes_cost_nbr += 1
+            self.node.storage.get_node(i, cb=CalvinCB(self._update_requirements_placements_1, actor_id=actor_id, possible_placements=possible_placements, status=status, move=move, cb=cb))
+
+    def _update_requirements_placements_1(self, key, value, actor_id, possible_placements, status=None, move=False, cb=None):
+        try:
+            self.monetary_cost_ram[key] = value['attributes']['public']['cost_ram']
+            self.monetary_cost_cpu[key] = value['attributes']['public']['cost_cpu']
+        except:
+            self.monetary_cost_ram[key] = 0
+            self.monetary_cost_cpu[key] = 0
+
+        if len(self.monetary_cost_cpu) == self.runtimes_cost_nbr:
+            self._update_requirements_placements(actor_id, possible_placements, status=status, move=move, cb=cb)
+
+#    def _update_requirements_placements_1(self, key, value, actor_id, possible_placements, move=False, cb=None):
+#        self.number_remote_actors = 0
+#        self.remote_actors = []
+#        for i in value["inports"] + value["outports"]:
+#            self.node.storage.get_port(i["id"], cb=CalvinCB(self._update_requirements_placements_2, actor_id=actor_id, possible_placements=possible_placements, move=move, cb=cb))
+
+#    def _update_requirements_placements_0(self, actor_id, possible_placements, status=None, move=False, cb=None):
+#        self.node.storage.get_actor(actor_id, cb=CalvinCB(self._update_requirements_placements_1, actor_id=actor_id, possible_placements=possible_placements, move=move, cb=cb))
+#
+#    def _update_requirements_placements_1(self, key, value, actor_id, possible_placements, move=False, cb=None):
+#        self.number_remote_actors = 0
+#        self.remote_actors = []
+#        for i in value["inports"] + value["outports"]:
+#            self.node.storage.get_port(i["id"], cb=CalvinCB(self._update_requirements_placements_2, actor_id=actor_id, possible_placements=possible_placements, move=move, cb=cb))
+#
+#    def _update_requirements_placements_2(self, key, value, actor_id, possible_placements, move=False, cb=None):
+#        # local port of actor_id, getting remote ports
+#        if value["actor_id"] == actor_id:
+#            for i in value["peers"]:
+#                for j in i:
+#                    if j != 'local':
+#                        self.number_remote_actors += 1
+#                        print "getting port " + j
+#                        self.node.storage.get_port(j, cb=CalvinCB(self._update_requirements_placements_2, actor_id=actor_id, possible_placements=possible_placements, move=move, cb=cb))
+#        else: # getting remote actors
+#            self.remote_actors.append(value["actor_id"])
+#            if len(self.remote_actors) == self.number_remote_actors:
+#                self._update_requirements_placements(actor_id, possible_placements, move, cb)
+
     def _update_requirements_placements(self, actor_id, possible_placements, status=None, move=False, cb=None):
         _log.analyze(self.node.id, "+ BEGIN", {}, tb=True)
+        print "XXXXXXXXXXXXXXX"
+        print possible_placements
+        print actor_id
+
         if move and len(possible_placements)>1:
             possible_placements.discard(self.node.id)
         actor = self.actors[actor_id]
@@ -338,7 +390,11 @@ class ActorManager(object):
         # TODO do a better selection between possible nodes
         # TODO: should also ask authorization server before selecting node to migrate to.
         # Try the possible placements in random order
-        pp = list(possible_placements)
+        possible_placements_cost = [(i, self.monetary_cost_cpu[i] + self.monetary_cost_ram[i]) for i in possible_placements]
+        print possible_placements_cost
+        pp = [ i[0] for i in sorted(possible_placements_cost, key=lambda k : k[1]) ]
+        print pp
+#       pp = list(possible_placements)
         random.shuffle(pp)
         self.robust_migrate(actor_id, pp, callback=cb)
         _log.analyze(self.node.id, "+ END", {})

@@ -899,6 +899,12 @@ class Storage(object):
         _log.debug("Delete application %s" % application_id)
         self.delete(prefix="application-", key=application_id, cb=cb)
 
+    def add_link(self, link, cb=None):
+        data = {"name": link.name, "src_actor": link.src_id, "dst_actor": link.dst_id}
+        self.set(prefix="link-", key=link.id, value=data, cb=cb)
+        self.add_index(['linkActors', link.src_id], link.dst_id, root_prefix_level=2, cb=None)
+        self.add_index(['linkActors', link.dst_id], link.src_id, root_prefix_level=2, cb=None)
+
     def add_actor(self, actor, node_id, cb=None):
         """
         Add actor and its ports to storage

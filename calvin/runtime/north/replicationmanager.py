@@ -584,6 +584,8 @@ class ReplicationManager(object):
 
     def _update_requirements_placements(self, replication_data, possible_placements, status=None):
         _log.analyze(self.node.id, "+ BEGIN", {'possible_placements':possible_placements, 'status':status}, tb=True)
+        print "possiblee"
+        print possible_placements
         # All possible actor placements derived
         if not possible_placements:
             replication_data.status = REPLICATION_STATUS.READY
@@ -594,6 +596,7 @@ class ReplicationManager(object):
         req = replication_data.requirements
         selected = req_operations[req['op']].select(self.node, replication_data, possible_placements, **req['kwargs'])
         _log.analyze(self.node.id, "+", {'possible_placements': possible_placements, 'selected': selected})
+        print selected
         if not selected:
             replication_data.status = REPLICATION_STATUS.READY
             if replication_data._replicate_callback:
@@ -779,6 +782,7 @@ class ReplicationManager(object):
             cb(status)
 
     def _replication_status_cb(self, status, replication_data, cb):
+        print 'END'
         replication_data.status = REPLICATION_STATUS.READY
         if cb:
             cb(status)
@@ -818,6 +822,7 @@ class ReplicationManager(object):
             return
         for replication_data in self.managed_replications.values():
             _log.debug("REPLICATION LOOP %s %s" % (replication_data.id, REPLICATION_STATUS.reverse_mapping[replication_data.status]))
+            print("REPLICATION LOOP %s %s" % (replication_data.id, REPLICATION_STATUS.reverse_mapping[replication_data.status]))
             if replication_data.status != REPLICATION_STATUS.READY:
                 continue
             try:
@@ -841,7 +846,7 @@ class ReplicationManager(object):
                 replication_data._missing_replica_time = time.time() + 10  # Don't check missing for a while
             elif pre_check == PRE_CHECK.SCALE_IN:
                 _log.info("Auto-dereplicate")
-                self.dereplicate(replication_data.id, CalvinCB(self._replication_loop_log_cb, replication_id=replication_data.id), exhaust=True)
+                self.dereplicate(replication_data.id, CalvinCB(self._replication_loop_log_cb, replication_id=replication_data.id), exhaust=False)
                 replication_data._missing_replica_time = time.time() + 10  # Don't check missing for a while
             elif pre_check == PRE_CHECK.NO_OPERATION:
                 # While idle check if any of the replicas has gone missing
@@ -867,6 +872,8 @@ class ReplicationManager(object):
     # Queue pressure
     #
     def check_pressure(self, actor_ids):
+        print "check"
+        print actor_ids
         if not actor_ids:
             # No actors, then check all for too low pressure
             for actor_id, actor in self.node.am.actors.items():
@@ -875,6 +882,8 @@ class ReplicationManager(object):
         for actor_id in actor_ids:
             try:
                 pressure = self.node.am.actors[actor_id].get_pressure()
+                pressure = {}
+                pressure['cpu'] = self.node.cpu_monitor.cpu_avail
             except:
                 _log.exception("check_pressure")
                 pressure = None
@@ -882,6 +891,7 @@ class ReplicationManager(object):
             if not pressure:
                 continue
             replication_id = self.node.am.actors[actor_id]._replication_id.id
+            print replication_id
             if replication_id in self.leaders_cache:
                 self.send_pressure(actor_id, replication_id, self.leaders_cache[replication_id], pressure)
             else:

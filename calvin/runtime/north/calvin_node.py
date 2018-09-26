@@ -146,7 +146,7 @@ class Node(object):
                 cpuTotal = i[-1]
             if 'memTotal' in i:
                 memTotal = i[-1]
-        self.cpu_monitor = CpuMonitor(self.id, self.storage, cpuTotal)
+        self.cpu_monitor = CpuMonitor(self, self.id, self.storage, cpuTotal)
         self.mem_monitor = MemMonitor(self.id, self.storage, memTotal)
         self.link_monitor = LinkMonitor(self.id, self.storage)
 

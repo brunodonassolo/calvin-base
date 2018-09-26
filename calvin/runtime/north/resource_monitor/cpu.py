@@ -22,12 +22,14 @@ def cpu_discretizer(cpu):
     return cpu_keys[idx - 1]
 
 class CpuMonitor(object):
-    def __init__(self, node_id, storage, cpuTotal):
+    def __init__(self, node, node_id, storage, cpuTotal):
         self.storage = storage
+        self.node = node
         self.node_id = node_id
         self.acceptable_avail = [0, 25, 50, 75, 100]
         self.helper = ResourceMonitorHelper(storage)
         self.cpu_total = int(cpuTotal)
+        self.cpu_avail = 100.0
 
     def set_avail(self, avail, cb=None):
         """
@@ -42,6 +44,18 @@ class CpuMonitor(object):
         self.helper.set(ident=self.node_id, prefix="nodeCpuAvail-", prefix_index="cpuAvail", value=avail, discretizer=cpu_avail_discretizer, cb=None)
 
         self.helper.set(ident=self.node_id, prefix="nodeCpu-", prefix_index="cpu", value=int(avail*(self.cpu_total/100)), discretizer=cpu_discretizer, cb=cb)
+
+
+        old_avail = self.cpu_avail
+        self.cpu_avail = avail
+
+        if avail < 20 or avail > 90:
+            import random
+            if len(self.node.am.actors.keys()) > 0:
+                replicable_nodes = [i for i in self.node.am.actors.keys() if self.node.am.actors[i]._replication_id.id != None ]
+                self.node.rm.check_pressure([random.choice(replicable_nodes)])
+#                self.node.am.update_requirements(actor_id=random.choice(list(self.node.am.actors.keys())), requirements=[], extend=True, move=True)
+
 
     def stop(self):
         """

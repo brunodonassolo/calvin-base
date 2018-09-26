@@ -53,6 +53,8 @@ class ReqMatch(object):
         def _got_requirements(key, value):
             if response.isnotfailresponse(value):
                 try:
+                    print 'matcth'
+                    print value
                     self.match(value, actor_id)
                 except:
                     if callable(self.callback):
@@ -60,8 +62,11 @@ class ReqMatch(object):
             else:
                 if callable(self.callback):
                     self.callback(status=value, possible_placements=set([]))
+        print actor_id
+        print self.node.am.actors
         if actor_id in self.node.am.actors:
             # Don't waste time if local
+            print 'xaste'
             return self.match_for_actor(actor_id)
         else:
             self.node.storage.get_actor_requirements(actor_id, cb=_got_requirements)

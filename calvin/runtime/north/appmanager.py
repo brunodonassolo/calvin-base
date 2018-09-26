@@ -69,6 +69,18 @@ class Application(object):
         self.deploy_info = deploy_info
         self._collect_placement_cb = None
 
+        self.cost_link_band = {}      # sum of requested cost by user for link, cache memory, it will be update in cost_for_link
+        self.cost_link_lat = {}      # sum of requested cost by user for link, cache memory, it will be update in cost_for_link
+        self.cost_runtime_cpu = {}   # sum of requested cost by user for runtime, update in cost_for_runtime
+        self.cost_runtime_ram = {}   # sum of requested cost by user for runtime, update in cost_for_runtime
+        self.runtime_cpu = {}    # available CPU in runtimes, runtime -> MIPS
+        self.runtime_ram = {}    # available RAM in runtimes, runtime -> MB
+        self.phys_link_latency = {}  # available latency in physical link
+        self.phys_link_bandwidth = {}# available bandwidth in physical link
+        self.monetary_cost_ram = {}
+        self.monetary_cost_cpu = {}
+        self.runtimes_nbr = set()
+
     def add_actor(self, actor_id):
         # Save actor_id and mapping to name while the actor is still on this node
         if not isinstance(actor_id, list):
@@ -2005,6 +2017,8 @@ class Deployer(object):
                     deploy_req = self.deploy_info['requirements'].get(link_name_deploy, [])
                     link_id = self.node.link_manager.new(link_name, src_id, dst_id, deploy_req)
                     self.node.app_manager.add_link(self.app_id, link_id)
+                    self.node.storage.add_actor_requirements(link_id, deploy_req)
+                    # TODO [donassolo] see when/where should we remove link requirements from storage
                     _log.debug("App Mgr: Creating link: name %s id %s. Between actor: %s and %s. Deployment rules: %s" % (link_name, link_id, src_name, dst_name, str(deploy_req)))
                 except:
                     _log.error("Error creating link(%s) connecting actor (%s) to actor (%s). Actors ID not found" % (link_name, l[0], l[1]))

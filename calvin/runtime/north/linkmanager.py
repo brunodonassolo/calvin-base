@@ -8,8 +8,9 @@ _log = get_logger(__name__)
 
 class Link(object):
 
-    def __init__(self, name, actor_src_id, actor_dst_id, requirements):
+    def __init__(self, name, id, actor_src_id, actor_dst_id, requirements):
         self.name = name
+        self.id = id
         self.src_id = actor_src_id
         self.dst_id = actor_dst_id
         self.requirements = requirements
@@ -39,9 +40,9 @@ class LinkManager(object):
         id = calvinuuid.uuid("LINK")
 
         _log.debug("link: id %s actor_src: %s actor_dst: %s" % (id, actor_src_id, actor_dst_id))
-        self.links[id] = Link(name, actor_src_id, actor_dst_id, requirements)
+        self.links[id] = Link(name, id, actor_src_id, actor_dst_id, requirements)
+        self.node.storage.add_link(self.links[id])
 
-        # TODO [donassolo] must a link be in storage?
-        # self.node.storage.add_actor(a, self.node.id)
+        # TODO [donassolo] remove link from storage
 
         return id

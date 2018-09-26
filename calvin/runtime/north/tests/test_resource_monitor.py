@@ -40,7 +40,7 @@ class TestCpuMonitor(object):
         self.node.attributes = AttributeResolver({"indexed_public": {"cpuTotal": "1000000" }})
         self.storage = storage.Storage(self.node)
         self.cpu_total = 1000000
-        self.cpu = CpuMonitor(self.node.id, self.storage, self.cpu_total)
+        self.cpu = CpuMonitor(self.node, self.node.id, self.storage, self.cpu_total)
         self.done = False
         self.storage.add_node(self.node)
         yield threads.defer_to_thread(time.sleep, .01)

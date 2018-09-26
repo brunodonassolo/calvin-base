@@ -6,3 +6,5 @@ snk : io.Log(loglevel="INFO")
 src.data > id1.token
 id1.token > id2.token
 id2.token > snk.data
+id2.token[out](routing="round-robin")
+snk.data[in](routing="collect-unordered")

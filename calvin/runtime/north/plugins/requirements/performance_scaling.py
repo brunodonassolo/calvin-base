@@ -54,17 +54,25 @@ def get_state(replication_data):
 def pre_check(node, **kwargs):
     """ Check if actor should scale out/in
     """
+    print "pre-check"
     # TODO check if scale in as well
     replication_data = kwargs['replication_data']
     # Check limits
     if kwargs.get('max', None) == kwargs.get('min', None) and len(replication_data.instances) == kwargs.get('min', None):
         return PRE_CHECK.NO_OPERATION
+    print replication_data.pressure
     if 'max' in kwargs and len(replication_data.instances) > kwargs['max']:
         return PRE_CHECK.SCALE_IN
     if 'min' in kwargs and len(replication_data.instances) < kwargs['min']:
         return PRE_CHECK.SCALE_OUT
     if not replication_data.pressure:
         return PRE_CHECK.NO_OPERATION
+
+    if replication_data.pressure["cpu"] < 20:
+        return PRE_CHECK.SCALE_OUT
+    elif replication_data.pressure["cpu"] > 90:
+        return PRE_CHECK.SCALE_IN
+    return PRE_CHECK.NO_OPERATION
     # Check performance
     replicate = False
     dereplicate = False
