@@ -1443,10 +1443,6 @@ class AppManager(object):
         print "Money placement cost: %f, n_samples: %d" % (place_set[0][1], n_samples)
         placement_lat = { actor: plac.runtime for actor,plac in place_set[0][0].iteritems() }
         print placement_lat
-        app.actor_placement.update(placement_lat)
-        print "FINAL"
-        print app.actor_placement
-        status = response.CalvinResponse(True)
         if len(actor_ids) > len(placement_lat):
             print "It was impossible to place all actors(total: %d, placed: %d), aborting..." % (len(actor_ids), len(placement_lat))
             status = response.CalvinResponse(False, data='Impossible to place all actors')
@@ -1455,6 +1451,12 @@ class AppManager(object):
             _log.analyze(self._node.id, "+ DONE", {'app_id': app.id}, tb=True)
             self._destroy(app, None)
             return
+
+        #app.actor_placement.update(placement_lat)
+        app.actor_placement = self.grasp_optimization(app, actor_ids, placement_lat)
+        print "FINAL"
+        print app.actor_placement
+        status = response.CalvinResponse(True)
 
         actor_placement = { actor_id: (node_id if isinstance(node_id, list) else [node_id]) for actor_id, node_id in app.actor_placement.iteritems() }
         for actor_id, node_id in actor_placement.iteritems():
@@ -1734,6 +1736,96 @@ class AppManager(object):
         # Done
         if cb:
             cb(status=response.CalvinResponse(all([s for s in app._migrated_actors.values()])))
+
+    def grasp_load_balance_cost(self, app, actor_id, runtime):
+        return self.cost_for_runtime(app, actor_id, runtime)
+
+    def grasp_get_actor_neighbors(self, actor_id):
+        actors = []
+        for i in self._node.am.actors[actor_id].inports.values() + self._node.am.actors[actor_id].outports.values():
+            for p in i.get_peers():
+                neigh_id = ""
+                try:
+                    neigh_id = self._node.pm._get_local_port(port_id=p[1]).owner.id
+                    actors.append(neigh_id)
+                except:
+                    _log.debug("Didn't find neighbor actor")
+                    continue
+        return actors
+
+    def grasp_runtime_accept_actor(self, app, actor_id, runtime, placement):
+        neighbors = self.grasp_get_actor_neighbors(actor_id)
+        _log.debug("GRASP, actor id: %s, neighbors: %s" % (actor_id, neighbors))
+        for link_id, phys_link_placements in app.link_placement.iteritems():
+            if any([isinstance(n, dynops.InfiniteElement) for n in phys_link_placements]):
+                _log.debug("Link can be any physical link")
+                continue
+
+            must_verify = False
+            src_actor = self._node.link_manager.links[link_id].src_id
+            dst_actor = self._node.link_manager.links[link_id].dst_id
+
+            if src_actor == actor_id and dst_actor in neighbors:
+                must_verify = True
+            elif src_actor in neighbors and dst_actor == actor_id:
+                must_verify = True
+                dst_actor = src_actor
+                src_actor = actor_id
+
+            if not must_verify:
+                continue
+
+            if runtime == placement[dst_actor]:
+                continue
+
+            found = False
+            for phy_link_id in phys_link_placements:
+                rt1 = app.phys_link_placement_runtimes[phy_link_id]['runtime1']
+                rt2 = app.phys_link_placement_runtimes[phy_link_id]['runtime2']
+                if (rt1 == runtime and rt2 == placement[dst_actor]) or (rt1 == placement[dst_actor] and rt2 == runtime):
+                    found = True
+                    break
+            if not found:
+                return False
+        return True
+
+    def grasp_actor_rcl(self, app, actor_id, placement, rcl):
+        best_runtime = placement[actor_id]
+        for r in rcl:
+            if not self.grasp_runtime_accept_actor(app, actor_id, r, placement):
+                _log.debug("GRASP, actor id: %s runtime: %s, CANNOT host it" % (actor_id, r))
+                continue
+            if self.grasp_load_balance_cost(app, actor_id, r) < self.grasp_load_balance_cost(app, actor_id, best_runtime):
+                best_runtime = r
+        return best_runtime
+
+
+    def grasp_actor_optimization(self, app, actor_id, placement, alpha):
+        best_money = -1
+        for i in app.actor_placement[actor_id]:
+            cost = self.cost_for_runtime_v2(app, actor_id, i)
+            if best_money == -1 or cost < best_money:
+                best_money = cost
+        rcl = [ i for i in app.actor_placement[actor_id] if self.cost_for_runtime_v2(app, actor_id, i) <= best_money + alpha*best_money ]
+        rcl = sorted(rcl, key=lambda k : self.cost_for_runtime_v2(app, actor_id, k))
+        _log.debug("RCL, actor: %s, list: %s" % (actor_id, str(rcl)))
+        runtime = self.grasp_actor_rcl(app, actor_id, placement, rcl)
+        if placement[actor_id] != runtime:
+            _log.debug("GRASP OPTIMIZATION: actor_id %s, old runtime: %s, new runtime: %s" % (actor_id, placement[actor_id], runtime))
+            placement[actor_id] = runtime
+            return True
+        return False
+
+    def grasp_optimization(self, app, actor_ids, placement, alpha=0.1):
+        optimized = True
+
+        N = 0
+        while optimized and N < 10:
+            optimized = False
+            N += 1
+            for actor_id in actor_ids:
+                optimized |= self.grasp_actor_optimization(app, actor_id, placement, alpha)
+        return placement
 
 class Deployer(object):
 
