@@ -1452,8 +1452,11 @@ class AppManager(object):
             self._destroy(app, None)
             return
 
-        #app.actor_placement.update(placement_lat)
-        app.actor_placement = self.grasp_optimization(app, actor_ids, placement_lat)
+        if _conf.get('global', 'grasp') == True:
+            app.actor_placement = self.grasp_optimization(app, actor_ids, placement_lat)
+        else:
+            app.actor_placement.update(placement_lat)
+
         print "FINAL"
         print app.actor_placement
         status = response.CalvinResponse(True)
