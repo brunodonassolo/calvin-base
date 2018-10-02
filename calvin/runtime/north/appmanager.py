@@ -1819,14 +1819,36 @@ class AppManager(object):
             return True
         return False
 
+    def grasp_actor_order(self, actor_ids):
+        ordered_actors = []
+        for actor_id in actor_ids:
+            if len(self._node.am.actors[actor_id].inports.values()) == 0:
+                ordered_actors.append(actor_id)
+
+        next_actors = copy.copy(ordered_actors)
+        while len(next_actors) > 0:
+            actor_id = next_actors.pop(0)
+            for i in self._node.am.actors[actor_id].outports.values():
+                for p in i.get_peers():
+                    try:
+                        neigh_id = self._node.pm._get_local_port(port_id=p[1]).owner.id
+                    except:
+                        _log.debug("Didn't find neighbor actor")
+                        continue
+                    ordered_actors.append(neigh_id)
+                    next_actors.append(neigh_id)
+
+        return ordered_actors
+
     def grasp_optimization(self, app, actor_ids, placement, alpha=0.1):
         optimized = True
 
         N = 0
+        ordered_actors = self.grasp_actor_order(actor_ids)
         while optimized and N < 10:
             optimized = False
             N += 1
-            for actor_id in actor_ids:
+            for actor_id in ordered_actors:
                 optimized |= self.grasp_actor_optimization(app, actor_id, placement, alpha)
         return placement
 
