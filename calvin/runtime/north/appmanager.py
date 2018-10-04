@@ -1756,9 +1756,23 @@ class AppManager(object):
                     continue
         return actors
 
+
     def grasp_runtime_accept_actor(self, app, actor_id, runtime, placement):
         neighbors = self.grasp_get_actor_neighbors(actor_id)
         _log.debug("GRASP, actor id: %s, neighbors: %s" % (actor_id, neighbors))
+        # verify resource usage
+        total_cpu = app.cost_runtime_cpu[actor_id]
+        total_ram = app.cost_runtime_ram[actor_id]
+        for actor, node in app.actor_placement.iteritems():
+            if actor != actor_id and node == runtime:
+                total_cpu += app.cost_runtime_cpu[actor]
+                total_ram += app.cost_runtime_ram[actor]
+
+        if (total_cpu > app.runtime_cpu.setdefault(runtime, 0) or
+                    total_ram > app.runtime_ram.setdefault(runtime, 0)):
+            return False
+
+        # verify links
         for link_id, phys_link_placements in app.link_placement.iteritems():
             if any([isinstance(n, dynops.InfiniteElement) for n in phys_link_placements]):
                 _log.debug("Link can be any physical link")
