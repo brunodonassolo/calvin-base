@@ -1452,8 +1452,10 @@ class AppManager(object):
             self._destroy(app, None)
             return
 
-        if _conf.get('global', 'grasp') == True:
-            app.actor_placement = self.grasp_optimization(app, actor_ids, placement_lat)
+        if _conf.get('global', 'grasp') == "v0":
+            app.actor_placement = self.grasp_optimization(app, actor_ids, placement_lat, False)
+        elif _conf.get('global', 'grasp') == "v1":
+            app.actor_placement = self.grasp_optimization(app, actor_ids, placement_lat, True)
         else:
             app.actor_placement.update(placement_lat)
 
@@ -1817,7 +1819,7 @@ class AppManager(object):
         return best_runtime
 
 
-    def grasp_actor_optimization(self, app, actor_id, placement, alpha):
+    def grasp_actor_optimization(self, app, actor_id, placement, update_resources, alpha):
         best_money = -1
         for i in app.actor_placement[actor_id]:
             cost = self.cost_for_runtime_v2(app, actor_id, i)
@@ -1829,6 +1831,12 @@ class AppManager(object):
         runtime = self.grasp_actor_rcl(app, actor_id, placement, rcl)
         if placement[actor_id] != runtime:
             _log.debug("GRASP OPTIMIZATION: actor_id %s, old runtime: %s, new runtime: %s" % (actor_id, placement[actor_id], runtime))
+            if update_resources:
+                old_runtime = placement[actor_id]
+                app.runtime_cpu[old_runtime] += app.cost_runtime_cpu[actor_id]
+                app.runtime_ram[old_runtime] += app.cost_runtime_ram[actor_id]
+                app.runtime_cpu[runtime] -= app.cost_runtime_cpu[actor_id]
+                app.runtime_ram[runtime] -= app.cost_runtime_ram[actor_id]
             placement[actor_id] = runtime
             return True
         return False
@@ -1854,8 +1862,17 @@ class AppManager(object):
 
         return ordered_actors
 
-    def grasp_optimization(self, app, actor_ids, placement, alpha=0.1):
+    def grasp_optimization(self, app, actor_ids, placement, update_resources=False, alpha=0.1):
         optimized = True
+        backup_cpu = copy.copy(app.runtime_cpu)
+        backup_ram = copy.copy(app.runtime_ram)
+
+        if update_resources:
+            for actor_id, runtime in placement.iteritems():
+                print actor_id
+                print runtime
+                app.runtime_cpu[runtime] -= app.cost_runtime_cpu[actor_id]
+                app.runtime_ram[runtime] -= app.cost_runtime_ram[actor_id]
 
         N = 0
         ordered_actors = self.grasp_actor_order(actor_ids)
@@ -1863,7 +1880,10 @@ class AppManager(object):
             optimized = False
             N += 1
             for actor_id in ordered_actors:
-                optimized |= self.grasp_actor_optimization(app, actor_id, placement, alpha)
+                optimized |= self.grasp_actor_optimization(app, actor_id, placement, update_resources, alpha)
+
+        app.runtime_cpu = backup_cpu
+        app.runtime_ram = backup_ram
         return placement
 
 class Deployer(object):
