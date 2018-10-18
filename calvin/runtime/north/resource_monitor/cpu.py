@@ -4,6 +4,7 @@ from calvin.runtime.south.async import async
 from calvin.runtime.north.resource_monitor.helper import ResourceMonitorHelper
 from calvin.utilities.calvinlogger import get_logger
 from calvin.requests import calvinresponse
+from calvin.utilities.calvin_callback import CalvinCB
 
 _log = get_logger(__name__)
 
@@ -28,6 +29,23 @@ class CpuMonitor(object):
         self.acceptable_avail = [0, 25, 50, 75, 100]
         self.helper = ResourceMonitorHelper(storage)
         self.cpu_total = int(cpuTotal)
+        self.storage.set(prefix="nodeCpuTotal-", key=node_id, value=self.cpu_total, cb=None)
+
+    def _cb_cpu_total(self, key, value, avail_mips, node_id):
+        avail = (avail_mips/value)*100
+
+        if avail < 0:
+            avail = 0
+        if avail > 100:
+            avail = 100
+
+        self.helper.set(ident=node_id, prefix="nodeCpuAvail-", prefix_index="cpuAvail", value=avail, discretizer=cpu_avail_discretizer, cb=None, force=True)
+
+        self.helper.set(ident=node_id, prefix="nodeCpu-", prefix_index="cpu", value=avail_mips, discretizer=cpu_discretizer, cb=None, force=True)
+
+
+    def set_avail_for_node(self, avail_mips, node_id):
+        self.storage.get(prefix="nodeCpuTotal-", key=node_id, cb=CalvinCB(self._cb_cpu_total, avail_mips=avail_mips, node_id=node_id))
 
     def set_avail(self, avail, cb=None):
         """

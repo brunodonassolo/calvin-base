@@ -41,7 +41,19 @@ class ResourceMonitorHelper(object):
             for index in new_data.get_indexed_public():
                 self.storage.add_index(index=index, value=ident, root_prefix_level=2, cb=None)
 
-    def set(self, ident, prefix, prefix_index, value, discretizer, cb=None):
+    def _set_aux2(self, key, value, prefix_get, prefix_index, ident, discretizer, force, new_value=None):
+
+        if not force and value is not None and value == "true":
+            return
+
+        # get old value to cleanup indexes
+        self.storage.get(prefix=prefix_get, key=ident, cb=CalvinCB(self._set_aux,
+            ident=ident, prefix_index=prefix_index, discretizer = discretizer, new_value=new_value))
+
+        self.storage.set(prefix=prefix_get, key=ident, value=new_value, cb=None)
+
+
+    def set(self, ident, prefix, prefix_index, value, discretizer, force=False, cb=None):
         """
         Sets a certain resource of a node.
         Gets the old value to erase from indexes.
@@ -52,11 +64,8 @@ class ResourceMonitorHelper(object):
         cb: callback to receive response. Signature: cb(value, True/False)
         """
 
-        # get old value to cleanup indexes
-        self.storage.get(prefix=prefix, key=ident, cb=CalvinCB(self._set_aux,
-            ident=ident, prefix_index=prefix_index, discretizer = discretizer, new_value=value))
+        self.storage.get(prefix="", key="batch", cb=CalvinCB(self._set_aux2, ident=ident, prefix_get=prefix, prefix_index=prefix_index, discretizer = discretizer, new_value=value, force=force))
 
-        self.storage.set(prefix=prefix, key=ident, value=value, cb=None)
         if cb:
             async.DelayedCall(0, cb, value, value=calvinresponse.CalvinResponse(True))
 

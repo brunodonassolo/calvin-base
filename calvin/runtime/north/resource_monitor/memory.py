@@ -4,6 +4,7 @@ from calvin.runtime.south.async import async
 from calvin.runtime.north.resource_monitor.helper import ResourceMonitorHelper
 from calvin.utilities.calvinlogger import get_logger
 from calvin.requests import calvinresponse
+from calvin.utilities.calvin_callback import CalvinCB
 
 _log = get_logger(__name__)
 
@@ -34,6 +35,23 @@ class MemMonitor(object):
         self.acceptable_avail = [0, 25, 50, 75, 100]
         self.helper = ResourceMonitorHelper(storage)
         self.ram_total = ram_text2number(ramTotal)
+        self.storage.set(prefix="nodeMemTotal-", key=node_id, value=self.ram_total, cb=None)
+
+    def _cb_mem_total(self, key, value, avail_bytes, node_id):
+        avail = (avail_bytes/value)*100
+
+        if avail < 0:
+            avail = 0
+        if avail > 100:
+            avail = 100
+
+        self.helper.set(ident=node_id, prefix="nodeMemAvail-", prefix_index="memAvail", value=avail, discretizer= memory_discretizer, cb=None, force=True)
+
+        self.helper.set(ident=node_id, prefix="nodeRam-", prefix_index="ram", value=avail_bytes, discretizer=ram_discretizer, cb=None, force=True)
+
+
+    def set_avail_for_node(self, avail_bytes, node_id):
+        self.storage.get(prefix="nodeMemTotal-", key=node_id, cb=CalvinCB(self._cb_mem_total, avail_bytes=avail_bytes, node_id=node_id))
 
     def set_avail(self, avail, cb=None):
         """

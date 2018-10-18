@@ -499,6 +499,7 @@ class AppManager(object):
         app.link_placement_nbr = len(link_ids) # number of links that must be found
         app.phys_link_placement_runtimes_nbr = set()
         app.placement_done = False # controls when the placement was done
+        app.batch = None
 
         # requests all actors placements
         for actor_id in actor_ids:
@@ -521,12 +522,24 @@ class AppManager(object):
             r.match(requirements=link.requirements_get())
             _log.analyze(self._node.id, "+ LINK REQ DONE", {'link_id': link_id}, tb=True)
 
+        self.storage.get("", "batch", cb=CalvinCB(func=self.collect_batch, app=app))
+
         _log.analyze(self._node.id, "+ DONE", {'application_id': application_id}, tb=True)
 
     def _verify_collect_placement(self, app):
         return (len(app.actor_placement) == app.actor_placement_nbr and
             len(app.link_placement) == app.link_placement_nbr and
-            set(app.phys_link_placement_runtimes.keys()) == app.phys_link_placement_runtimes_nbr)
+            set(app.phys_link_placement_runtimes.keys()) == app.phys_link_placement_runtimes_nbr and
+            app.batch is not None)
+
+    def collect_batch(self, key, value, app):
+        if value is not None and value == "true":
+            app.batch = True
+        else:
+            app.batch = False
+
+        if self._verify_collect_placement(app):
+            self.decide_placement(app)
 
     def collect_actor_placement(self, app, actor_id, possible_placements, status):
         """
@@ -1437,6 +1450,14 @@ class AppManager(object):
         _log.analyze(self._node.id, "+ DONE", {'app_id': app.id}, tb=True)
         _log.info("Deployment: app: %s: finished placement: total elapsed time %d" % (app.id, time.time() - app.start_time))
 
+    def batch_update_available_resources(self, app):
+        for actor_id, node_id in app.actor_placement.iteritems():
+            cpu_mips = app.runtime_cpu[node_id] - app.cost_runtime_cpu[actor_id]
+            ram_bytes = app.runtime_ram[node_id] - app.cost_runtime_ram[actor_id]
+            self._node.cpu_monitor.set_avail_for_node(cpu_mips, node_id)
+            self._node.mem_monitor.set_avail_for_node(ram_bytes, node_id)
+
+
     def money_placement_finish(self, app, actor_ids, n_samples, place_set):
         _log.debug("Ending placing actors:...")
         _log.debug(str(place_set))
@@ -1460,6 +1481,9 @@ class AppManager(object):
             app.actor_placement.update(placement_lat)
 
         print "FINAL"
+        if app.batch == True:
+            self.batch_update_available_resources(app)
+
         print app.actor_placement
         status = response.CalvinResponse(True)
 
