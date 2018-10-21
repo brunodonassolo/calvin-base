@@ -1452,8 +1452,8 @@ class AppManager(object):
 
     def batch_update_available_resources(self, app):
         for actor_id, node_id in app.actor_placement.iteritems():
-            cpu_mips = app.runtime_cpu[node_id] - app.cost_runtime_cpu[actor_id]
-            ram_bytes = app.runtime_ram[node_id] - app.cost_runtime_ram[actor_id]
+            cpu_mips = app.runtime_cpu[node_id]# - app.cost_runtime_cpu[actor_id]
+            ram_bytes = app.runtime_ram[node_id]# - app.cost_runtime_ram[actor_id]
             self._node.cpu_monitor.set_avail_for_node(cpu_mips, node_id)
             self._node.mem_monitor.set_avail_for_node(ram_bytes, node_id)
 
