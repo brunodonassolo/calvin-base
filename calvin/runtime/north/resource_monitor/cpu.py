@@ -30,6 +30,7 @@ class CpuMonitor(object):
         self.helper = ResourceMonitorHelper(storage)
         self.cpu_total = int(cpuTotal)
         self.storage.set(prefix="nodeCpuTotal-", key=node_id, value=self.cpu_total, cb=None)
+        self.set_avail(avail=100)
 
     def _cb_cpu_total(self, key, value, avail_mips, node_id):
         avail = (avail_mips/value)*100

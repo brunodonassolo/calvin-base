@@ -52,7 +52,7 @@ class LinkMonitor(object):
             return
 
         _log.debug("LinkMonitor (%s, %s): Link found (%s) for key: %s. Value %s will be updated" % (link_prefix, link_prefix_index, value, key, str(link_value)))
-        self.helper.set(ident=value, prefix=link_prefix, prefix_index=link_prefix_index, value=link_value, discretizer=discretizer, cb=org_cb)
+        self.helper.set(ident=value, prefix=link_prefix, prefix_index=link_prefix_index, value=link_value, discretizer=discretizer, force=True, cb=org_cb)
 
     def set_bandwidth(self, runtime1, runtime2, bandwidth, cb=None):
         """
@@ -149,8 +149,8 @@ class LinkMonitor(object):
         from calvin.utilities import calvinuuid
         link_id = calvinuuid.uuid("Link")
         # set default values for bandwidth (max possible) and latency (0)
-        self.helper.set(link_id, "linkBandwidth-", "bandwidth", value=BAND_VALUES[-1], discretizer=bandwidth_number2text, cb=None)
-        self.helper.set(link_id, "linkLatency-", "latency", value=0, discretizer=latency_number2text, cb=None)
+        self.helper.set(link_id, "linkBandwidth-", "bandwidth", value=BAND_VALUES[-1], discretizer=bandwidth_number2text, force=True, cb=None)
+        self.helper.set(link_id, "linkLatency-", "latency", value=0, discretizer=latency_number2text, force=True, cb=None)
 
         self.storage.set(prefix="phyLink-", key=link_id, value=data, cb = None)
         # search link id by its origin/dst runtimes
@@ -186,8 +186,8 @@ class LinkMonitor(object):
         - Remove links from /phyLink-ID/ database
         - Remove from /phyLinks/runtimes the link
         """
-        self.helper.set(key, "linkBandwidth-", "bandwidth", value=None, discretizer=bandwidth_number2text, cb=None)
-        self.helper.set(key, "linkLatency-", "latency", value=None, discretizer=latency_number2text, cb=None)
+        self.helper.set(key, "linkBandwidth-", "bandwidth", value=None, discretizer=bandwidth_number2text, force=True, cb=None)
+        self.helper.set(key, "linkLatency-", "latency", value=None, discretizer=latency_number2text, force=True, cb=None)
         self.storage.remove_index(['phyLinks', value['runtime1']], key, root_prefix_level=1, cb=None)
         self.storage.remove_index(['phyLinks', value['runtime2']], key, root_prefix_level=1, cb=None)
         self.storage.delete('rt-link-', value['runtime1'] + value['runtime2'], cb=None)

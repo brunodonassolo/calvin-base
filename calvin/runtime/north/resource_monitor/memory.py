@@ -36,6 +36,7 @@ class MemMonitor(object):
         self.helper = ResourceMonitorHelper(storage)
         self.ram_total = ram_text2number(ramTotal)
         self.storage.set(prefix="nodeMemTotal-", key=node_id, value=self.ram_total, cb=None)
+        self.set_avail(avail=100)
 
     def _cb_mem_total(self, key, value, avail_bytes, node_id):
         avail = (avail_bytes/value)*100
