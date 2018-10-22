@@ -987,6 +987,8 @@ class AppManager(object):
             self._destroy(app, None)
             return
 
+        if app.batch == True:
+            self.batch_update_available_resources(app)
 
         actor_placement = { actor_id: (node_id if isinstance(node_id, list) else [node_id]) for actor_id, node_id in app.actor_placement.iteritems() }
         for actor_id, node_id in actor_placement.iteritems():
@@ -1451,9 +1453,15 @@ class AppManager(object):
         _log.info("Deployment: app: %s: finished placement: total elapsed time %d" % (app.id, time.time() - app.start_time))
 
     def batch_update_available_resources(self, app):
+        nodes = set()
         for actor_id, node_id in app.actor_placement.iteritems():
-            cpu_mips = app.runtime_cpu[node_id]# - app.cost_runtime_cpu[actor_id]
-            ram_bytes = app.runtime_ram[node_id]# - app.cost_runtime_ram[actor_id]
+            nodes.add(node_id)
+            app.runtime_cpu[node_id] -= app.cost_runtime_cpu[actor_id]
+            app.runtime_ram[node_id] -= app.cost_runtime_ram[actor_id]
+
+        for node_id in nodes:
+            cpu_mips = app.runtime_cpu[node_id]
+            ram_bytes = app.runtime_ram[node_id]
             self._node.cpu_monitor.set_avail_for_node(cpu_mips, node_id)
             self._node.mem_monitor.set_avail_for_node(ram_bytes, node_id)
 
@@ -1515,6 +1523,9 @@ class AppManager(object):
             _log.analyze(self._node.id, "+ DONE", {'app_id': app.id}, tb=True)
             self._destroy(app, None)
             return
+
+        if app.batch == True:
+            self.batch_update_available_resources(app)
 
 
         actor_placement = { actor_id: (node_id if isinstance(node_id, list) else [node_id]) for actor_id, node_id in app.actor_placement.iteritems() }
@@ -1893,8 +1904,6 @@ class AppManager(object):
 
         if update_resources:
             for actor_id, runtime in placement.iteritems():
-                print actor_id
-                print runtime
                 app.runtime_cpu[runtime] -= app.cost_runtime_cpu[actor_id]
                 app.runtime_ram[runtime] -= app.cost_runtime_ram[actor_id]
 
