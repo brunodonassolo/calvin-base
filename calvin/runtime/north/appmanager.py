@@ -490,6 +490,8 @@ class AppManager(object):
         app.cost_runtime_ram = {}   # sum of requested cost by user for runtime, update in cost_for_runtime
         app.runtime_cpu = {}    # available CPU in runtimes, runtime -> MIPS
         app.runtime_ram = {}    # available RAM in runtimes, runtime -> MB
+        app.runtime_cpu_total = {}    # total CPU in runtimes, runtime -> MIPS
+        app.runtime_ram_total = {}    # total RAM in runtimes, runtime -> MB
         app.phys_link_latency = {}  # available latency in physical link
         app.phys_link_bandwidth = {}# available bandwidth in physical link
         app.monetary_cost_ram = {}
@@ -563,6 +565,26 @@ class AppManager(object):
             value = 0
 
         app.runtime_cpu[key] = value
+        app.dynamic_capabilities.subtract({key : 1})
+
+        if self._calculate_cost_for_placement_verify(app):
+            update_cb()
+
+    def collect_runtime_cpu_total(self, key, value, app, update_cb):
+        if not value or value == response.NOT_FOUND:
+            value = 0
+
+        app.runtime_cpu_total[key] = value
+        app.dynamic_capabilities.subtract({key : 1})
+
+        if self._calculate_cost_for_placement_verify(app):
+            update_cb()
+
+    def collect_runtime_mem_total(self, key, value, app, update_cb):
+        if not value or value == response.NOT_FOUND:
+            value = 0
+
+        app.runtime_ram_total[key] = value
         app.dynamic_capabilities.subtract({key : 1})
 
         if self._calculate_cost_for_placement_verify(app):
@@ -1116,10 +1138,15 @@ class AppManager(object):
             for actor, actorPlac in opt.iteritems():
                 if actorPlac.runtime not in app.runtime_cpu or actorPlac.runtime not in app.runtime_ram:
                     if actorPlac.runtime not in app.dynamic_capabilities:
-                        app.dynamic_capabilities.update({actorPlac.runtime : 3 })
+                        app.dynamic_capabilities.update({actorPlac.runtime : 5 })
                         self.storage.get("nodeCpu-", actorPlac.runtime, cb=CalvinCB(func=self.collect_runtime_cpu, app=app, update_cb=CalvinCB(self.money_calculate_cost_for_placement_finish, app, actor_ids, place_set, cb_cost_calculated)))
                         self.storage.get("nodeRam-", actorPlac.runtime, cb=CalvinCB(func=self.collect_runtime_ram, app=app, update_cb=CalvinCB(self.money_calculate_cost_for_placement_finish, app, actor_ids, place_set, cb_cost_calculated)))
                         self.storage.get_node(actorPlac.runtime, cb=CalvinCB(func=self.collect_monetary_costs, app=app, update_cb=CalvinCB(self.money_calculate_cost_for_placement_finish, app, actor_ids, place_set, cb_cost_calculated)))
+                        #total cpu and ram for each node
+                        self.storage.get("nodeCpuTotal-", actorPlac.runtime, cb=CalvinCB(func=self.collect_runtime_cpu_total, app=app, update_cb=CalvinCB(self.money_calculate_cost_for_placement_finish, app, actor_ids, place_set, cb_cost_calculated)))
+                        self.storage.get("nodeMemTotal-", actorPlac.runtime, cb=CalvinCB(func=self.collect_runtime_mem_total, app=app, update_cb=CalvinCB(self.money_calculate_cost_for_placement_finish, app, actor_ids, place_set, cb_cost_calculated)))
+
+
                 if actorPlac.phys_link not in app.phys_link_bandwidth or actorPlac.phys_link not in app.phys_link_latency:
                     if actorPlac.phys_link != "" and actorPlac.phys_link not in app.dynamic_capabilities:
                         app.dynamic_capabilities.update({actorPlac.phys_link : 1 })
@@ -1485,6 +1512,12 @@ class AppManager(object):
             app.actor_placement = self.grasp_optimization(app, actor_ids, placement_lat, False)
         elif _conf.get('global', 'grasp') == "v1":
             app.actor_placement = self.grasp_optimization(app, actor_ids, placement_lat, True)
+        elif _conf.get('global', 'grasp') == "v2":
+            n_solutions = []
+            N = 10
+            for i in range(0,min(N, len(place_set))):
+                n_solutions.append({ actor: plac.runtime for actor,plac in place_set[i][0].iteritems() })
+            app.actor_placement = self.grasp_optimization_v2(app, actor_ids, n_solutions, False)
         else:
             app.actor_placement.update(placement_lat)
 
@@ -1778,7 +1811,9 @@ class AppManager(object):
             cb(status=response.CalvinResponse(all([s for s in app._migrated_actors.values()])))
 
     def grasp_load_balance_cost(self, app, actor_id, runtime):
-        return self.cost_for_runtime(app, actor_id, runtime)
+        cost = (float(app.runtime_cpu[runtime])/float(app.runtime_cpu_total[runtime]))
+        cost += (float(app.runtime_ram[runtime])/float(app.runtime_ram_total[runtime]))
+        return cost
 
     def grasp_get_actor_neighbors(self, actor_id):
         actors = []
@@ -1907,17 +1942,56 @@ class AppManager(object):
                 app.runtime_cpu[runtime] -= app.cost_runtime_cpu[actor_id]
                 app.runtime_ram[runtime] -= app.cost_runtime_ram[actor_id]
 
-        N = 0
+        K = 0
         ordered_actors = self.grasp_actor_order(actor_ids)
-        while optimized and N < 10:
+        while optimized and K < 10:
             optimized = False
-            N += 1
+            K += 1
             for actor_id in ordered_actors:
                 optimized |= self.grasp_actor_optimization(app, actor_id, placement, update_resources, alpha)
 
         app.runtime_cpu = backup_cpu
         app.runtime_ram = backup_ram
         return placement
+
+    def grasp_evaluate_cost_and_load(self, app, placement):
+        cost = 0.0
+        runtimes_cpu_usage = {}
+        runtimes_ram_usage = {}
+        for actor_id, node_id in placement.iteritems():
+            runtimes_cpu_usage[node_id] = runtimes_cpu_usage.setdefault(node_id, 0) + app.cost_runtime_cpu[actor_id]
+            runtimes_ram_usage[node_id] = runtimes_ram_usage.setdefault(node_id, 0) + app.cost_runtime_ram[actor_id]
+            cost += self.cost_for_runtime_v2(app, actor_id, node_id) 
+
+        min_load = 0.0
+        for runtime, avail in app.runtime_cpu.iteritems():
+            load_cpu = (avail - runtimes_cpu_usage.setdefault(runtime, 0))/app.runtime_cpu_total[runtime]
+            load_ram = (app.runtime_ram[runtime] - runtimes_ram_usage.setdefault(runtime, 0))/app.runtime_ram_total[runtime]
+            if min_load == 0.0 or (load_cpu + load_ram < min_load):
+                min_load = load_cpu + load_ram
+
+        return cost, min_load
+
+
+    def grasp_evaluate_solution(self, app, best, plac, alpha):
+        best_cost, best_min_load = self.grasp_evaluate_cost_and_load(app, best)
+        plac_cost, plac_min_load = self.grasp_evaluate_cost_and_load(app, plac)
+
+        if plac_cost < best_cost:
+            return True
+        if (plac_cost < best_cost + best_cost*alpha) and plac_min_load > best_min_load:
+            return True
+        return False
+
+
+    def grasp_optimization_v2(self, app, actor_ids, placement, update_resources=False, alpha=0.1):
+        best = None
+        for plac in placement:
+            plac_opt = self.grasp_optimization(app, actor_ids, plac, update_resources, alpha)
+            if best == None or self.grasp_evaluate_solution(app, best, plac_opt, alpha):
+                best = plac_opt
+
+        return best
 
 class Deployer(object):
 
