@@ -1616,7 +1616,7 @@ class AppManager(object):
             app.actor_placement = self.grasp_optimization(app, actor_ids, placement_lat, True)
         elif _conf.get('global', 'grasp') == "v2":
             n_solutions = []
-            N = 10
+            N = n_samples
             for i in range(0,min(N, len(place_set))):
                 n_solutions.append({ actor: plac.runtime for actor,plac in place_set[i][0].iteritems() })
             app.actor_placement = self.grasp_optimization_v2(app, actor_ids, n_solutions, False)
@@ -2138,23 +2138,27 @@ class AppManager(object):
             runtimes_ram_usage[node_id] = runtimes_ram_usage.setdefault(node_id, 0) + app.cost_runtime_ram[actor_id]
             cost += self.cost_for_runtime_v2(app, actor_id, node_id) 
 
-        min_load = 0.0
+        max_load = 0.0
         for runtime, avail in app.runtime_cpu.iteritems():
-            load_cpu = (avail - runtimes_cpu_usage.setdefault(runtime, 0))/app.runtime_cpu_total[runtime]
-            load_ram = (app.runtime_ram[runtime] - runtimes_ram_usage.setdefault(runtime, 0))/app.runtime_ram_total[runtime]
-            if min_load == 0.0 or (load_cpu + load_ram < min_load):
-                min_load = load_cpu + load_ram
+            #v1 load balance considering this placement
+            #load_cpu = (avail - runtimes_cpu_usage.setdefault(runtime, 0))/app.runtime_cpu_total[runtime]
+            #load_ram = (app.runtime_ram[runtime] - runtimes_ram_usage.setdefault(runtime, 0))/app.runtime_ram_total[runtime]
+            #v0 load between applications
+            load_cpu = avail/app.runtime_cpu_total[runtime]
+            load_ram = app.runtime_ram[runtime]/app.runtime_ram_total[runtime]
+            if max_load == 0.0 or (load_cpu + load_ram > max_load):
+                max_load = load_cpu + load_ram
 
-        return cost, min_load
+        return cost, max_load
 
 
     def grasp_evaluate_solution(self, app, best, plac, alpha):
-        best_cost, best_min_load = self.grasp_evaluate_cost_and_load(app, best)
-        plac_cost, plac_min_load = self.grasp_evaluate_cost_and_load(app, plac)
+        best_cost, best_max_load = self.grasp_evaluate_cost_and_load(app, best)
+        plac_cost, plac_max_load = self.grasp_evaluate_cost_and_load(app, plac)
 
         if plac_cost < best_cost:
             return True
-        if (plac_cost < best_cost + best_cost*alpha) and plac_min_load > best_min_load:
+        if (plac_cost < best_cost + best_cost*alpha) and plac_max_load < best_max_load:
             return True
         return False
 
