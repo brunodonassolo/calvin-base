@@ -497,6 +497,7 @@ class AppManager(object):
         app.monetary_cost_ram = {}
         app.monetary_cost_cpu = {}
         app.runtimes_nbr = set()
+        app.dynamic_capabilities = collections.Counter()
 
         app.link_placement_nbr = len(link_ids) # number of links that must be found
         app.phys_link_placement_runtimes_nbr = set()
@@ -529,10 +530,12 @@ class AppManager(object):
         _log.analyze(self._node.id, "+ DONE", {'application_id': application_id}, tb=True)
 
     def _verify_collect_placement(self, app):
-        return (len(app.actor_placement) == app.actor_placement_nbr and
+        if (len(app.actor_placement) == app.actor_placement_nbr and
             len(app.link_placement) == app.link_placement_nbr and
             set(app.phys_link_placement_runtimes.keys()) == app.phys_link_placement_runtimes_nbr and
-            app.batch is not None)
+            app.batch is not None and
+            self._calculate_cost_for_placement_verify(app)):
+            self.decide_placement(app)
 
     def collect_batch(self, key, value, app):
         if value is not None and value == "true":
@@ -540,8 +543,7 @@ class AppManager(object):
         else:
             app.batch = False
 
-        if self._verify_collect_placement(app):
-            self.decide_placement(app)
+        self._verify_collect_placement(app)
 
     def collect_actor_placement(self, app, actor_id, possible_placements, status):
         """
@@ -556,9 +558,22 @@ class AppManager(object):
         app.actor_placement[actor_id] = possible_placements
 
         app.runtimes_nbr.update(possible_placements)
+        for candidate in possible_placements:
+            if isinstance(candidate, dynops.InfiniteElement):
+                _log.debug("Skipping InfiniteElement in placement")
+                continue
 
-        if self._verify_collect_placement(app):
-            self.decide_placement(app)
+            if candidate not in app.runtime_cpu or candidate not in app.runtime_ram:
+                if candidate not in app.dynamic_capabilities:
+                    app.dynamic_capabilities.update({candidate : 5 })
+                    self.storage.get("nodeCpu-", candidate, cb=CalvinCB(func=self.collect_runtime_cpu, app=app, update_cb=CalvinCB(self._verify_collect_placement, app)))
+                    self.storage.get("nodeRam-", candidate, cb=CalvinCB(func=self.collect_runtime_ram, app=app, update_cb=CalvinCB(self._verify_collect_placement, app)))
+                    self.storage.get_node(candidate, cb=CalvinCB(func=self.collect_monetary_costs, app=app, update_cb=CalvinCB(self._verify_collect_placement, app)))
+                    #total cpu and ram for each node
+                    self.storage.get("nodeCpuTotal-", candidate, cb=CalvinCB(func=self.collect_runtime_cpu_total, app=app, update_cb=CalvinCB(self._verify_collect_placement, app)))
+                    self.storage.get("nodeMemTotal-", candidate, cb=CalvinCB(func=self.collect_runtime_mem_total, app=app, update_cb=CalvinCB(self._verify_collect_placement, app)))
+
+        self._verify_collect_placement(app)
 
     def collect_runtime_cpu(self, key, value, app, update_cb):
         if not value or value == response.NOT_FOUND:
@@ -640,8 +655,7 @@ class AppManager(object):
                 # requesting the runtimes that this physical link connects
                 self._node.link_monitor.get_info(candidate, cb=CalvinCB(func=self.collect_link_placement_runtime, app=app, link=link_id))
 
-        if self._verify_collect_placement(app):
-            self.decide_placement(app)
+        self._verify_collect_placement(app)
 
     def collect_phys_link_bandwidth(self, key, value, app, update_cb):
         if not value or value == response.NOT_FOUND:
@@ -681,8 +695,7 @@ class AppManager(object):
             app.phys_link_placement_runtimes[key] = value
             self.phys_link_placement_runtimes[key] = value
 
-        if self._verify_collect_placement(app):
-            self.decide_placement(app)
+        self._verify_collect_placement(app)
 
     def filter_update_placement_set(self, actor, rt_actor, dst_actor, rt_dst, plac_set):
         for opt in plac_set:
@@ -883,17 +896,17 @@ class AppManager(object):
         app.cost_link_band[link_id] = cost_band
         app.cost_link_lat[link_id] = cost_lat
 
-    def cost_for_link_v2(self, app, link_id, phy_link_id):
+    def cost_for_link_v2(self, app, link_id):
 
         # no link, just returns
-        if link_id == "" or phy_link_id == "":
+        if link_id == "":
             return 0.0
 
         # cost already calculated and  in the cache, get value and returns...
         if link_id not in app.cost_link_band or link_id not in app.cost_link_lat:
             self.update_cache_cost_link(app, link_id)
 
-        _log.debug("Calculating cost v2 for link %s, phys_link %s" % (link_id, phy_link_id))
+        _log.debug("Calculating cost v2 for link %s" % (link_id))
         cost = app.cost_link_band[link_id]*COST_LINK
         _log.debug("Total cost v2: %f" % cost)
         return cost
@@ -1163,13 +1176,58 @@ class AppManager(object):
             cost = 0.0
             runtimes_set = set()
             for actor, actorPlac in opt.iteritems():
-                cost += self.cost_for_runtime_v2(app, actor, actorPlac.runtime) + self.cost_for_link_v2(app, actorPlac.link, actorPlac.phys_link)
+                cost += self.cost_for_runtime_v2(app, actor, actorPlac.runtime) + self.cost_for_link_v2(app, actorPlac.link)
                 runtimes_set.add(actorPlac.runtime)
             multiplier = 1000000*COST_LINK*(len(actor_ids)+app.link_placement_nbr) # 1000000 max bandwidth value
             cost += multiplier*(len(app.runtimes_nbr) - len(runtimes_set))
             cost += multiplier*len(app.runtimes_nbr)*(len(actor_ids) - len(opt))
             place_set_sorted.append((opt, cost))
         place_set_sorted = sorted(place_set_sorted, key=lambda k : k[1])
+        cb_cost_calculated(place_set_sorted)
+
+    def grasp_calculate_cost_for_placement(self, app, actor_ids, place_set, cb_cost_calculated):
+        app.dynamic_capabilities = collections.Counter()
+        # request for unnkown values needed by cost functions
+        for opt,old_cost in place_set:
+            for actor, actorPlac in opt.iteritems():
+                if actorPlac.runtime not in app.runtime_cpu or actorPlac.runtime not in app.runtime_ram:
+                    if actorPlac.runtime not in app.dynamic_capabilities:
+                        app.dynamic_capabilities.update({actorPlac.runtime : 5 })
+                        self.storage.get("nodeCpu-", actorPlac.runtime, cb=CalvinCB(func=self.collect_runtime_cpu, app=app, update_cb=CalvinCB(self.grasp_calculate_cost_for_placement_finish, app, actor_ids, place_set, cb_cost_calculated)))
+                        self.storage.get("nodeRam-", actorPlac.runtime, cb=CalvinCB(func=self.collect_runtime_ram, app=app, update_cb=CalvinCB(self.grasp_calculate_cost_for_placement_finish, app, actor_ids, place_set, cb_cost_calculated)))
+                        self.storage.get_node(actorPlac.runtime, cb=CalvinCB(func=self.collect_monetary_costs, app=app, update_cb=CalvinCB(self.grasp_calculate_cost_for_placement_finish, app, actor_ids, place_set, cb_cost_calculated)))
+                        #total cpu and ram for each node
+                        self.storage.get("nodeCpuTotal-", actorPlac.runtime, cb=CalvinCB(func=self.collect_runtime_cpu_total, app=app, update_cb=CalvinCB(self.grasp_calculate_cost_for_placement_finish, app, actor_ids, place_set, cb_cost_calculated)))
+                        self.storage.get("nodeMemTotal-", actorPlac.runtime, cb=CalvinCB(func=self.collect_runtime_mem_total, app=app, update_cb=CalvinCB(self.grasp_calculate_cost_for_placement_finish, app, actor_ids, place_set, cb_cost_calculated)))
+
+
+                if actorPlac.phys_link not in app.phys_link_bandwidth or actorPlac.phys_link not in app.phys_link_latency:
+                    if actorPlac.phys_link != "" and actorPlac.phys_link not in app.dynamic_capabilities:
+                        app.dynamic_capabilities.update({actorPlac.phys_link : 1 })
+                        self.storage.get("linkBandwidth-", actorPlac.phys_link, cb=CalvinCB(func=self.collect_phys_link_bandwidth, app=app, update_cb=CalvinCB(self.grasp_calculate_cost_for_placement_finish, app, actor_ids, place_set, cb_cost_calculated)))
+
+        if self._calculate_cost_for_placement_verify(app):
+            self.grasp_calculate_cost_for_placement_finish(app, actor_ids, place_set, cb_cost_calculated)
+
+    def grasp_calculate_cost_for_placement_finish(self, app, actor_ids, place_set, cb_cost_calculated):
+        place_set_sorted = []
+        for opt,old_cost in place_set:
+            if not self.is_resource_usage_in_placement_ok(app, opt):
+                continue
+            cost = 0.0
+            load = -1.0
+            runtimes_set = set()
+            for actor, actorPlac in opt.iteritems():
+                cost += self.cost_for_runtime_v2(app, actor, actorPlac.runtime) + self.cost_for_link_v2(app, actorPlac.link)
+                runtimes_set.add(actorPlac.runtime)
+            for runtime in runtimes_set:
+                if (load == -1.0 or self.grasp_load_balance_cost(app, runtime) < load):
+                    load = self.grasp_load_balance_cost(app, runtime)
+            multiplier = 1000000*COST_LINK*(len(actor_ids)+app.link_placement_nbr) # 1000000 max bandwidth value
+            cost += multiplier*len(app.runtimes_nbr)*(len(actor_ids) - len(opt))
+            place_set_sorted.append((opt, cost, load))
+        place_set_sorted = sorted(place_set_sorted, key=lambda k : k[2], reverse=True) #load
+        place_set_sorted = sorted(place_set_sorted, key=lambda k : k[1]) # cost
         cb_cost_calculated(place_set_sorted)
 
     def best_calculate_cost_for_placement(self, app, actor_ids, place_set, cb_cost_calculated, worst):
@@ -1404,6 +1462,50 @@ class AppManager(object):
         # get cost to next step of loop
         self.money_calculate_cost_for_placement(app, actor_ids, place_set_for_actor, cb_cost_calculated=CalvinCB(self.money_actor_placement, app, actor_ids, n_samples, orphan_actors, cb_finish_placement = cb_finish_placement))
 
+    def grasp_actor_placement(self, app, actor_ids, alpha):
+
+        orphan_actors = []
+        for actor_id in actor_ids:
+            _log.debug("Actor id: %s, name: %s" % (actor_id, app.actors[actor_id]))
+            if len(self._node.am.actors[actor_id].inports.values()) == 0:
+                heappush(orphan_actors, (-100000, actor_id))
+
+        _log.debug("Starting placing the actors...")
+        actor_placement = {}
+        while len(orphan_actors) > 0:
+            neigh_actors = {}
+            for prio, actor_id in orphan_actors:
+                _log.debug("Actor id: %s, name: %s, prio(orphan): %d" % (actor_id, app.actors[actor_id], prio))
+                options = self.incremental_placement(app, actor_placement, actor_id)
+                if (len(options) == 0):
+                    continue
+                options_cost = []
+                for opt in options:
+                    cost = self.cost_for_runtime_v2(app, actor_id, opt)
+                    options_cost.append((opt, cost))
+                best_r, best_r_cost = sorted(options_cost, key=lambda k : k[1])[0]
+                RCL = [ r[0] for r in options_cost if r[1] <= best_r_cost*(1+alpha) ]
+                import random
+                elected = random.choice(tuple(RCL))
+                actor_placement[actor_id] = options[elected]
+
+                for i in self._node.am.actors[actor_id].outports.values():
+                    for p in i.get_peers():
+                        try:
+                            neigh_id = self._node.pm._get_local_port(port_id=p[1]).owner.id
+                        except:
+                            _log.debug("Didn't find neighbor actor")
+                            continue
+                        if not neigh_id in neigh_actors:
+                            neigh_actors[neigh_id] = -1
+                        else:
+                            neigh_actors[neigh_id] -= 1
+            orphan_actors = [(val, actor) for actor, val in neigh_actors.iteritems()]
+            heapify(orphan_actors)
+
+        _log.debug("Ending placing actors:...")
+        return actor_placement
+
     def green_actor_placement(self, app, actor_ids, n_samples, orphan_actors, place_set, cb_finish_placement):
 
         place_set = place_set[:n_samples]
@@ -1538,6 +1640,40 @@ class AppManager(object):
         _log.analyze(self._node.id, "+ DONE", {'app_id': app.id}, tb=True)
         _log.info("Deployment: app: %s: finished placement: total elapsed time %d" % (app.id, time.time() - app.start_time))
 
+    def grasp_placement_finish(self, app, actor_ids, N, place_set):
+        print("Ending placing actors:...")
+        print(str(place_set))
+
+        print "Grasp placement cost: %f, N: %d" % (place_set[0][1], N)
+        placement_lat = { actor: plac.runtime for actor,plac in place_set[0][0].iteritems() }
+        print placement_lat
+        if len(actor_ids) > len(placement_lat):
+            print "It was impossible to place all actors(total: %d, placed: %d), aborting..." % (len(actor_ids), len(placement_lat))
+            status = response.CalvinResponse(False, data='Impossible to place all actors')
+            app._org_cb(status=status, placement={})
+            del app._org_cb
+            _log.analyze(self._node.id, "+ DONE", {'app_id': app.id}, tb=True)
+            self._destroy(app, None)
+            return
+
+        app.actor_placement.update(placement_lat)
+        print "FINAL"
+        if app.batch == True:
+            self.batch_update_available_resources(app)
+
+        print app.actor_placement
+        status = response.CalvinResponse(True)
+
+        actor_placement = { actor_id: (node_id if isinstance(node_id, list) else [node_id]) for actor_id, node_id in app.actor_placement.iteritems() }
+        for actor_id, node_id in actor_placement.iteritems():
+            _log.debug("Actor deployment %s \t-> %s" % (app.actors[actor_id], node_id))
+            self._node.am.robust_migrate(actor_id, node_id[:], None)
+
+        app._org_cb(status=status, placement=actor_placement)
+        del app._org_cb
+        _log.analyze(self._node.id, "+ DONE", {'app_id': app.id}, tb=True)
+        _log.info("Deployment: app: %s: finished placement: total elapsed time %d" % (app.id, time.time() - app.start_time))
+
     def worst_placement_finish(self, app, actor_ids, n_samples, place_set):
         _log.debug("Ending placing actors:...")
         _log.debug(str(place_set))
@@ -1627,6 +1763,36 @@ class AppManager(object):
         place_set = [({}, 0.0)]
         self.money_actor_placement(app, actor_ids, n_samples, orphan_actors, place_set, cb_finish_placement=CalvinCB(self.money_placement_finish, app, actor_ids, n_samples))
 
+    def grasp_placement(self, app, actor_ids, alpha):
+        N = _conf.get('global', 'deployment_n_samples')
+        place_set = []
+        for i in range(0, N):
+            placement = self.grasp_actor_placement(app, actor_ids, alpha)
+            placement_temp = { actor: plac.runtime for actor,plac in placement.iteritems() }
+            if len(actor_ids) > len(placement_temp):
+                place_set.append((placement, 0.0))
+                continue
+            if _conf.get('global', 'grasp') == "v0":
+                placement = self.grasp_optimization(app, actor_ids, placement_temp, False)
+            elif _conf.get('global', 'grasp') == "v1":
+                placement = self.grasp_optimization(app, actor_ids, placement_temp, True)
+            else:
+                placement = placement_temp
+            # put back links to consider in cost
+            placement_link = {}
+            for link_id, phys_link_placements in app.link_placement.iteritems():
+                src_actor = self._node.link_manager.links[link_id].src_id
+                dst_actor = self._node.link_manager.links[link_id].dst_id
+                if placement[src_actor] != placement[dst_actor]:
+                    placement_link[dst_actor] = ActorPlacement(placement[dst_actor], link_id, "")
+            for actor, runtime in placement.iteritems():
+                if actor not in placement_link:
+                    placement_link[actor] = ActorPlacement(runtime, "", "")
+
+            place_set.append((placement_link, 0.0))
+
+        self.grasp_calculate_cost_for_placement(app, actor_ids, place_set, cb_cost_calculated=CalvinCB(self.grasp_placement_finish, app, actor_ids, N))
+
     def green_placement(self, app, actor_ids):
         n_samples = _conf.get('global', 'deployment_n_samples')
         orphan_actors = []
@@ -1699,6 +1865,8 @@ class AppManager(object):
             placement_best = self.best_first_placement(app, actor_ids)
         elif _conf.get('global', 'deployment_algorithm') == 'money':
             placement_best = self.money_placement(app, actor_ids)
+        elif _conf.get('global', 'deployment_algorithm') == 'grasp':
+            placement_best = self.grasp_placement(app, actor_ids, alpha=0.1)
         else:
             placement_best = self.money_placement(app, actor_ids)
 
@@ -1810,7 +1978,7 @@ class AppManager(object):
         if cb:
             cb(status=response.CalvinResponse(all([s for s in app._migrated_actors.values()])))
 
-    def grasp_load_balance_cost(self, app, actor_id, runtime):
+    def grasp_load_balance_cost(self, app, runtime):
         cost = (float(app.runtime_cpu[runtime])/float(app.runtime_cpu_total[runtime]))
         cost += (float(app.runtime_ram[runtime])/float(app.runtime_ram_total[runtime]))
         return cost
@@ -1884,8 +2052,15 @@ class AppManager(object):
             if not self.grasp_runtime_accept_actor(app, actor_id, r, placement):
                 _log.debug("GRASP, actor id: %s runtime: %s, CANNOT host it" % (actor_id, r))
                 continue
-            if self.grasp_load_balance_cost(app, actor_id, r) < self.grasp_load_balance_cost(app, actor_id, best_runtime):
-                best_runtime = r
+
+            if _conf.get('global', 'deployment_algorithm') == 'grasp':
+                if self.cost_for_runtime_v2(app, actor_id, r) < self.cost_for_runtime_v2(app, actor_id, best_runtime):
+                    best_runtime = r
+                elif (self.grasp_load_balance_cost(app, r) > self.grasp_load_balance_cost(app, best_runtime)) and (self.cost_for_runtime_v2(app, actor_id, r) <= self.cost_for_runtime_v2(app, actor_id, best_runtime)):
+                    best_runtime = r
+            else: # keep old behavior for other modes
+                if self.grasp_load_balance_cost(app, r) > self.grasp_load_balance_cost(app, best_runtime):
+                    best_runtime = r
         return best_runtime
 
 
