@@ -29,7 +29,7 @@ except:
 
 from calvin.utilities.calvinlogger import get_logger
 
-DEFAULT_TIMEOUT = 600
+DEFAULT_TIMEOUT = 300
 
 _log = get_logger(__name__)
 
