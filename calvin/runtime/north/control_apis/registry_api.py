@@ -1,15 +1,31 @@
+# -*- coding: utf-8 -*-
+
+# Copyright (c) 2018 Ericsson AB
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import json
 import re
 from calvin.requests import calvinresponse
 from calvin.utilities.calvin_callback import CalvinCB
 from calvin.utilities.calvinlogger import get_logger
-from routes import handler, register, uuid_re
+from routes import register, handler
 from authentication import authentication_decorator
 from calvin.utilities.attribute_resolver import format_index_string
 
 _log = get_logger(__name__)
 
-@handler(r"POST /index/([0-9a-zA-Z\.\-/_]*)\sHTTP/1")
+@handler(method="POST", path="/index/{path}")
 @authentication_decorator
 def handle_post_index(self, handle, connection, match, data, hdr):
     """
@@ -29,8 +45,7 @@ def handle_post_index(self, handle, connection, match, data, hdr):
     self.node.storage.add_index(
         match.group(1), data['value'], cb=CalvinCB(self.index_cb, handle, connection), **kwargs)
 
-
-@handler(r"DELETE /index/([0-9a-zA-Z\.\-/_]*)\sHTTP/1")
+@handler(method="DELETE", path="/index/{path}")
 @authentication_decorator
 def handle_delete_index(self, handle, connection, match, data, hdr):
     """
@@ -52,7 +67,7 @@ def handle_delete_index(self, handle, connection, match, data, hdr):
 
 
 # Can't be access controlled, as it is needed to find authorization server
-@handler(r"GET /index/([0-9a-zA-Z\.\-/_]*)(?:\?root_prefix_level=([0-9]*))?\sHTTP/1")
+@handler(method="GET", path="/index/{path}", optional=[r"\?root_prefix_level=(\d+)"])
 def handle_get_index(self, handle, connection, match, data, hdr):
     """
     GET /index/{key}?root_prefix_level={level}
@@ -61,8 +76,8 @@ def handle_get_index(self, handle, connection, match, data, hdr):
     Response: {"result": <list of strings>}
     """
     kwargs = {}
-    if match.group(2) is not None:
-        kwargs['root_prefix_level'] = int(match.group(2))
+    if match.group(3) is not None:
+        kwargs['root_prefix_level'] = int(match.group(3))
     self.node.storage.get_index(
         match.group(1), cb=CalvinCB(self.get_index_cb, handle, connection), **kwargs)
 
@@ -89,7 +104,7 @@ def get_index_cb(self, handle, connection, value, *args, **kwargs):
                        status=calvinresponse.NOT_FOUND if value is None else calvinresponse.OK)
 
 
-@handler(r"POST /storage/([0-9a-zA-Z\.\-/_]*)\sHTTP/1")
+@handler(method="POST", path="/storage/{path}")
 @authentication_decorator
 def handle_post_storage(self, handle, connection, match, data, hdr):
     """
@@ -104,8 +119,7 @@ def handle_post_storage(self, handle, connection, match, data, hdr):
     """
     self.node.storage.set("", match.group(1), data['value'], cb=CalvinCB(self.index_cb, handle, connection))
 
-
-@handler(r"GET /storage/([0-9a-zA-Z\.\-/_]*)\sHTTP/1")
+@handler(method="GET", path="/storage/{path}")
 @authentication_decorator
 def handle_get_storage(self, handle, connection, match, data, hdr):
     """
@@ -124,7 +138,7 @@ def get_storage_cb(self, key, value, handle, connection):
                        status=calvinresponse.NOT_FOUND if missing else calvinresponse.OK)
 
 
-@handler(r"GET /dumpstorage\sHTTP/1")
+@handler(method="GET", path="/dumpstorage")
 @authentication_decorator
 def handle_dump_storage(self, handle, connection, match, data, hdr):
     """
@@ -155,7 +169,8 @@ def handle_post_node_attribute_indexed_public_cb(self, key, value, handle, conne
         _log.error("Failed to update node %s", e)
         self.send_response(handle, connection, None, status=calvinresponse.INTERNAL_ERROR)
 
-@handler(r"POST /node/(NODE_" + uuid_re + "|" + uuid_re + ")/attributes/indexed_public\sHTTP/1")
+
+@handler(method="POST", path="/node/{node_id}/attributes/indexed_public")
 @authentication_decorator
 def handle_post_node_attribute_indexed_public(self, handle, connection, match, data, hdr):
     """
@@ -192,8 +207,7 @@ def storage_cb(self, key, value, handle, connection):
     self.send_response(handle, connection, None if missing else json.dumps(value),
                        status=calvinresponse.NOT_FOUND if missing else calvinresponse.OK)
 
-
-@handler(r"GET /node/(NODE_" + uuid_re + "|" + uuid_re + ")\sHTTP/1")
+@handler(method="GET", path="/node/{node_id}")
 @authentication_decorator
 def handle_get_node(self, handle, connection, match, data, hdr):
     """
@@ -211,7 +225,7 @@ def handle_get_node(self, handle, connection, match, data, hdr):
         func=self.storage_cb, handle=handle, connection=connection))
 
 
-@handler(r"GET /application/(APP_" + uuid_re + "|" + uuid_re + ")\sHTTP/1")
+@handler(method="GET", path="/application/{application_id}")
 @authentication_decorator
 def handle_get_application(self, handle, connection, match, data, hdr):
     """
@@ -230,7 +244,7 @@ def handle_get_application(self, handle, connection, match, data, hdr):
         func=self.storage_cb, handle=handle, connection=connection))
 
 
-@handler(r"GET /actor/(ACTOR_" + uuid_re + "|" + uuid_re + ")\sHTTP/1")
+@handler(method="GET", path="/actor/{actor_id}")
 @authentication_decorator
 def handle_get_actor(self, handle, connection, match, data, hdr):
     """
@@ -250,11 +264,8 @@ def handle_get_actor(self, handle, connection, match, data, hdr):
     self.node.storage.get_actor(match.group(1), CalvinCB(
         func=self.storage_cb, handle=handle, connection=connection))
 
-
-
-
 # @authentication_decorator # Disabled in original code
-@handler(r"GET /actor/(ACTOR_" + uuid_re + "|" + uuid_re + ")/port/(PORT_" + uuid_re + "|" + uuid_re + ")\sHTTP/1")
+@handler(method="GET", path="/actor/{actor_id}/port/{port_id}")
 def handle_get_port(self, handle, connection, match, data, hdr):
     """
         GET /actor/{actor-id}/port/{port-id}
@@ -264,33 +275,24 @@ def handle_get_port(self, handle, connection, match, data, hdr):
     self.node.storage.get_port(match.group(2), CalvinCB(
         func=self.storage_cb, handle=handle, connection=connection))
 
-
-@handler(r"POST /node/resource/cpuAvail\sHTTP/1")
+@handler(method="POST", path="/node/resource/", optional=["mem_avail", "cpu_avail", "memAvail", "cpuAvail"])
 @authentication_decorator
-def handle_resource_cpu_avail(self, handle, connection, match, data, hdr):
+def handle_resource_avail(self, handle, connection, match, data, hdr):
     """
-    POST /node/resource/cpuAvail
-    Updates CPU availability in the local node
+    POST /node/resource/{mem_avail|cpu_avail}
+    Updates {mem|cpu]} availability in the local node
     Body:
     {
-        "value": <CPU avail (0,25,50,75,100)>
+        "value": <{RAM|CPU} avail (0,25,50,75,100)>
     }
-    Response status code: OK or INTERNAL_ERROR
-    Response: none
-    """
-    self.node.cpu_monitor.set_avail(data['value'], CalvinCB(self.index_cb, handle, connection))
 
-@handler(r"POST /node/resource/memAvail\sHTTP/1")
-@authentication_decorator
-def handle_resource_mem_avail(self, handle, connection, match, data, hdr):
-    """
-    POST /node/resource/memAvail
-    Updates RAM availability in the local node
-    Body:
-    {
-        "value": <RAM avail (0,25,50,75,100)>
-    }
-    Response status code: OK or INTERNAL_ERROR
+    Note: memAvail, cpuAvail versions are deprecated. Use lowercase
+    Response status code: OK, NOT_FOUND, INTERNAL_ERROR
     Response: none
     """
-    self.node.mem_monitor.set_avail(data['value'], CalvinCB(self.index_cb, handle, connection))
+    if match.group(1) in ['mem_avail', "memAvail"]:
+        self.node.mem_monitor.set_avail(data['value'], CalvinCB(self.index_cb, handle, connection))
+    elif match.group(1) in ['cpu_avail', "cpuAvail"]:
+        self.node.cpu_monitor.set_avail(data['value'], CalvinCB(self.index_cb, handle, connection))
+    else:
+        self.send_response(handle, connection, None, status=calvinresponse.NOT_FOUND)

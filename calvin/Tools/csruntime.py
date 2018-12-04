@@ -36,6 +36,14 @@ Start runtime, compile calvinscript and deploy application.
 
     argparser = argparse.ArgumentParser(description=long_description)
 
+    group = argparser.add_mutually_exclusive_group()
+    group.add_argument('--gui', dest="gui", action="store_true", help="start Calvin GUI")
+    group.add_argument('--gui-mock-devices', dest="guimockdevices", action="store_true", help="start Calvin GUI with default set of mock devices")
+    argparser.add_argument('--gui-port', metavar='<gui port>', type=int, dest="guiport",
+                           default=8000, help="use port <gui port> for gui server")
+    argparser.add_argument('--gui-if', metavar='<gui interface>', type=str, dest="guiif",
+                           default="localhost", help="use ipv4 interface <gui interface> for gui server")
+
     argparser.add_argument('--name', metavar='<name>', type=str,
                             help="shortcut for attribute indexed_public/node_name/name",
                             dest='name')
@@ -218,7 +226,7 @@ def set_config_from_args(args):
 
 def discover(timeout=2, retries=5):
     import struct
-    from calvin.runtime.south.plugins.storage.twistedimpl.dht.service_discovery_ssdp import SSDPServiceDiscovery,\
+    from calvin.runtime.south.storage.twistedimpl.dht.service_discovery_ssdp import SSDPServiceDiscovery,\
                                                                                             SERVICE_UUID,\
                                                                                             CA_SERVICE_UUID,\
                                                                                             SSDP_ADDR,\
@@ -260,7 +268,7 @@ def runtime_certificate(rt_attributes):
     from calvin.utilities import runtime_credentials
     from calvin.utilities import certificate
     from calvin.utilities import certificate_authority
-    from calvin.runtime.south.plugins.storage.twistedimpl.dht.service_discovery_ssdp import parse_http_response
+    from calvin.runtime.south.storage.twistedimpl.dht.service_discovery_ssdp import parse_http_response
     global _conf
     global _log
     _conf = calvinconfig.get()
@@ -355,6 +363,32 @@ def runtime_certificate(rt_attributes):
             else:
                 _log.debug("Runtime certificate available")
 
+def start_gui(interface4, port, mockdevices):
+  import calvinextras
+  import inspect
+  import os.path
+  from twisted.web.server import Site
+  from twisted.web.static import File
+  from twisted.internet import endpoints, reactor
+  from calvin.utilities import calvinconfig
+
+  # find installation path of calvinextras package
+  extras_path = os.path.dirname(inspect.getfile(calvinextras))
+  # build path to gui files
+  gui_path = os.path.join(extras_path, "CalvinGUI", "Build", "GUI")
+  gui_config_path =  os.path.join(extras_path, "CalvinGUI", "calvin.conf")
+  if mockdevices:
+      # Patch config
+      _conf = calvinconfig.get()
+      delta_config = _conf.config_at_path(gui_config_path)
+      _conf.update_config(delta_config)
+  # Add endpoint to twisted reactor
+  resource = File(gui_path)
+  factory = Site(resource)
+  endpoint = endpoints.TCP4ServerEndpoint(reactor, interface=interface4, port=port)
+  endpoint.listen(factory)
+  _log.info("Calvin GUI server listening on http://{}:{}".format(interface4, port))
+
 
 def main():
     args = parse_arguments()
@@ -366,6 +400,10 @@ def main():
     # Need to be before other calvin calls to set the common log file
     set_loglevel(args.loglevel, args.logfile)
     set_config_from_args(args)
+
+    # Start gui (if applicaple)
+    if args.gui or args.guimockdevices:
+        start_gui(args.guiif, args.guiport, args.guimockdevices)
 
     app_info = None
 
