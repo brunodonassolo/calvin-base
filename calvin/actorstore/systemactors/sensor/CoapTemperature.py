@@ -72,9 +72,3 @@ class CoapTemperature(Actor):
 
     action_priority = (send_read, read_temperature, )
 
-    test_set = [
-        {
-            'in': {'token': [1, 2, 3]},
-            'out': {'token': [1, 2, 3]}
-        }
-    ]
