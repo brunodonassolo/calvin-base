@@ -54,6 +54,11 @@ class Sink(Actor):
         if self.store_tokens:
             self.tokens.append(token)
         self.logger("%s<%s>: %s" % (self.__class__.__name__, self.id, str(token).strip()))
+        if "timestamp" in token:
+            import datetime
+            elapsed = datetime.datetime.now() - datetime.datetime.strptime(token["timestamp"][0]["date"], "%Y-%m-%d %H:%M:%S.%f")
+            self.logger("%s<%s>: %f" % (self.__class__.__name__, self.id, elapsed.total_seconds()))
+
 
     action_priority = (log, )
 

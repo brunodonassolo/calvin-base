@@ -42,6 +42,11 @@ class DumbBurn(Actor):
         if self.dump:
             self.log(input)
         self.last = input
+        try:
+            import datetime
+            input["timestamp"].append({"uid": self.id, "date": str(datetime.datetime.now())})
+        except:
+            pass
         # Burn cycles
         x = 0
         while x != self.duration:
