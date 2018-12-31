@@ -31,15 +31,16 @@ if not hasattr(pytest, 'inlineCallbacks'):
 class TestCpuMonitor(object):
     CPUAVAIL_INDEX_BASE = ['node', 'resource', 'cpuAvail']
     CPU_INDEX_BASE = ['node', 'resource', 'cpu']
+    CPURAW_INDEX_BASE = ['node', 'resource', 'cpuRaw']
     CPUTOTAL_INDEX_BASE = ['node', 'attribute', 'cpuTotal']
 
     @pytest.inlineCallbacks
     def setup(self):
         _conf.set('global', 'storage_type', 'local')
         self.node = calvin.tests.TestNode(["127.0.0.1:5000"])
-        self.node.attributes = AttributeResolver({"indexed_public": {"cpuTotal": "1000000" }})
+        self.node.attributes = AttributeResolver({"indexed_public": {"cpuTotal": "100000" }})
         self.storage = storage.Storage(self.node)
-        self.cpu_total = 1000000
+        self.cpu_total = 100000
         self.cpu = CpuMonitor(self.node.id, self.storage, self.cpu_total)
         self.done = False
         self.storage.add_node(self.node)
@@ -88,6 +89,11 @@ class TestCpuMonitor(object):
                 yield wait_for(self._test_done)
                 assert self.node.id in self.get_ans
 
+                self.done = False
+                self.storage.get_index(index=self.CPURAW_INDEX_BASE + map(str, cpu_values[:0]), root_prefix_level=2, cb=CalvinCB(self.cb2))
+                yield wait_for(self._test_done)
+                assert self.node.id in self.get_ans
+
             # verify index ok and present until level i
             for j in range(0, values.index(i)):
                 self.done = False
@@ -127,8 +133,14 @@ class TestCpuMonitor(object):
         yield wait_for(self._test_done)
         assert self.node.id in self.get_ans
 
+        self.done = False
+        self.storage.get(prefix="nodeCpuAvail-", key=self.node.id, cb=CalvinCB(self.cb))
+        yield wait_for(self._test_done)
+        assert self.get_ans == 25
+
         self.cpu.stop()
         self.storage.delete_node(self.node)
+        yield threads.defer_to_thread(time.sleep, .1)
 
         # nodeCpuAvail must not exist
         self.done = False
@@ -145,6 +157,11 @@ class TestCpuMonitor(object):
         # node id must not be present
         self.done = False
         self.storage.get_index(index=self.CPU_INDEX_BASE + ['1'], root_prefix_level=2, cb=CalvinCB(self.cb2))
+        yield wait_for(self._test_done)
+        assert self.get_ans == []
+
+        self.done = False
+        self.storage.get_index(index=self.CPURAW_INDEX_BASE + ['1'], root_prefix_level=2, cb=CalvinCB(self.cb2))
         yield wait_for(self._test_done)
         assert self.get_ans == []
 
@@ -180,6 +197,7 @@ class TestCpuMonitor(object):
 class TestMemMonitor(object):
     MEMAVAIL_INDEX_BASE = ['node', 'resource', 'memAvail']
     RAM_INDEX_BASE = ['node', 'resource', 'ram']
+    RAMRAW_INDEX_BASE = ['node', 'resource', 'ramRaw']
     MEMTOTAL_INDEX_BASE = ['node', 'attribute', 'memTotal']
 
     @pytest.inlineCallbacks
@@ -237,6 +255,11 @@ class TestMemMonitor(object):
                 yield wait_for(self._test_done)
                 assert self.node.id in self.get_ans
 
+                self.done = False
+                self.storage.get_index(index=self.RAMRAW_INDEX_BASE + map(str,ram_values[:0]), root_prefix_level=2, cb=CalvinCB(self.cb2))
+                yield wait_for(self._test_done)
+                assert self.node.id in self.get_ans
+
             # verify index ok and present until level i
             for j in range(0, values.index(i)):
                 self.done = False
@@ -278,6 +301,7 @@ class TestMemMonitor(object):
 
         self.mem.stop()
         self.storage.delete_node(self.node)
+        yield threads.defer_to_thread(time.sleep, .01)
 
         # nodeMemAvail must not exist
         self.done = False
@@ -294,6 +318,11 @@ class TestMemMonitor(object):
         # no node in ram indexes
         self.done = False
         self.storage.get_index(index=self.RAM_INDEX_BASE + ['1000'], root_prefix_level=2, cb=CalvinCB(self.cb2))
+        yield wait_for(self._test_done)
+        assert self.get_ans == []
+
+        self.done = False
+        self.storage.get_index(index=self.RAMRAW_INDEX_BASE + ['1000'], root_prefix_level=2, cb=CalvinCB(self.cb2))
         yield wait_for(self._test_done)
         assert self.get_ans == []
 
@@ -478,6 +507,7 @@ class TestLinkMonitor(object):
         assert self.get_ans == []
 
     @pytest.inlineCallbacks
+    @pytest.mark.skip
     def test_stop_node(self):
         """
         Verify if indexes are cleared after node stop

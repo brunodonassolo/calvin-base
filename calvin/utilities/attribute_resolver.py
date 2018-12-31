@@ -117,7 +117,7 @@ latency_help = {"1s":"1 second",
                 "100us": "100 microseconds"}
 
 # list of acceptable resources
-resource_list = ["cpuAvail", "memAvail", "cpu", "ram"]
+resource_list = ["cpuAvail", "memAvail", "cpu", "ram", "cpuRaw", "ramRaw"]
 
 # list of acceptable links
 links_list = ["bandwidth", "latency"]
@@ -259,9 +259,26 @@ class AttributeResolverHelper(object):
 
     @classmethod
     def cpu_total_resolver(cls, attr):
-        if attr not in cpuTotal_keys:
-            raise Exception('CPU power must be: %s' % cpuTotal_keys)
-        resolved = map(cls._to_unicode, cpuTotal_keys[:cpuTotal_keys.index(attr) + 1])
+        for i, value in enumerate(cpuTotal_keys):
+            if int(value) >= int(attr):
+                idx = i
+                break
+        resolved = map(cls._to_unicode, cpuTotal_keys[:idx])
+        resolved.append(cls._to_unicode(attr))
+        return resolved
+
+    # get all runtimes
+    @classmethod
+    def cpu_raw_resolver(cls, attr):
+        idx = 0
+        resolved = map(cls._to_unicode, cpuTotal_keys[:idx+1])
+        return resolved
+
+    # get all runtimes
+    @classmethod
+    def ram_raw_resolver(cls, attr):
+        idx = 0
+        resolved = map(cls._to_unicode, ram_keys[:idx + 1])
         return resolved
 
     @classmethod
@@ -392,6 +409,8 @@ attr_resolver = {"owner": AttributeResolverHelper.owner_resolver,
                  "cpuTotal" : AttributeResolverHelper.cpu_total_resolver,
                  "cpu" : AttributeResolverHelper.cpu_resolver,
                  "ram" : AttributeResolverHelper.ram_resolver,
+                 "cpuRaw" : AttributeResolverHelper.cpu_raw_resolver,
+                 "ramRaw" : AttributeResolverHelper.ram_raw_resolver,
                  "cpuAvail" : AttributeResolverHelper.cpu_avail_resolver,
                  "cpuAffinity" : AttributeResolverHelper.cpu_affi_resolver,
                  "memAvail" : AttributeResolverHelper.mem_avail_resolver,
@@ -406,6 +425,8 @@ keys = {"owner": owner_keys,
         "address": address_keys,
         "cpu": cpuTotal_keys,
         "ram": ram_keys,
+        "cpuRaw": cpuTotal_keys,
+        "ramRaw": ram_keys,
         "cpuTotal": cpuTotal_keys,
         "cpuAvail": cpuAvail_keys,
         "cpuAffinity": cpuAffinity_keys,

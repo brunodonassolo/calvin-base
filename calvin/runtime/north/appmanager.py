@@ -938,6 +938,10 @@ class AppManager(object):
                     cost_cpu += float(i["kwargs"]["index"]["cpu"])
                 if "ram" in i["kwargs"]["index"]:
                     cost_ram += float(i["kwargs"]["index"]["ram"])
+                if "cpuRaw" in i["kwargs"]["index"]:
+                    cost_cpu += float(i["kwargs"]["index"]["cpuRaw"])
+                if "ramRaw" in i["kwargs"]["index"]:
+                    cost_ram += float(i["kwargs"]["index"]["ramRaw"])
         app.cost_runtime_cpu[actor_id] = cost_cpu
         app.cost_runtime_ram[actor_id] = cost_ram
 
@@ -1836,6 +1840,12 @@ class AppManager(object):
 
         # Collect an actor by actor matrix stipulating a weighting 0.0 - 1.0 for their connectivity
         actor_ids, actor_matrix = self._actor_connectivity(app)
+
+        # verify available CPU and RAM in nodes
+        for actor_id, nodes_ids in app.actor_placement.iteritems():
+            self.update_cache_cost_actor(app, actor_id)
+            nodes_to_remove = [ node_id for node_id in nodes_ids if (app.runtime_cpu[node_id] < app.cost_runtime_cpu.setdefault(actor_id, 0)) or (app.runtime_ram[node_id] < app.cost_runtime_ram.setdefault(actor_id, 0)) ]
+            nodes_ids -= set(nodes_to_remove)
 
         # Get list of all possible nodes
         node_ids = set([])

@@ -2,6 +2,7 @@
 
 from calvin.runtime.south.async import async
 from calvin.runtime.north.resource_monitor.helper import ResourceMonitorHelper
+from calvin.utilities.attribute_resolver import AttributeResolver
 from calvin.utilities.calvinlogger import get_logger
 from calvin.requests import calvinresponse
 from calvin.utilities.calvin_callback import CalvinCB
@@ -62,12 +63,22 @@ class CpuMonitor(object):
 
         self.helper.set(ident=self.node_id, prefix="nodeCpu-", prefix_index="cpu", value=int(avail*(self.cpu_total/100)), discretizer=cpu_discretizer, cb=cb)
 
+        #adding runtime for cpuRaw, independently of available CPU
+        new_data = AttributeResolver({"indexed_public": {"cpuRaw": "1"}})
+        for index in new_data.get_indexed_public():
+            self.storage.add_index(index=index, value=self.node_id, root_prefix_level=2, cb=None)
+
+    def _stop(self, key, value):
+        self.storage.delete(prefix="nodeCpuAvail-", key=self.node_id, cb=None)
+        self.storage.delete(prefix="nodeCpu-", key=self.node_id, cb=None)
+
     def stop(self):
         """
         Stops monitoring, cleaning storage
         """
         # get old value to cleanup indexes
         self.helper.set(self.node_id, "nodeCpuAvail-", "cpuAvail", value=None, discretizer=cpu_avail_discretizer, cb=None)
-        self.helper.set(self.node_id, "nodeCpu-", "cpu", value=None, discretizer=cpu_discretizer, cb=None)
-        self.storage.delete(prefix="nodeCpuAvail-", key=self.node_id, cb=None)
-        self.storage.delete(prefix="nodeCpu-", key=self.node_id, cb=None)
+        self.helper.set(self.node_id, "nodeCpu-", "cpu", value=None, discretizer=cpu_discretizer, cb=CalvinCB(self._stop))
+        new_data = AttributeResolver({"indexed_public": {"cpuRaw": "1"}})
+        for index in new_data.get_indexed_public():
+            self.storage.remove_index(index=index, value=self.node_id, root_prefix_level=2, cb=None)
