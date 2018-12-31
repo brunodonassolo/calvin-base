@@ -35,9 +35,16 @@ class SmartBurn(Actor):
         self.dump = dump
         self.last = None
         self.size = size
-        random.seed(seed)
-        self.A = [[random.random() for i in range(0,size)] for j in range(0,size)]
-        self.B = [[random.random() for i in range(0,size)] for j in range(0,size)]
+        self.seed = seed
+        self.setup()
+
+    def setup(self):
+        random.seed(self.seed)
+        self.A = [[random.random() for i in range(0,self.size)] for j in range(0,self.size)]
+        self.B = [[random.random() for i in range(0,self.size)] for j in range(0,self.size)]
+
+    def did_migrate(self):
+        self.setup()
 
     def log(self, data):
         _log.info("%s<%s>: %s" % (self.__class__.__name__, self.id, str(data).strip()))
