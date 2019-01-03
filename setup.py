@@ -35,7 +35,7 @@ setup(name='er-calvin',
           'pytest-twisted'
       ],
       install_requires=[
-        'numpy==1.13.3',
+        'numpy>=1.10.0',
         'colorlog==2.6.1',
         'rpcudp==1.0',
         'kademlia==0.5',
