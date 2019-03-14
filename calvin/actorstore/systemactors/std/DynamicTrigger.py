@@ -98,6 +98,8 @@ class DynamicTrigger(Actor):
             if current_time > (self.initial_setup_date + state[0] + delta):
                 _log.warning("%s<%s>: Delayed state change, state:%s, expected time: %f, current time:%f" % (self.__class__.__name__, self.id, state[1], self.initial_setup_date + state[0], current_time))
 
+        _log.info("%s<%s>: State change, state:%s, expected time: %f, current time:%f" % (self.__class__.__name__, self.id, state[1], self.initial_setup_date + state[0], current_time))
+
         self.last_state_date = current_time
         data_state = self.state_info[state[1]]
         self.data = data_state[1]
