@@ -117,6 +117,7 @@ class DynamicTrigger(Actor):
                 split_line = f.readline().replace('\n', '').split(' ')
                 interval = float(split_line[1])
 
+                _log.info("%s<%s>: Setup DynamicTrigger, state: %s, token interval: %f" % (self.__class__.__name__, self.id, split_line[0], interval))
                 if interval < 0:
                     self.state_info[split_line[0]] = (interval,"")
                 else:
