@@ -61,8 +61,6 @@ class DynamicTrigger(Actor):
 
             next_token = max(0, (self.last_token_date + self.current_token_interval) - current_time)
 
-        self.last_token_date = current_time
-
         self.timer = calvinsys.open(self, "sys.timer.once", period = next_token)
 
 
@@ -155,13 +153,13 @@ class DynamicTrigger(Actor):
         if (self.verbose and self.last_token_date != None and (current_time > (self.last_token_date + delta))):
             _log.info("%s<%s>: Delay sending token, token interval: %f, expected date: %f, current date: %f" % (self.__class__.__name__, self.id, self.current_token_interval, self.last_token_date + self.current_token_interval, current_time))
 
-        self.last_token_date = current_time
         import datetime
         message = { "seq_number" : self.seq_number, "timestamp":  [ {"uid" : self.id,"date" : str(datetime.datetime.now())}], "data" : self.data}
         if self.verbose:
             _log.info("%s<%s>: %s" % (self.__class__.__name__, self.id, str(message).strip()))
         self.seq_number += 1
         self._set_timer()
+        self.last_token_date = current_time #save last token date only in the end. _set_timer uses it to configure next token interval and log warning message
         return (message, )
 
     action_priority = (set_state, trigger)
