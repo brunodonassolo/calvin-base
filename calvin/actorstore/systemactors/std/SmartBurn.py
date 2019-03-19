@@ -17,10 +17,12 @@
 from calvin.actor.actor import Actor, manage, condition
 import time  # NEVER DO THIS OUTSIDE OF TEST
 import numpy
-import random
+import random, datetime
 from calvin.utilities.calvinlogger import get_logger
 
 _log = get_logger(__name__)
+
+TRIGGER_THRESHOLD=5
 
 class SmartBurn(Actor):
     """
@@ -42,6 +44,10 @@ class SmartBurn(Actor):
         random.seed(self.seed)
         self.A = [[random.random() for i in range(0,self.size)] for j in range(0,self.size)]
         self.B = [[random.random() for i in range(0,self.size)] for j in range(0,self.size)]
+        timestamp = time.time()
+        numpy.matmul(self.A, self.B)
+        self.processing_time = time.time() - timestamp
+        self.number_events = 0
 
     def did_migrate(self):
         self.setup()
@@ -54,13 +60,31 @@ class SmartBurn(Actor):
         if self.dump:
             self.log(input)
         self.last = input
+        elapsed = 0
         try:
             import datetime
             input["timestamp"].append({"uid": self.id, "date": str(datetime.datetime.now())})
+            if "timestamp" in input:
+                import datetime
+                elapsed = (datetime.datetime.now() - datetime.datetime.strptime(input["timestamp"][0]["date"], "%Y-%m-%d %H:%M:%S.%f")).total_seconds()
         except:
             pass
         # Burn cycles
         numpy.matmul(self.A, self.B)
+
+        # check processing time and migration conditions
+        if elapsed > TRIGGER_THRESHOLD*self.processing_time:
+            self.number_events += 1
+            _log.info("%s<%s>: Elapsed time in burn higher than threshold, elapsed: %f threshould: %f number_events: %d" % (self.__class__.__name__, self.id, elapsed, TRIGGER_THRESHOLD*self.processing_time, self.number_events))
+        else:
+            self.number_events = 0
+        if self.number_events > TRIGGER_THRESHOLD:
+            _log.warning("%s<%s>: Actor must be migrated, number_events: %d" % (self.__class__.__name__, self.id, self.number_events))
+            self.better_migrate = True
+        elif self.better_migrate:
+            _log.info("%s<%s>: Actor doest need to be migrated, number_events: %d" % (self.__class__.__name__, self.id, self.number_events))
+            self.better_migrate = False
+
         return (input, )
 
     action_priority = (donothing, )

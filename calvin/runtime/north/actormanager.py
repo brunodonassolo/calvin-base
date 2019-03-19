@@ -27,6 +27,7 @@ from calvin.actor.actor import ShadowActor
 from calvin.runtime.north.plugins.port import DISCONNECT
 from calvin.runtime.north.calvinsys import get_calvinsys
 from calvin.runtime.north.calvinlib import get_calvinlib
+import collections
 
 
 _log = get_logger(__name__)
@@ -36,6 +37,23 @@ def log_callback(reply, **kwargs):
     if reply:
         _log.info("%s: %s" % (kwargs['prefix'], reply))
 
+#############################################################################
+#UGLY: copy and paste from calvin/runtime/north/appmanager.py
+class ActorMigData(object):
+    def __init__(self, actor_id, possible_placements, move, status, cb):
+        self.actor_id = actor_id
+        self.actor_placement = possible_placements
+        self.move = move
+        self.status = status
+        self.cb = cb
+        self.dynamic_capabilities = collections.Counter()
+        self.runtime_cpu = {}    # available CPU in runtimes, runtime -> MIPS
+        self.runtime_ram = {}    # available RAM in runtimes, runtime -> MB
+        self.runtime_cpu_total = {}    # total CPU in runtimes, runtime -> MIPS
+        self.runtime_ram_total = {}    # total RAM in runtimes, runtime -> MB
+        self.cost_runtime_cpu = {}   # sum of requested cost by user for runtime, update in cost_for_runtime
+        self.cost_runtime_ram = {}   # sum of requested cost by user for runtime, update in cost_for_runtime
+#############################################################################
 
 class ActorManager(object):
 
@@ -317,16 +335,128 @@ class ActorManager(object):
         actor.requirements_add(requirements, extend)
         self.node.storage.add_actor(actor, self.node.id)  # Update requirements in registry
         r = ReqMatch(self.node,
-                     callback=CalvinCB(self._update_requirements_placements, actor_id=actor_id, move=move, cb=callback))
+                     callback=CalvinCB(self._collect_actor_placement, actor_id=actor_id, move=move, cb=callback))
         r.match_for_actor(actor_id)
         _log.analyze(self.node.id, "+ END", {'actor_id': actor_id})
 
-    def _update_requirements_placements(self, actor_id, possible_placements, status=None, move=False, cb=None):
+#############################################################################
+#UGLY: copy and paste from calvin/runtime/north/appmanager.py
+    def parse_requirements(self, requirements):
+        parsed = []
+        for i in requirements:
+            if "requirements" in i:
+                parsed += self.parse_requirements(i["requirements"])
+            else:
+                parsed.append(i)
+        return parsed
+    def update_cache_cost_actor(self, app, actor_id):
+        _log.debug("Calculating cost for actor %s" % (actor_id))
+        cost_cpu = 0.0
+        cost_ram = 0.0
+        actor = self.actors[actor_id]
+        for i in self.parse_requirements(actor.requirements_get()):
+            if i["op"] == "node_attr_match":
+                if "cpu" in i["kwargs"]["index"]:
+                    cost_cpu += float(i["kwargs"]["index"]["cpu"])
+                if "ram" in i["kwargs"]["index"]:
+                    cost_ram += float(i["kwargs"]["index"]["ram"])
+                if "cpuRaw" in i["kwargs"]["index"]:
+                    cost_cpu += float(i["kwargs"]["index"]["cpuRaw"])
+                if "ramRaw" in i["kwargs"]["index"]:
+                    cost_ram += float(i["kwargs"]["index"]["ramRaw"])
+        app.cost_runtime_cpu[actor_id] = cost_cpu
+        app.cost_runtime_ram[actor_id] = cost_ram
+
+    def _calculate_cost_for_placement_verify(self, app):
+        app.dynamic_capabilities += collections.Counter() # remove empty entries
+        return len(app.dynamic_capabilities) == 0
+
+    def collect_runtime_cpu(self, key, value, app, update_cb):
+        if not value or value == response.NOT_FOUND:
+            value = 0
+
+        app.runtime_cpu[key] = value
+        app.dynamic_capabilities.subtract({key : 1})
+
+        if self._calculate_cost_for_placement_verify(app):
+            update_cb()
+
+    def collect_runtime_ram(self, key, value, app, update_cb):
+        if not value or value == response.NOT_FOUND:
+            value = 0
+
+        app.runtime_ram[key] = value
+        app.dynamic_capabilities.subtract({key : 1})
+
+        if self._calculate_cost_for_placement_verify(app):
+            update_cb()
+
+    def collect_runtime_cpu_total(self, key, value, app, update_cb):
+        if not value or value == response.NOT_FOUND:
+            value = 0
+
+        app.runtime_cpu_total[key] = value
+        app.dynamic_capabilities.subtract({key : 1})
+
+        if self._calculate_cost_for_placement_verify(app):
+            update_cb()
+
+    def collect_runtime_mem_total(self, key, value, app, update_cb):
+        if not value or value == response.NOT_FOUND:
+            value = 0
+
+        app.runtime_ram_total[key] = value
+        app.dynamic_capabilities.subtract({key : 1})
+
+        if self._calculate_cost_for_placement_verify(app):
+            update_cb()
+
+    def _verify_collect_placement(self, app):
+        if (self._calculate_cost_for_placement_verify(app)):
+            self._update_requirements_placements(app=app, actor_id=app.actor_id, possible_placements=app.actor_placement, status=app.status, move=app.move, cb=app.cb)
+
+    def _collect_actor_placement(self, actor_id, possible_placements, status, move, cb):
+        """
+        Collects possible runtimes that satisfies the requirements for a certain actor
+        app: Application structure
+        actor_id: Actor (described in .calvin file) identifier in UUID format
+        possible_placements: all possible runtimes that respect the requirements
+        status: return status from ReqMatch
+        """
+        # TODO look at status
+        _log.debug("Collect possible placements: %s for actor: %s" %(str(possible_placements), actor_id))
+
+        app = ActorMigData(actor_id, possible_placements, move, status, cb)
+
+        for candidate in possible_placements:
+            if isinstance(candidate, dynops.InfiniteElement):
+                _log.debug("Skipping InfiniteElement in placement")
+                continue
+
+            app.dynamic_capabilities.update({candidate : 4 })
+            self.node.storage.get("nodeCpu-", candidate, cb=CalvinCB(func=self.collect_runtime_cpu, app=app, update_cb=CalvinCB(self._verify_collect_placement, app)))
+            self.node.storage.get("nodeRam-", candidate, cb=CalvinCB(func=self.collect_runtime_ram, app=app, update_cb=CalvinCB(self._verify_collect_placement, app)))
+            #total cpu and ram for each node
+            self.node.storage.get("nodeCpuTotal-", candidate, cb=CalvinCB(func=self.collect_runtime_cpu_total, app=app, update_cb=CalvinCB(self._verify_collect_placement, app)))
+            self.node.storage.get("nodeMemTotal-", candidate, cb=CalvinCB(func=self.collect_runtime_mem_total, app=app, update_cb=CalvinCB(self._verify_collect_placement, app)))
+
+        self._verify_collect_placement(app)
+
+#############################################################################
+
+    def _update_requirements_placements(self, app, actor_id, possible_placements, status=None, move=False, cb=None):
+
+        # verify available CPU and RAM in nodes
+        self.update_cache_cost_actor(app, actor_id)
+        nodes_to_remove = [ node_id for node_id in possible_placements if (app.runtime_cpu[node_id] < app.cost_runtime_cpu.setdefault(actor_id, 0)) or (app.runtime_ram[node_id] < app.cost_runtime_ram.setdefault(actor_id, 0)) ]
+        possible_placements -= set(nodes_to_remove)
+
         _log.analyze(self.node.id, "+ BEGIN", {}, tb=True)
         if move and len(possible_placements)>1:
             possible_placements.discard(self.node.id)
         actor = self.actors[actor_id]
         if not possible_placements:
+            _log.warning("Impossible to migrate actor: %s, no possible placement", actor_id)
             if cb:
                 cb(status=response.CalvinResponse(False))
             return
@@ -334,6 +464,7 @@ class ActorManager(object):
             # Actor could stay, then do that
             if cb:
                 cb(status=response.CalvinResponse(True))
+            _log.warning("Impossible to migrate actor: %s, no new possible placement", actor_id)
             return
         # TODO do a better selection between possible nodes
         # TODO: should also ask authorization server before selecting node to migrate to.
