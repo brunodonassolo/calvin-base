@@ -471,6 +471,7 @@ class ActorManager(object):
         # Try the possible placements in random order
         pp = list(possible_placements)
         random.shuffle(pp)
+        _log.info("Actor: %s migrate from: %s to %s", actor_id, self.node.id, pp[0])
         self.robust_migrate(actor_id, pp, callback=cb)
         _log.analyze(self.node.id, "+ END", {})
 
