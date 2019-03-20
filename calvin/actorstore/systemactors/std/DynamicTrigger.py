@@ -56,10 +56,13 @@ class DynamicTrigger(Actor):
         next_token = self.current_token_interval
 
         if (self.last_token_date != None):
-            if ((self.last_token_date + self.current_token_interval) - current_time < 0):
+            # relax the condition to log warning message
+            delta = 2*self.current_token_interval
+            if ((self.last_token_date + delta) - current_time < 0):
                 _log.warning("%s<%s>: Cannot send token in the expected rate: %f, last successful token sent: %f, current time: %f " % (self.__class__.__name__, self.id, self.current_token_interval, self.last_token_date, current_time))
 
-            next_token = max(0, (self.last_token_date + self.current_token_interval) - current_time)
+            # I sent one token right now, set the next date to 2xtoken_interval, or 0 if it has already elapsed
+            next_token = max(0, (self.last_token_date + 2*self.current_token_interval) - current_time)
 
         self.timer = calvinsys.open(self, "sys.timer.once", period = next_token)
 
