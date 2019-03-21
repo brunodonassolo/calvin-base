@@ -17,12 +17,12 @@
 from calvin.actor.actor import Actor, manage, condition
 import time  # NEVER DO THIS OUTSIDE OF TEST
 import numpy
-import random, datetime
+import random, datetime, collections
 from calvin.utilities.calvinlogger import get_logger
 
 _log = get_logger(__name__)
 
-TRIGGER_THRESHOLD=20
+TRIGGER_THRESHOLD=13
 
 class SmartBurn(Actor):
     """
@@ -47,7 +47,7 @@ class SmartBurn(Actor):
         timestamp = time.time()
         numpy.matmul(self.A, self.B)
         self.processing_time = time.time() - timestamp
-        self.number_events = 0
+        self.token_process_time = collections.deque(maxlen=TRIGGER_THRESHOLD)
 
     def did_migrate(self):
         self.setup()
@@ -73,16 +73,15 @@ class SmartBurn(Actor):
         numpy.matmul(self.A, self.B)
 
         # check processing time and migration conditions
+        self.token_process_time.append(elapsed)
+        mean = float(sum(self.token_process_time))/len(self.token_process_time)
         if elapsed > TRIGGER_THRESHOLD*self.processing_time:
-            self.number_events += 1
-            _log.info("%s<%s>: Elapsed time in burn higher than threshold, elapsed: %f threshould: %f number_events: %d" % (self.__class__.__name__, self.id, elapsed, TRIGGER_THRESHOLD*self.processing_time, self.number_events))
-        else:
-            self.number_events = 0
-        if self.number_events > TRIGGER_THRESHOLD:
-            _log.warning("%s<%s>: Actor must be migrated, number_events: %d" % (self.__class__.__name__, self.id, self.number_events))
+            _log.info("%s<%s>: Elapsed time in burn higher than threshold, elapsed: %f threshold: %f mean: %f" % (self.__class__.__name__, self.id, elapsed, TRIGGER_THRESHOLD*self.processing_time, mean))
+        if mean > TRIGGER_THRESHOLD*self.processing_time:
+            _log.warning("%s<%s>: Actor must be migrated, mean: %f, threshold: %f" % (self.__class__.__name__, self.id, mean, TRIGGER_THRESHOLD*self.processing_time))
             self.better_migrate = True
         elif self.better_migrate:
-            _log.info("%s<%s>: Actor doest need to be migrated, number_events: %d" % (self.__class__.__name__, self.id, self.number_events))
+            _log.info("%s<%s>: Actor doesn't need to be migrated anymore, mean: %f, threshold: %f" % (self.__class__.__name__, self.id, mean, TRIGGER_THRESHOLD*self.processing_time))
             self.better_migrate = False
 
         return (input, )
