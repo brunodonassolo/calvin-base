@@ -456,7 +456,7 @@ class ActorManager(object):
             possible_placements.discard(self.node.id)
         actor = self.actors[actor_id]
         if not possible_placements:
-            _log.warning("Impossible to migrate actor: %s, no possible placement", actor_id)
+            _log.warning("Impossible to migrate actor: %s, no possible placement. Internal state: runtimes considered: %s, runtimes removed: %s, CPU: %s, RAM %s, CPU total: %s, RAM total: %s", actor_id, str(possible_placements), str(nodes_to_remove), str(app.runtime_cpu), str(app.runtime_ram), str(app.runtime_cpu_total), str(app.runtime_ram_total))
             if cb:
                 cb(status=response.CalvinResponse(False))
             return
@@ -464,7 +464,7 @@ class ActorManager(object):
             # Actor could stay, then do that
             if cb:
                 cb(status=response.CalvinResponse(True))
-            _log.warning("Impossible to migrate actor: %s, no new possible placement", actor_id)
+            _log.warning("Impossible to migrate actor: %s, no new possible placement. Internal state: runtimes considered: %s, runtimes removed: %s, CPU: %s, RAM %s, CPU total: %s, RAM total: %s", actor_id, str(possible_placements), str(nodes_to_remove), str(app.runtime_cpu), str(app.runtime_ram), str(app.runtime_cpu_total), str(app.runtime_ram_total))
             return
         # TODO do a better selection between possible nodes
         # TODO: should also ask authorization server before selecting node to migrate to.
