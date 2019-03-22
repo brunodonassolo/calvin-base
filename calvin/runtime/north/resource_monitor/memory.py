@@ -67,12 +67,15 @@ class MemMonitor(object):
 
         self.helper.set(ident=self.node_id, prefix="nodeMemAvail-", prefix_index="memAvail", value=avail, discretizer= memory_discretizer, cb=None)
 
-        self.helper.set(ident=self.node_id, prefix="nodeRam-", prefix_index="ram", value=int(avail*(self.ram_total/100)), discretizer=ram_discretizer, cb=cb)
+        ram = int(avail*(self.ram_total/100))
+        self.helper.set(ident=self.node_id, prefix="nodeRam-", prefix_index="ram", value=ram, discretizer=ram_discretizer, cb=cb)
 
         #adding runtime for ramRaw, independently of available RAM
         new_data = AttributeResolver({"indexed_public": {"ramRaw": "1000"}})
         for index in new_data.get_indexed_public():
             self.storage.add_index(index=index, value=self.node_id, root_prefix_level=2, cb=None)
+
+        _log.info("Update RAM, node: %s CPU: %s, avail: %d, total: %d" % (self.node_id, ram, avail, self.ram_total))
 
     def _stop(self, key, value):
         self.storage.delete(prefix="nodeMemAvail-", key=self.node_id, cb=None)
