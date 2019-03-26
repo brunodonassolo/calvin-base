@@ -186,9 +186,9 @@ class AppManager(object):
         self.actor_by_runtime = {}
         self.phys_link_placement_runtimes = {}  # This information is quite stable, save it here to avoid collecting it each app deployment. Clean placement slate, saves the runtimes that the physical link connects
 
-    def new(self, name):
+    def new(self, name, deploy_info=None):
         application_id = calvinuuid.uuid("APP")
-        self.applications[application_id] = Application(application_id, name, self._node.id, self._node.am)
+        self.applications[application_id] = Application(application_id, name, self._node.id, self._node.am, deploy_info=deploy_info)
         self._node.control.log_application_new(application_id, name)
         return application_id
 
@@ -1935,21 +1935,29 @@ class AppManager(object):
 
     # Remigration
 
-    def migrate_with_requirements(self, app_id, deploy_info, move=False, cb=None):
+    def migrate_with_requirements(self, app_id, deploy_info, move=False, extend=False, cb=None):
         """ Migrate actors of app app_id based on newly supplied deploy_info.
             Optional argument move controls if actors prefers to stay when possible.
         """
         self.storage.get_application(app_id, cb=CalvinCB(self._migrate_got_app,
-                                                         app_id=app_id, deploy_info=deploy_info,
-                                                         move=move, cb=cb))
+            app_id=app_id, deploy_info=deploy_info,
+            move=move, extend=extend, cb=cb))
 
-    def _migrate_got_app(self, key, value, app_id, deploy_info, move, cb):
+    def _migrate_got_app(self, key, value, app_id, deploy_info, move, extend, cb):
         if response.isfailresponse(value):
             if cb:
                 cb(status=response.CalvinResponse(response.NOT_FOUND))
             return
+        deploy_req = { "requirements" : {} }
+        if value['deploy_info'] is not None:
+            deploy_req = value['deploy_info']
+        if extend:
+            _log.warning("APP migration, extending requirements NOT working")
+            pass
+        else:
+            deploy_req = deploy_info
         app = Application(app_id, value['name'], value['origin_node_id'],
-                                              self._node.am, actors=value['actors_name_map'], deploy_info=deploy_info)
+                self._node.am, actors=value['actors_name_map'], deploy_info=value['deploy_info'])
         app.group_components()
         app._migrated_actors = {a: None for a in app.actors}
         for actor_id, actor_name in app.actors.iteritems():
@@ -2207,14 +2215,14 @@ class Deployer(object):
         self._connection_count = None
         if name:
             self.name = name
-            self.app_id = self.node.app_manager.new(self.name)
+            self.app_id = self.node.app_manager.new(self.name, deploy_info=deploy_info)
             self.ns = os.path.splitext(os.path.basename(self.name))[0]
         elif "name" in self.deployable:
             self.name = self.deployable["name"]
-            self.app_id = self.node.app_manager.new(self.name)
+            self.app_id = self.node.app_manager.new(self.name, deploy_info=deploy_info)
             self.ns = os.path.splitext(os.path.basename(self.name))[0]
         else:
-            self.app_id = self.node.app_manager.new(None)
+            self.app_id = self.node.app_manager.new(None, deploy_info=deploy_info)
             self.name = self.app_id
             self.ns = ""
         self.group_components()
@@ -2324,7 +2332,7 @@ class Deployer(object):
             # TODO add requirements should be part of actor_manager new
             actor_id = self.node.am.new(actor_type=info['actor_type'], args=info['args'], signature=info['signature'],
                                         actor_def=actor_def, security=self.sec, access_decision=access_decision,
-                                        shadow_actor='shadow_actor' in info, port_properties=port_properties)
+                                        shadow_actor='shadow_actor' in info, port_properties=port_properties, app_id=self.app_id)
             if not actor_id:
                 raise Exception("Could not instantiate actor %s" % actor_name)
             deploy_req = self.get_req(actor_name)

@@ -133,10 +133,21 @@ class TestStorageStarted(object):
         def cb(key, value):
             self.q.put({"key": key, "value": value})
 
+        deploy_info = {
+                "requirements": {
+                    "button": [
+                        {
+                            "op": "node_attr_match",
+                            "kwargs": {"index": ["address", {"locality": "inside"}]},
+                            "type": "+"
+                            }]
+                        }
+                }
         application = appmanager.Application(calvinuuid.uuid(
-            'APP'), "test_app", [calvinuuid.uuid('ACTOR'), calvinuuid.uuid('ACTOR')], calvinuuid.uuid("NODE"), None)
+            'APP'), "test_app", [calvinuuid.uuid('ACTOR'), calvinuuid.uuid('ACTOR')], calvinuuid.uuid("NODE"), deploy_info=deploy_info)
 
         self.storage.add_application(application, cb=CalvinCB(cb))
+
         yield wait_for(self.q.empty, condition=lambda x: not x())
         value = self.q.get(timeout=.001)
         assert isinstance(value["value"], calvinresponse.CalvinResponse) and value["value"] == calvinresponse.OK
@@ -145,6 +156,7 @@ class TestStorageStarted(object):
         yield wait_for(self.q.empty, condition=lambda x: not x())
         value = self.q.get(timeout=.001)
         assert value["value"]["name"] == application.name
+        assert value["value"]["deploy_info"] == deploy_info
 
         self.storage.delete_application(application.id, cb=CalvinCB(cb))
         yield wait_for(self.q.empty, condition=lambda x: not x())
@@ -169,7 +181,8 @@ class TestStorageStarted(object):
         port1.peers = [("local", port2.id)]
         port2.peers = [("local", port1.id)]
 
-        actor = calvin.tests.TestActor("actor1", "type1", {}, {port1.name: port1})
+        app_id = calvinuuid.uuid("APP")
+        actor = calvin.tests.TestActor("actor1", "type1", {}, {port1.name: port1}, app_id=app_id)
 
         self.storage.add_actor(actor, calvinuuid.uuid("NODE"), cb=CalvinCB(cb))
         yield wait_for(self.q.empty, condition=lambda x: not x())
@@ -180,6 +193,7 @@ class TestStorageStarted(object):
         yield wait_for(self.q.empty, condition=lambda x: not x())
         value = self.q.get(timeout=.001)
         assert value["value"]["name"] == actor.name
+        assert value["value"]["app_id"] == app_id
 
         self.storage.delete_actor(actor.id, cb=CalvinCB(cb))
         yield wait_for(self.q.empty, condition=lambda x: not x())

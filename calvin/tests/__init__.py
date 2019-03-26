@@ -51,10 +51,11 @@ class TestNode:
 
 class TestActor:
 
-    def __init__(self, name, type, inports, outports):
+    def __init__(self, name, type, inports, outports, app_id=None):
         self.id = calvinuuid.uuid("ACTOR")
         self.name = name
         self._type = type
+        self._app_id = app_id
         self.inports = inports
         self.outports = outports
         self._replication_id = _DummyRepSet()

@@ -209,6 +209,9 @@ class Node(object):
                    ('#' * 40, self.id, preamble if preamble else "*", args, kwargs, '#' * 40))
 
     def new(self, actor_type, args, deploy_args=None, state=None, prev_connections=None, connection_list=None, security=None, access_decision=None):
+        app_id = None
+        if deploy_args:
+            app_id = deploy_args['app_id']
         # TODO requirements should be input to am.new
         # TODO: make it possible to use security/credentials here.
         actor_def, signer = self.am.lookup_and_verify(actor_type)
@@ -216,7 +219,7 @@ class Node(object):
                                signature=deploy_args['signature'] if deploy_args and 'signature' in deploy_args else None,
                                actor_def=actor_def,
                                security=security,
-                               access_decision=access_decision)
+                               access_decision=access_decision, app_id=app_id)
         if deploy_args:
             app_id = deploy_args['app_id']
             if 'app_name' not in deploy_args:

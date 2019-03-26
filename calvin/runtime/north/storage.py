@@ -883,7 +883,8 @@ class Storage(object):
                         # FIXME when all users of the actors field is updated, save the full dict only
                         "actors": application.actors.keys(),
                         "actors_name_map": application.actors,
-                        "origin_node_id": application.origin_node_id},
+                        "origin_node_id": application.origin_node_id,
+                        "deploy_info": application.deploy_info },
                  cb=cb)
 
     def get_application(self, application_id, cb=None):
@@ -905,7 +906,7 @@ class Storage(object):
         """
         # TODO need to store app-id
         _log.debug("Add actor %s id %s" % (actor, node_id))
-        data = {"name": actor.name, "type": actor._type, "node_id": node_id}
+        data = {"name": actor.name, "type": actor._type, "node_id": node_id, "app_id": actor._app_id}
         inports = []
         for p in actor.inports.values():
             port = {"id": p.id, "name": p.name}

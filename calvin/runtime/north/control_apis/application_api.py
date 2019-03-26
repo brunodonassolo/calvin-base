@@ -572,6 +572,7 @@ def handle_post_application_migrate(self, handle, connection, match, data, hdr):
         self.node.app_manager.migrate_with_requirements(app_id,
                                                deploy_info=data["deploy_info"] if "deploy_info" in data else None,
                                                move=data["move"] if "move" in data else False,
+                                               extend=data["extend"] if "move" in data else False,
                                                cb=CalvinCB(self.handle_post_application_migrate_cb, handle, connection))
     except:
         _log.exception("App migration failed")

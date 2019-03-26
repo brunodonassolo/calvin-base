@@ -259,7 +259,7 @@ class Actor(object):
 
     # These are the instance variables that will always be serialized, see serialize()/deserialize() below
     _private_state_keys = ('_id', '_name', '_has_started', '_deployment_requirements',
-                           '_signature', '_migration_info', "_port_property_capabilities", "_replication_id")
+                           '_signature', '_migration_info', "_port_property_capabilities", "_replication_id", "_app_id")
 
     # Internal state (status)
     class FSM(object):
@@ -330,7 +330,7 @@ class Actor(object):
 
     # What are the arguments, really?
     def __init__(self, actor_type, name='', allow_invalid_transitions=True, disable_transition_checks=False,
-                 disable_state_checks=False, actor_id=None, security=None):
+                 disable_state_checks=False, actor_id=None, security=None, app_id=None):
         """Should _not_ be overridden in subclasses."""
         super(Actor, self).__init__()
         self._type = actor_type
@@ -344,6 +344,7 @@ class Actor(object):
         self._component_members = set([self._id])  # We are only part of component if this is extended
         self._managed = set()
         self._has_started = False
+        self._app_id = app_id
         # self.control = calvincontrol.get_calvincontrol()
         self._migration_info = None
         self._migrating_to = None  # During migration while on the previous node set to the next node id
