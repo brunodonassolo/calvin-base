@@ -505,13 +505,23 @@ class ActorManager(object):
                 kwargs.get('actor_type', None), kwargs.get('state', None), kwargs.get('ports', None))
         else:
             # Start with standard migration
-            self.migrate(actor_id, node_id,
+            if actor_id not in self.actors:
+                self.node.storage.get_actor(actor_id, cb=CalvinCB(self._migrate_from_rt, peer_node_id=node_id, cb=CalvinCB(self._robust_migrate_cb, actor_id=actor_id, node_ids=node_ids, callback=callback)))
+            else:
+                self.migrate(actor_id, node_id,
                         CalvinCB(self._robust_migrate_cb, actor_id=actor_id, node_ids=node_ids, callback=callback))
 
     def _robust_migrate_cb(self, status, actor_id, node_ids, callback, **kwargs):
         # Just for moving status into kwargs, TODO the reply_handler should use kwarg
         kwargs['status'] = status
         self.robust_migrate(actor_id, node_ids, callback, **kwargs)
+
+    def _migrate_from_rt(self, key, value, peer_node_id, cb):
+        if response.isfailresponse(value):
+            if cb:
+                cb(status=kwargs.get('status', response.CalvinResponse(False)))
+            return
+        self.node.proto.actor_migrate_direct(value['node_id'], cb, key, peer_node_id)
 
     def migrate(self, actor_id, node_id, callback=None):
         """ Migrate an actor actor_id to peer node node_id """

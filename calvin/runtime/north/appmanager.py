@@ -221,7 +221,8 @@ class AppManager(object):
             return
         self.storage.add_application(self.applications[application_id])
         if migrate:
-            self.execute_requirements(application_id, cb if cb else self.req_done)
+            app = self.applications[application_id]
+            self.execute_requirements(app, cb if cb else self.req_done)
         elif cb:
             cb(status=response.CalvinResponse(True))
 
@@ -451,20 +452,13 @@ class AppManager(object):
 
     ### DEPLOYMENT REQUIREMENTS ###
 
-    def execute_requirements(self, application_id, cb):
+    def execute_requirements(self, app, cb):
         """ Build dynops iterator to collect all possible placements,
             then trigger migration.
 
             For initial deployment (all actors on the current node)
         """
-        app = None
-        try:
-            app = self.applications[application_id]
-        except:
-            _log.debug("execute_requirements did not find app %s" % (application_id,))
-            cb(status=response.CalvinResponse(False))
-            return
-        _log.debug("execute_requirements(app=%s)" % (self.applications[application_id],))
+        application_id = app.id
 
         if hasattr(app, '_org_cb'):
             # application deployment requirements ongoing, abort
@@ -479,6 +473,9 @@ class AppManager(object):
         app.actor_placement = {}  # Clean placement slate
         actor_ids = app.get_actors()
         app.actor_placement_nbr = len(actor_ids)
+        app.actor_storage = {}
+        app.port_storage = {}
+        app.port_nbr = set()
 
         app.link_placement = {}  # Clean placement slate, saves possible physical links that satifies requirements
         app.phys_link_placement_runtimes = {}  # Clean placement slate, saves the runtimes that the physical link connects
@@ -506,14 +503,16 @@ class AppManager(object):
 
         # requests all actors placements
         for actor_id in actor_ids:
-            if actor_id not in self._node.am.actors.keys():
-                _log.debug("Only apply requirements to local actors")
-                app.actor_placement[actor_id] = None
-                continue
+           # if actor_id not in self._node.am.actors.keys():
+           #     _log.debug("Only apply requirements to local actors")
+           #     app.actor_placement[actor_id] = None
+           #     continue
+            self.storage.get_actor(actor_id, cb=CalvinCB(self.collect_actor_storage, app=app, actor_id=actor_id))
+
             _log.analyze(self._node.id, "+ ACTOR REQ", {'actor_id': actor_id}, tb=True)
             r = ReqMatch(self._node,
                          callback=CalvinCB(self.collect_actor_placement, app=app, actor_id=actor_id))
-            r.match_for_actor(actor_id)
+            r.match_actor_registry(actor_id)
             _log.analyze(self._node.id, "+ ACTOR REQ DONE", {'actor_id': actor_id}, tb=True)
 
         # requests all links placements
@@ -531,6 +530,8 @@ class AppManager(object):
 
     def _verify_collect_placement(self, app):
         if (len(app.actor_placement) == app.actor_placement_nbr and
+            len(app.actor_storage) == app.actor_placement_nbr and
+            set(app.port_storage.keys()) == app.port_nbr and
             len(app.link_placement) == app.link_placement_nbr and
             set(app.phys_link_placement_runtimes.keys()) == app.phys_link_placement_runtimes_nbr and
             app.batch is not None and
@@ -545,6 +546,20 @@ class AppManager(object):
 
         self._verify_collect_placement(app)
 
+    def collect_actor_storage(self, key, value, app, actor_id):
+        app.actor_storage[actor_id] = value
+        for port in value['inports'] + value['outports']:
+            port_id = port['id']
+            self.storage.get_port(port['id'], cb=CalvinCB(self.collect_port_storage, app=app, port_id=port_id))
+            app.port_nbr.add(port_id)
+
+        self._verify_collect_placement(app)
+
+    def collect_port_storage(self, key, value, app, port_id):
+        app.port_storage[port_id] = value
+
+        self._verify_collect_placement(app)
+
     def collect_actor_placement(self, app, actor_id, possible_placements, status):
         """
         Collects possible runtimes that satisfies the requirements for a certain actor
@@ -555,12 +570,15 @@ class AppManager(object):
         """
         # TODO look at status
         _log.debug("Collect possible placements: %s for actor: %s" %(str(possible_placements), actor_id))
+        print("Collect possible placements: %s for actor: %s" %(str(possible_placements), actor_id))
         app.actor_placement[actor_id] = possible_placements
 
         app.runtimes_nbr.update(possible_placements)
         for candidate in possible_placements:
             if isinstance(candidate, dynops.InfiniteElement):
                 _log.debug("Skipping InfiniteElement in placement")
+                print actor_id
+                print("Skipping InfiniteElement in placement")
                 continue
 
             if candidate not in app.runtime_cpu or candidate not in app.runtime_ram:
@@ -766,6 +784,7 @@ class AppManager(object):
 
         # build a map of actors that have links requirements
         actor_link = {}
+#TODO: later
         for link_id, phys_link_placements in app.link_placement.iteritems():
             src_actor = self._node.link_manager.links[link_id].src_id
             dst_actor = self._node.link_manager.links[link_id].dst_id
@@ -828,7 +847,9 @@ class AppManager(object):
             next_runtimes = next_temp
         _log.debug(str(neighbors))
 
+#TODO: soon
     def incremental_filter_candidates_considering_neighbors(self, app, placement, actor_id, actor_placement):
+        return
         # filter possible runtimes considering already placed actors and links
         for i in self._node.am.actors[actor_id].inports.values():
             for p in i.get_peers():
@@ -839,6 +860,7 @@ class AppManager(object):
                     _log.debug("Didn't find neighbor actor")
                     continue
 
+#TODO: later
                 for link_id, phys_link_placements in app.link_placement.iteritems():
                     src_actor = self._node.link_manager.links[link_id].src_id
                     dst_actor = self._node.link_manager.links[link_id].dst_id
@@ -882,6 +904,7 @@ class AppManager(object):
                 parsed.append(i)
         return parsed
 
+#TODO: later
     def update_cache_cost_link(self, app, link_id):
         from calvin.runtime.north.resource_monitor.link import bandwidth_text2number, latency_text2number
         link = self._node.link_manager.links[link_id]
@@ -896,6 +919,7 @@ class AppManager(object):
         app.cost_link_band[link_id] = cost_band
         app.cost_link_lat[link_id] = cost_lat
 
+#TODO: later
     def cost_for_link_v2(self, app, link_id):
 
         # no link, just returns
@@ -911,6 +935,7 @@ class AppManager(object):
         _log.debug("Total cost v2: %f" % cost)
         return cost
 
+#TODO: later
     def cost_for_link(self, app, link_id, phy_link_id):
         # no link, just returns
         if link_id == "" or phy_link_id == "":
@@ -931,8 +956,9 @@ class AppManager(object):
         _log.debug("Calculating cost for actor %s" % (actor_id))
         cost_cpu = 0.0
         cost_ram = 0.0
-        actor = self._node.am.actors[actor_id]
-        for i in self.parse_requirements(actor.requirements_get()):
+        #actor = self._node.am.actors[actor_id]
+        for i in self.parse_requirements(app.get_req(app.actors[actor_id])):
+        #for i in self.parse_requirements(actor.requirements_get()):
             if i["op"] == "node_attr_match":
                 if "cpu" in i["kwargs"]["index"]:
                     cost_cpu += float(i["kwargs"]["index"]["cpu"])
@@ -965,6 +991,7 @@ class AppManager(object):
         _log.debug("Total cost: %f" % cost)
         return cost
 
+#TODO: later
     def random_actor_placement(self, app, actor_ids):
         orphan_actors = []
         for actor_id in actor_ids:
@@ -1305,6 +1332,7 @@ class AppManager(object):
 
         # update next actors to be placed
         neigh_actors = {}
+#TODO: later
         for i in self._node.am.actors[actor_id].outports.values():
             for p in i.get_peers():
                 try:
@@ -1352,6 +1380,7 @@ class AppManager(object):
         _log.analyze(self._node.id, "+ DONE", {'app_id': app.id}, tb=True)
         _log.info("Deployment: app: %s: finished placement: total elapsed time %d" % (app.id, time.time() - app.start_time))
 
+#TODO: later
     def best_first_placement(self, app, actor_ids):
         n_samples = _conf.get('global', 'deployment_n_samples')
         orphan_actors = []
@@ -1364,6 +1393,7 @@ class AppManager(object):
         place_set = [({}, 0.0)]
         self.best_first_actor_placement(app, actor_ids, n_samples, orphan_actors, place_set, cb_finish_placement=CalvinCB(self.best_first_placement_finish, app, actor_ids, n_samples), worst=False)
 
+#TODO: later
     def worst_placement(self, app, actor_ids):
         n_samples = _conf.get('global', 'deployment_n_samples')
         orphan_actors = []
@@ -1404,6 +1434,7 @@ class AppManager(object):
 
         # update next actors to be placed
         neigh_actors = {}
+#TODO: later
         for i in self._node.am.actors[actor_id].outports.values():
             for p in i.get_peers():
                 try:
@@ -1449,10 +1480,13 @@ class AppManager(object):
 
         # update next actors to be placed
         neigh_actors = {}
-        for i in self._node.am.actors[actor_id].outports.values():
-            for p in i.get_peers():
+        #for i in self._node.am.actors[actor_id].outports.values():
+        for i in app.actor_storage[actor_id]['outports']:
+            #for p in i.get_peers():
+            for p in app.port_storage[i['id']]['peers']:
                 try:
-                    neigh_id = self._node.pm._get_local_port(port_id=p[1]).owner.id
+                    neigh_id = app.port_storage[p[1]]['actor_id']
+                    #neigh_id = self._node.pm._get_local_port(port_id=p[1]).owner.id
                 except:
                     _log.debug("Didn't find neighbor actor")
                     continue
@@ -1466,8 +1500,8 @@ class AppManager(object):
         # get cost to next step of loop
         self.money_calculate_cost_for_placement(app, actor_ids, place_set_for_actor, cb_cost_calculated=CalvinCB(self.money_actor_placement, app, actor_ids, n_samples, orphan_actors, cb_finish_placement = cb_finish_placement))
 
+#TODO: later
     def grasp_actor_placement(self, app, actor_ids, alpha):
-
         orphan_actors = []
         for actor_id in actor_ids:
             _log.debug("Actor id: %s, name: %s" % (actor_id, app.actors[actor_id]))
@@ -1538,6 +1572,7 @@ class AppManager(object):
 
         # update next actors to be placed
         neigh_actors = {}
+#TODO: later
         for i in self._node.am.actors[actor_id].outports.values():
             for p in i.get_peers():
                 try:
@@ -1746,6 +1781,7 @@ class AppManager(object):
     def latency_placement(self, app, actor_ids):
         n_samples = _conf.get('global', 'deployment_n_samples')
         orphan_actors = []
+#TODO: later
         for actor_id in actor_ids:
             _log.debug("Actor id: %s, name: %s" % (actor_id, app.actors[actor_id]))
             if len(self._node.am.actors[actor_id].inports.values()) == 0:
@@ -1760,7 +1796,8 @@ class AppManager(object):
         orphan_actors = []
         for actor_id in actor_ids:
             _log.debug("Actor id: %s, name: %s" % (actor_id, app.actors[actor_id]))
-            if len(self._node.am.actors[actor_id].inports.values()) == 0:
+            #if len(self._node.am.actors[actor_id].inports.values()) == 0:
+            if len(app.actor_storage[actor_id]['inports']) == 0:
                 heappush(orphan_actors, (-100000, actor_id))
 
         _log.debug("Starting placing the actors...")
@@ -1802,6 +1839,7 @@ class AppManager(object):
         orphan_actors = []
         for actor_id in actor_ids:
             _log.debug("Actor id: %s, name: %s" % (actor_id, app.actors[actor_id]))
+#TODO: later
             if len(self._node.am.actors[actor_id].inports.values()) == 0:
                 heappush(orphan_actors, (-100000, actor_id))
 
@@ -1839,7 +1877,9 @@ class AppManager(object):
             status = response.CalvinResponse(response.CREATED)
 
         # Collect an actor by actor matrix stipulating a weighting 0.0 - 1.0 for their connectivity
-        actor_ids, actor_matrix = self._actor_connectivity(app)
+        # removing it, we do not use them anymore and it does not work with reconfig
+        #actor_ids, actor_matrix = self._actor_connectivity(app)
+        actor_ids = app.get_actors()
 
         # verify available CPU and RAM in nodes
         for actor_id, nodes_ids in app.actor_placement.iteritems():
@@ -1856,8 +1896,7 @@ class AppManager(object):
         for actor_id, possible_nodes in app.actor_placement.iteritems():
             if any([isinstance(n, dynops.InfiniteElement) for n in possible_nodes]):
                 app.actor_placement[actor_id] = node_ids
-        _log.analyze(self._node.id, "+ ACTOR MATRIX", {'actor_ids': actor_ids, 'actor_matrix': actor_matrix,
-                                            'node_ids': node_ids, 'placement': app.actor_placement}, tb=True)
+        #_log.analyze(self._node.id, "+ ACTOR MATRIX", {'actor_ids': actor_ids, 'actor_matrix': actor_matrix, 'node_ids': node_ids, 'placement': app.actor_placement}, tb=True)
 
         _log.debug("Actor Placement before network filtering %s" % (str(app.actor_placement)))
         #self.filter_link_placement(app, status)
@@ -1957,26 +1996,27 @@ class AppManager(object):
         else:
             deploy_req = deploy_info
         app = Application(app_id, value['name'], value['origin_node_id'],
-                self._node.am, actors=value['actors_name_map'], deploy_info=value['deploy_info'])
+                self._node.am, actors=value['actors_name_map'], deploy_info=deploy_req)
         app.group_components()
-        app._migrated_actors = {a: None for a in app.actors}
-        for actor_id, actor_name in app.actors.iteritems():
-            req = app.get_req(actor_name)
-            if not req:
-                _log.analyze(self._node.id, "+ NO REQ", {'actor_id': actor_id, 'actor_name': actor_name})
-                # No requirement then leave as is.
-                self._migrated_cb(response.CalvinResponse(True), app, actor_id, cb)
-                continue
-            if actor_id in self._node.am.actors:
-                _log.analyze(self._node.id, "+ OWN ACTOR", {'actor_id': actor_id, 'actor_name': actor_name})
-                self._node.am.update_requirements(actor_id, req, False, move,
-                                                 callback=CalvinCB(self._migrated_cb, app=app,
-                                                                   actor_id=actor_id, cb=cb))
-            else:
-                _log.analyze(self._node.id, "+ OTHER NODE", {'actor_id': actor_id, 'actor_name': actor_name})
-                self.storage.get_actor(actor_id, cb=CalvinCB(self._migrate_from_rt, app=app,
-                                                                  actor_id=actor_id, req=req,
-                                                                  move=move, cb=cb))
+        self.execute_requirements(app, cb if cb else self.req_done)
+        #app._migrated_actors = {a: None for a in app.actors}
+        #for actor_id, actor_name in app.actors.iteritems():
+        #    req = app.get_req(actor_name)
+        #    if not req:
+        #        _log.analyze(self._node.id, "+ NO REQ", {'actor_id': actor_id, 'actor_name': actor_name})
+        #        # No requirement then leave as is.
+        #        self._migrated_cb(response.CalvinResponse(True), app, actor_id, cb)
+        #        continue
+        #    if actor_id in self._node.am.actors:
+        #        _log.analyze(self._node.id, "+ OWN ACTOR", {'actor_id': actor_id, 'actor_name': actor_name})
+        #        self._node.am.update_requirements(actor_id, req, False, move,
+        #                                         callback=CalvinCB(self._migrated_cb, app=app,
+        #                                                           actor_id=actor_id, cb=cb))
+        #    else:
+        #        _log.analyze(self._node.id, "+ OTHER NODE", {'actor_id': actor_id, 'actor_name': actor_name})
+        #        self.storage.get_actor(actor_id, cb=CalvinCB(self._migrate_from_rt, app=app,
+        #                                                          actor_id=actor_id, req=req,
+        #                                                          move=move, cb=cb))
 
     def _migrate_from_rt(self, key, value, app, actor_id, req, move, cb):
         if response.isfailresponse(value):
@@ -2001,13 +2041,13 @@ class AppManager(object):
         cost += (float(app.runtime_ram[runtime])/float(app.runtime_ram_total[runtime]))
         return cost
 
-    def grasp_get_actor_neighbors(self, actor_id):
+    def grasp_get_actor_neighbors(self, app, actor_id):
         actors = []
-        for i in self._node.am.actors[actor_id].inports.values() + self._node.am.actors[actor_id].outports.values():
-            for p in i.get_peers():
+        for i in app.actor_storage[actor_id]['outports'] + app.actor_storage[actor_id]['inports']:
+            for p in app.port_storage[i['id']]['peers']:
                 neigh_id = ""
                 try:
-                    neigh_id = self._node.pm._get_local_port(port_id=p[1]).owner.id
+                    neigh_id = app.port_storage[p[1]]['actor_id']
                     actors.append(neigh_id)
                 except:
                     _log.debug("Didn't find neighbor actor")
@@ -2016,7 +2056,7 @@ class AppManager(object):
 
 
     def grasp_runtime_accept_actor(self, app, actor_id, runtime, placement):
-        neighbors = self.grasp_get_actor_neighbors(actor_id)
+        neighbors = self.grasp_get_actor_neighbors(app, actor_id)
         _log.debug("GRASP, actor id: %s, neighbors: %s" % (actor_id, neighbors))
         # verify resource usage
         total_cpu = app.cost_runtime_cpu[actor_id]
@@ -2104,19 +2144,21 @@ class AppManager(object):
             return True
         return False
 
-    def grasp_actor_order(self, actor_ids):
+    def grasp_actor_order(self, app, actor_ids):
         ordered_actors = []
         for actor_id in actor_ids:
-            if len(self._node.am.actors[actor_id].inports.values()) == 0:
+            #if len(self._node.am.actors[actor_id].inports.values()) == 0:
+            if len(app.actor_storage[actor_id]['inports']) == 0:
                 ordered_actors.append(actor_id)
 
         next_actors = copy.copy(ordered_actors)
         while len(next_actors) > 0:
             actor_id = next_actors.pop(0)
-            for i in self._node.am.actors[actor_id].outports.values():
-                for p in i.get_peers():
+
+            for i in app.actor_storage[actor_id]['outports']:
+                for p in app.port_storage[i['id']]['peers']:
                     try:
-                        neigh_id = self._node.pm._get_local_port(port_id=p[1]).owner.id
+                        neigh_id = app.port_storage[p[1]]['actor_id']
                     except:
                         _log.debug("Didn't find neighbor actor")
                         continue
@@ -2136,7 +2178,7 @@ class AppManager(object):
                 app.runtime_ram[runtime] -= app.cost_runtime_ram[actor_id]
 
         K = 0
-        ordered_actors = self.grasp_actor_order(actor_ids)
+        ordered_actors = self.grasp_actor_order(app, actor_ids)
         while optimized and K < 10:
             optimized = False
             K += 1
