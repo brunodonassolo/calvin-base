@@ -883,6 +883,7 @@ class Storage(object):
                         # FIXME when all users of the actors field is updated, save the full dict only
                         "actors": application.actors.keys(),
                         "actors_name_map": application.actors,
+                        "links_set": application.links,
                         "origin_node_id": application.origin_node_id,
                         "deploy_info": application.deploy_info },
                  cb=cb)
@@ -900,11 +901,29 @@ class Storage(object):
         _log.debug("Delete application %s" % application_id)
         self.delete(prefix="application-", key=application_id, cb=cb)
 
+    def add_link(self, link, cb=None):
+        """
+        Add link to storage
+        """
+        data = {"name" : link.name, "src_actor": link.src_id, "dst_actor": link.dst_id, "requirements": link.requirements}
+        self.set(prefix="link-", key=link.id, value=data, cb=cb)
+
+    def delete_link(self, link_id, cb=None):
+        """
+        Delete link from storage
+        """
+        self.delete(prefix="link-", key=link_id, cb=cb)
+
+    def get_link(self, link_id, cb=None):
+        """
+        Get link from storage
+        """
+        self.get(prefix="link-", key=link_id, cb=cb)
+
     def add_actor(self, actor, node_id, cb=None):
         """
         Add actor and its ports to storage
         """
-        # TODO need to store app-id
         _log.debug("Add actor %s id %s" % (actor, node_id))
         data = {"name": actor.name, "type": actor._type, "node_id": node_id, "app_id": actor._app_id}
         inports = []
