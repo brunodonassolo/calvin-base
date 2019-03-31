@@ -186,6 +186,7 @@ class CalvinProto(CalvinCBClass):
             # or using the callback_register method.
             'ACTOR_NEW': [CalvinCB(self.actor_new_handler)],
             'ACTOR_MIGRATE': [CalvinCB(self.actor_migrate_handler)],
+            'ACTOR_MIGRATE_ASYNC': [CalvinCB(self.actor_migrate_async_handler)],
             'APP_DESTROY': [CalvinCB(self.app_destroy_handler)],
             'PORT_CONNECT': [CalvinCB(self.port_connect_handler)],
             'PORT_DISCONNECT': [CalvinCB(self.port_disconnect_handler)],
@@ -321,6 +322,16 @@ class CalvinProto(CalvinCBClass):
             msg = {'cmd': 'ACTOR_MIGRATE', 'actor_id': actor_id, 'peer_node_id': peer_node_id},
             callback=callback))
 
+    def actor_migrate_direct_async(self, to_rt_uuid, actor_id, peer_node_id):
+        """ Request actor on to_rt_uuid node to migrate to new peer_node_id
+            callback: called when finished with the status respons as argument
+            actor_id: actor_id to migrate
+            peer_node_id: node to migrate to
+        """
+        self.node.network.link_request(to_rt_uuid, CalvinCB(send_message,
+            msg = {'cmd': 'ACTOR_MIGRATE_ASYNC', 'actor_id': actor_id, 'peer_node_id': peer_node_id},
+            callback=None))
+
     def actor_migrate_handler(self, payload):
         """ Peer request new actor with state and connections """
         if 'peer_node_id' in payload:
@@ -332,6 +343,16 @@ class CalvinProto(CalvinCBClass):
                                          payload['extend'], payload['move'],
                                          callback=CalvinCB(self.node.network.link_request, payload['from_rt_uuid'], callback=CalvinCB(send_message,
                                                                     msg = {'cmd': 'REPLY', 'msg_uuid': payload['msg_uuid']})))
+
+    def actor_migrate_async_handler(self, payload):
+        """ Peer request new actor with state and connections """
+        if 'peer_node_id' in payload:
+            self.node.am.migrate(payload['actor_id'], payload['peer_node_id'],
+                callback=None)
+        else:
+            self.node.am.update_requirements(payload['actor_id'], payload['requirements'],
+                                         payload['extend'], payload['move'],
+                                         callback=None)
 
     #### APPS ####
 

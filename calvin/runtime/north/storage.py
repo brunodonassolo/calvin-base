@@ -883,7 +883,7 @@ class Storage(object):
                         # FIXME when all users of the actors field is updated, save the full dict only
                         "actors": application.actors.keys(),
                         "actors_name_map": application.actors,
-                        "links_set": application.links,
+                        "links_name_map": application.links,
                         "origin_node_id": application.origin_node_id,
                         "deploy_info": application.deploy_info },
                  cb=cb)

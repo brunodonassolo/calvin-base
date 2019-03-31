@@ -519,9 +519,12 @@ class ActorManager(object):
     def _migrate_from_rt(self, key, value, peer_node_id, cb):
         if response.isfailresponse(value):
             if cb:
-                cb(status=kwargs.get('status', response.CalvinResponse(False)))
+                cb(status=response.CalvinResponse(False))
             return
-        self.node.proto.actor_migrate_direct(value['node_id'], cb, key, peer_node_id)
+
+        self.node.proto.actor_migrate_direct_async(value['node_id'], key, peer_node_id)
+        if cb:
+            cb(status=response.CalvinResponse(True))
 
     def migrate(self, actor_id, node_id, callback=None):
         """ Migrate an actor actor_id to peer node node_id """
@@ -568,11 +571,15 @@ class ActorManager(object):
         state = actor.serialize()
         self.destroy(actor.id, temporary=True)
         if status:
-            callback = CalvinCB(callback, state=state, ports=ports, actor_type=actor_type)
+            callback = CalvinCB(self._migrate_disconnected_actor_created, callback=callback, state=state, ports=ports, actor_type=actor_type)
             self.node.proto.actor_new(node_id, callback, actor_type, state, ports)
         else:
             if callback:
                 callback(status=status, state=state, ports=ports, actor_type=actor_type)
+
+    def _migrate_disconnected_actor_created(self, status, callback, state, ports, actor_type):
+        if callback:
+            callback(status, state=state, ports=ports, actor_type=actor_type)
 
     def peernew_to_local_cb(self, reply, **kwargs):
         if kwargs['actor_id'] == reply:
