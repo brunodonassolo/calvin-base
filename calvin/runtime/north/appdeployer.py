@@ -1463,6 +1463,7 @@ class AppDeployer(object):
         for actor_id, nodes_ids in app.actor_placement.iteritems():
             self.update_cache_cost_actor(app, actor_id)
             nodes_to_remove = [ node_id for node_id in nodes_ids if (app.runtime_cpu[node_id] < app.cost_runtime_cpu.setdefault(actor_id, 0)) or (app.runtime_ram[node_id] < app.cost_runtime_ram.setdefault(actor_id, 0)) ]
+            _log.info("Placement actor: %s. Internal state: runtimes considered: %s, runtimes removed: %s, CPU: %s, RAM %s, CPU total: %s, RAM total: %s", actor_id, str(nodes_ids), str(nodes_to_remove), str(app.runtime_cpu), str(app.runtime_ram), str(app.runtime_cpu_total), str(app.runtime_ram_total))
             nodes_ids -= set(nodes_to_remove)
 
         # Get list of all possible nodes

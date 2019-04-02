@@ -358,8 +358,9 @@ class AppManager(object):
 
     def _migrate_got_placement(self, app, status, placement, cb):
         actor_placement = { actor_id: (node_id if isinstance(node_id, list) else [node_id]) for actor_id, node_id in placement.iteritems() }
+        for actor_id in set(app.actors.keys()) - set(actor_placement.keys()):
+            _log.warning("Application: %s, Impossible to migrate actor: %s, no possible placement.", app.id, actor_id)
         for actor_id, node_id in actor_placement.iteritems():
-            _log.debug("Actor deployment %s \t-> %s" % (app.actors[actor_id], node_id))
             self._node.am.robust_migrate(actor_id, node_id[:], None)
         if cb:
             cb(status=status, placement=actor_placement)
