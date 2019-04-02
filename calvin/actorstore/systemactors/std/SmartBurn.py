@@ -15,14 +15,11 @@
 # limitations under the License.
 
 from calvin.actor.actor import Actor, manage, condition
-import time  # NEVER DO THIS OUTSIDE OF TEST
 import numpy
-import random, datetime, collections
+import random
 from calvin.utilities.calvinlogger import get_logger
 
 _log = get_logger(__name__)
-
-TRIGGER_THRESHOLD=13
 
 class SmartBurn(Actor):
     """
@@ -44,10 +41,6 @@ class SmartBurn(Actor):
         random.seed(self.seed)
         self.A = [[random.random() for i in range(0,self.size)] for j in range(0,self.size)]
         self.B = [[random.random() for i in range(0,self.size)] for j in range(0,self.size)]
-        timestamp = time.time()
-        numpy.matmul(self.A, self.B)
-        self.processing_time = time.time() - timestamp
-        self.token_process_time = collections.deque(maxlen=TRIGGER_THRESHOLD)
 
     def did_migrate(self):
         self.setup()
@@ -64,25 +57,10 @@ class SmartBurn(Actor):
         try:
             import datetime
             input["timestamp"].append({"uid": self.id, "date": str(datetime.datetime.now())})
-            if "timestamp" in input:
-                import datetime
-                elapsed = (datetime.datetime.now() - datetime.datetime.strptime(input["timestamp"][0]["date"], "%Y-%m-%d %H:%M:%S.%f")).total_seconds()
         except:
             pass
         # Burn cycles
         numpy.matmul(self.A, self.B)
-
-        # check processing time and migration conditions
-        self.token_process_time.append(elapsed)
-        mean = float(sum(self.token_process_time))/len(self.token_process_time)
-        if elapsed > TRIGGER_THRESHOLD*self.processing_time:
-            _log.info("%s<%s>: Elapsed time in burn higher than threshold, elapsed: %f threshold: %f mean: %f" % (self.__class__.__name__, self.id, elapsed, TRIGGER_THRESHOLD*self.processing_time, mean))
-        if mean > TRIGGER_THRESHOLD*self.processing_time:
-            _log.warning("%s<%s>: Actor must be migrated, mean: %f, threshold: %f" % (self.__class__.__name__, self.id, mean, TRIGGER_THRESHOLD*self.processing_time))
-            self.better_migrate = True
-        elif self.better_migrate:
-            _log.info("%s<%s>: Actor doesn't need to be migrated anymore, mean: %f, threshold: %f" % (self.__class__.__name__, self.id, mean, TRIGGER_THRESHOLD*self.processing_time))
-            self.better_migrate = False
 
         return (input, )
 

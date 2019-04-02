@@ -16,9 +16,9 @@
 
 from calvin.actor.actor import Actor, manage, condition, stateguard
 from calvin.utilities.calvinlogger import get_logger
+import datetime, collections
 
 _log = get_logger(__name__)
-
 
 class Sink(Actor):
     """
@@ -31,18 +31,21 @@ class Sink(Actor):
         # Check args to verify that it is EOSToken
         return action(self, *args)
 
-    @manage(['tokens', 'store_tokens', 'quiet', 'active'])
-    def init(self, store_tokens=False, quiet=False, active=True):
+    @manage(['tokens', 'store_tokens', 'quiet', 'active', 'threshold', 'n_tokens_mean'])
+    def init(self, store_tokens=False, quiet=False, active=True, threshold=5, n_tokens_mean=20):
         self.store_tokens = store_tokens
         self.tokens = []
         self.quiet = quiet
         self.active = active
+        self.threshold = threshold
+        self.n_tokens_mean = n_tokens_mean
         self.setup()
 
     def did_migrate(self):
         self.setup()
 
     def setup(self):
+        self.token_process_time = collections.deque([0]*self.n_tokens_mean, maxlen=self.n_tokens_mean)
         if self.quiet:
             self.logger = _log.debug
         else:
@@ -57,8 +60,19 @@ class Sink(Actor):
         if "timestamp" in token:
             import datetime
             elapsed = datetime.datetime.now() - datetime.datetime.strptime(token["timestamp"][0]["date"], "%Y-%m-%d %H:%M:%S.%f")
-            self.logger("%s<%s>: %f" % (self.__class__.__name__, self.id, elapsed.total_seconds()))
-
+            elapsed = elapsed.total_seconds()
+            self.logger("%s<%s>: %f" % (self.__class__.__name__, self.id, elapsed))
+            # check processing time and migration conditions
+            self.token_process_time.append(elapsed)
+            mean = float(sum(self.token_process_time))/len(self.token_process_time)
+            if elapsed > self.threshold:
+                _log.info("%s<%s>: Elapsed time in sink higher than threshold, elapsed: %f threshold: %f mean: %f" % (self.__class__.__name__, self.id, elapsed, self.threshold, mean))
+            if mean > self.threshold:
+                _log.warning("%s<%s>: Actor must be migrated, mean: %f, threshold: %f" % (self.__class__.__name__, self.id, mean, self.threshold))
+                self.better_migrate = True
+            elif self.better_migrate:
+                _log.info("%s<%s>: Actor doesn't need to be migrated anymore, mean: %f, threshold: %f" % (self.__class__.__name__, self.id, mean, self.threshold))
+                self.better_migrate = False
 
     action_priority = (log, )
 
