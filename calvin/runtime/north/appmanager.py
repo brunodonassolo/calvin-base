@@ -33,7 +33,6 @@ from calvin.utilities import calvinconfig
 from calvin.runtime.north.appdeployer import AppDeployer,Application
 
 _log = calvinlogger.get_logger(__name__)
-_conf = calvinconfig.get()
 
 class AppManager(object):
 

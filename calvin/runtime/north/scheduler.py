@@ -155,9 +155,18 @@ class BaseScheduler(object):
     #
     def _maintenance_loop(self):
         # Migrate denied actors
+        algo = _conf.get("global", "reconfig_algorithm") or "app_v0"
+        _log.info("Maintenance loop, reconfiguration algorithm: %s" % algo)
         for actor in self.actor_mgr.migratable_actors():
-#            self.actor_mgr.update_requirements(actor.id, [], True, True)
-            self.node.app_manager.migrate_with_requirements(actor._app_id, None, move=True, extend=True, cb=None)
+            if algo == "app_v0":
+                self.node.app_manager.migrate_with_requirements(actor._app_id, None, move=True, extend=True, cb=None)
+            elif algo == "actor_v0":
+                self.actor_mgr.update_requirements(actor.id, [], True, True)
+            elif algo == "NA":
+                pass
+            else:
+                self.node.app_manager.migrate_with_requirements(actor._app_id, None, move=True, extend=True, cb=None)
+
             #self.actor_mgr.migrate(actor.id, actor.migration_info["node_id"],
             #                       callback=CalvinCB(actor.remove_migration_info))
         # Enable denied actors again if access is permitted. Will try to migrate if access still denied.
