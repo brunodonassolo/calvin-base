@@ -750,24 +750,11 @@ class AppDeployer(object):
         print "FINAL"
         print app.actor_placement
         status = response.CalvinResponse(True)
-        if len(actor_ids) > len(placement_best):
-            print "It was impossible to place all actors(total: %d, placed: %d), aborting..." % (len(actor_ids), len(placement_best))
-            status = response.CalvinResponse(False, data='Impossible to place all actors')
-            app._org_cb(status=status, placement={})
-            del app._org_cb
-            _log.analyze(self._node.id, "+ DONE", {'app_id': app.id}, tb=True)
-            self._destroy(app, None)
-            return
 
         if app.batch == True:
             self.batch_update_available_resources(app)
 
-        actor_placement = { actor_id: (node_id if isinstance(node_id, list) else [node_id]) for actor_id, node_id in app.actor_placement.iteritems() }
-        for actor_id, node_id in actor_placement.iteritems():
-            _log.debug("Actor deployment %s \t-> %s" % (app.actors[actor_id], node_id))
-            self._node.am.robust_migrate(actor_id, node_id[:], None)
-
-        app._org_cb(status=status, placement=actor_placement)
+        app._org_cb(status=status, placement=app.actor_placement)
         del app._org_cb
         _log.analyze(self._node.id, "+ DONE", {'app_id': app.id}, tb=True)
         _log.info("Deployment: app: %s: finished placement: total elapsed time %d" % (app.id, time.time() - app.start_time))
@@ -1060,27 +1047,12 @@ class AppDeployer(object):
         _log.debug(str(place_set))
         print "Best First placement cost: %f, n_samples: %d" % (place_set[0][1], n_samples)
         placement_best = { actor: plac.runtime for actor,plac in place_set[0][0].iteritems() }
-        print placement_best
         app.actor_placement.update(placement_best)
         print "FINAL"
         print app.actor_placement
         status = response.CalvinResponse(True)
-        if len(actor_ids) > len(placement_best):
-            print "It was impossible to place all actors(total: %d, placed: %d), aborting..." % (len(actor_ids), len(placement_best))
-            status = response.CalvinResponse(False, data='Impossible to place all actors')
-            app._org_cb(status=status, placement={})
-            del app._org_cb
-            _log.analyze(self._node.id, "+ DONE", {'app_id': app.id}, tb=True)
-            self._destroy(app, None)
-            return
 
-
-        actor_placement = { actor_id: (node_id if isinstance(node_id, list) else [node_id]) for actor_id, node_id in app.actor_placement.iteritems() }
-        for actor_id, node_id in actor_placement.iteritems():
-            _log.debug("Actor deployment %s \t-> %s" % (app.actors[actor_id], node_id))
-            self._node.am.robust_migrate(actor_id, node_id[:], None)
-
-        app._org_cb(status=status, placement=actor_placement)
+        app._org_cb(status=status, placement=app.actor_placement)
         del app._org_cb
         _log.analyze(self._node.id, "+ DONE", {'app_id': app.id}, tb=True)
         _log.info("Deployment: app: %s: finished placement: total elapsed time %d" % (app.id, time.time() - app.start_time))
@@ -1292,27 +1264,13 @@ class AppDeployer(object):
         _log.debug(str(place_set))
         print "Latency placement cost: %f, n_samples: %d" % (place_set[0][1], n_samples)
         placement_lat = { actor: plac.runtime for actor,plac in place_set[0][0].iteritems() }
-        print placement_lat
         app.actor_placement.update(placement_lat)
         print "FINAL"
         print app.actor_placement
+
         status = response.CalvinResponse(True)
-        if len(actor_ids) > len(placement_lat):
-            print "It was impossible to place all actors(total: %d, placed: %d), aborting..." % (len(actor_ids), len(placement_lat))
-            status = response.CalvinResponse(False, data='Impossible to place all actors')
-            app._org_cb(status=status, placement={})
-            del app._org_cb
-            _log.analyze(self._node.id, "+ DONE", {'app_id': app.id}, tb=True)
-            self._destroy(app, None)
-            return
 
-
-        actor_placement = { actor_id: (node_id if isinstance(node_id, list) else [node_id]) for actor_id, node_id in app.actor_placement.iteritems() }
-        for actor_id, node_id in actor_placement.iteritems():
-            _log.debug("Actor deployment %s \t-> %s" % (app.actors[actor_id], node_id))
-            self._node.am.robust_migrate(actor_id, node_id[:], None)
-
-        app._org_cb(status=status, placement=actor_placement)
+        app._org_cb(status=status, placement=app.actor_placement)
         del app._org_cb
         _log.analyze(self._node.id, "+ DONE", {'app_id': app.id}, tb=True)
         _log.info("Deployment: app: %s: finished placement: total elapsed time %d" % (app.id, time.time() - app.start_time))
@@ -1337,14 +1295,6 @@ class AppDeployer(object):
         print "Money placement cost: %f, n_samples: %d" % (place_set[0][1], n_samples)
         placement_lat = { actor: plac.runtime for actor,plac in place_set[0][0].iteritems() }
         print placement_lat
-        if len(actor_ids) > len(placement_lat):
-            print "It was impossible to place all actors(total: %d, placed: %d), aborting..." % (len(actor_ids), len(placement_lat))
-            status = response.CalvinResponse(False, data='Impossible to place all actors')
-            app._org_cb(status=status, placement={})
-            del app._org_cb
-            _log.analyze(self._node.id, "+ DONE", {'app_id': app.id}, tb=True)
-            self._destroy(app, None)
-            return
 
         if _conf.get('global', 'grasp') == "v0":
             app.actor_placement = self.grasp_optimization(app, actor_ids, placement_lat, False)
@@ -1365,13 +1315,7 @@ class AppDeployer(object):
 
         print app.actor_placement
         status = response.CalvinResponse(True)
-
-        actor_placement = { actor_id: (node_id if isinstance(node_id, list) else [node_id]) for actor_id, node_id in app.actor_placement.iteritems() }
-        for actor_id, node_id in actor_placement.iteritems():
-            _log.debug("Actor deployment %s \t-> %s" % (app.actors[actor_id], node_id))
-            self._node.am.robust_migrate(actor_id, node_id[:], None)
-
-        app._org_cb(status=status, placement=actor_placement)
+        app._org_cb(status=status, placement = app.actor_placement)
         del app._org_cb
         _log.analyze(self._node.id, "+ DONE", {'app_id': app.id}, tb=True)
         _log.info("Deployment: app: %s: finished placement: total elapsed time %d" % (app.id, time.time() - app.start_time))
@@ -1382,16 +1326,6 @@ class AppDeployer(object):
 
         print "Grasp placement cost: %f, N: %d" % (place_set[0][1], N)
         placement_lat = { actor: plac.runtime for actor,plac in place_set[0][0].iteritems() }
-        print placement_lat
-        if len(actor_ids) > len(placement_lat):
-            print "It was impossible to place all actors(total: %d, placed: %d), aborting..." % (len(actor_ids), len(placement_lat))
-            status = response.CalvinResponse(False, data='Impossible to place all actors')
-            app._org_cb(status=status, placement={})
-            del app._org_cb
-            _log.analyze(self._node.id, "+ DONE", {'app_id': app.id}, tb=True)
-            self._destroy(app, None)
-            return
-
         app.actor_placement.update(placement_lat)
         print "FINAL"
         if app.batch == True:
@@ -1399,13 +1333,7 @@ class AppDeployer(object):
 
         print app.actor_placement
         status = response.CalvinResponse(True)
-
-        actor_placement = { actor_id: (node_id if isinstance(node_id, list) else [node_id]) for actor_id, node_id in app.actor_placement.iteritems() }
-        for actor_id, node_id in actor_placement.iteritems():
-            _log.debug("Actor deployment %s \t-> %s" % (app.actors[actor_id], node_id))
-            self._node.am.robust_migrate(actor_id, node_id[:], None)
-
-        app._org_cb(status=status, placement=actor_placement)
+        app._org_cb(status=status, placement=app.actor_placement)
         del app._org_cb
         _log.analyze(self._node.id, "+ DONE", {'app_id': app.id}, tb=True)
         _log.info("Deployment: app: %s: finished placement: total elapsed time %d" % (app.id, time.time() - app.start_time))
@@ -1419,26 +1347,12 @@ class AppDeployer(object):
         app.actor_placement.update(placement_best)
         print "FINAL"
         print app.actor_placement
-        status = response.CalvinResponse(True)
-        if len(actor_ids) > len(placement_best):
-            print "It was impossible to place all actors(total: %d, placed: %d), aborting..." % (len(actor_ids), len(placement_best))
-            status = response.CalvinResponse(False, data='Impossible to place all actors')
-            app._org_cb(status=status, placement={})
-            del app._org_cb
-            _log.analyze(self._node.id, "+ DONE", {'app_id': app.id}, tb=True)
-            self._destroy(app, None)
-            return
 
         if app.batch == True:
             self.batch_update_available_resources(app)
 
-
-        actor_placement = { actor_id: (node_id if isinstance(node_id, list) else [node_id]) for actor_id, node_id in app.actor_placement.iteritems() }
-        for actor_id, node_id in actor_placement.iteritems():
-            _log.debug("Actor deployment %s \t-> %s" % (app.actors[actor_id], node_id))
-            self._node.am.robust_migrate(actor_id, node_id[:], None)
-
-        app._org_cb(status=status, placement=actor_placement)
+        status = response.CalvinResponse(True)
+        app._org_cb(status=status, placement=app.actor_placement)
         del app._org_cb
         _log.analyze(self._node.id, "+ DONE", {'app_id': app.id}, tb=True)
         _log.info("Deployment: app: %s: finished placement: total elapsed time %d" % (app.id, time.time() - app.start_time))
@@ -1452,25 +1366,16 @@ class AppDeployer(object):
         app.actor_placement.update(placement_best)
         print "FINAL"
         print app.actor_placement
-        status = response.CalvinResponse(True)
-        if len(actor_ids) > len(placement_best):
-            print "It was impossible to place all actors(total: %d, placed: %d), aborting..." % (len(actor_ids), len(placement_best))
-            status = response.CalvinResponse(False, data='Impossible to place all actors')
-            app._org_cb(status=status, placement={})
-            del app._org_cb
-            _log.analyze(self._node.id, "+ DONE", {'app_id': app.id}, tb=True)
-            self._destroy(app, None)
-            return
 
-
+        # leaving here to update self.actor_by_runtime variable
         actor_placement = { actor_id: (node_id if isinstance(node_id, list) else [node_id]) for actor_id, node_id in app.actor_placement.iteritems() }
         for actor_id, node_id in actor_placement.iteritems():
             _log.debug("Actor deployment %s \t-> %s" % (app.actors[actor_id], node_id))
             self.actor_by_runtime.setdefault(node_id[0], set())
             self.actor_by_runtime[node_id[0]].add(actor_id)
-            self._node.am.robust_migrate(actor_id, node_id[:], None)
 
-        app._org_cb(status=status, placement=actor_placement)
+        status = response.CalvinResponse(True)
+        app._org_cb(status=status, placement=app.actor_placement)
         del app._org_cb
         _log.analyze(self._node.id, "+ DONE", {'app_id': app.id}, tb=True)
         _log.info("Deployment: app: %s: finished placement: total elapsed time %d" % (app.id, time.time() - app.start_time))
@@ -1552,27 +1457,6 @@ class AppDeployer(object):
         _log.info("Deployment: app: %s: finished filter phase: elapsed time %d" % (app.id, time.time() - app.start_time))
         _log.analyze(self._node.id, "+ BEGIN", {}, tb=True)
 
-        # all possible actor placements derived
-        _log.analyze(self._node.id, "+ ACTOR PLACEMENT", {'placement': app.actor_placement}, tb=True)
-        status = response.CalvinResponse(True)
-        # we want to return error if an actor cannot be placed
-        #if any([not n for n in app.actor_placement.values()]):
-        #    # At least one actor have no required placement
-        #    # Let them stay on this node
-        #    app.actor_placement = {actor_id: set([self._node.id]) if placement is None else placement
-        #                             for actor_id, placement in app.actor_placement.items()}
-        #    # Status will indicate success, but be different than the normal OK code
-        #    status = response.CalvinResponse(response.CREATED)
-        #    _log.analyze(self._node.id, "+ MISS PLACEMENT", {'app_id': app.id, 'placement': app.actor_placement}, tb=True)
-
-        if any([not n for n in app.link_placement.values()]):
-            # At least one link have no required placement
-            # Status will indicate success, but be different than the normal OK code
-            status = response.CalvinResponse(response.CREATED)
-
-        # Collect an actor by actor matrix stipulating a weighting 0.0 - 1.0 for their connectivity
-        # removing it, we do not use them anymore and it does not work with reconfig
-        #actor_ids, actor_matrix = self._actor_connectivity(app)
         actor_ids = app.get_actors()
 
         # verify available CPU and RAM in nodes
@@ -1590,10 +1474,6 @@ class AppDeployer(object):
         for actor_id, possible_nodes in app.actor_placement.iteritems():
             if any([isinstance(n, dynops.InfiniteElement) for n in possible_nodes]):
                 app.actor_placement[actor_id] = node_ids
-        #_log.analyze(self._node.id, "+ ACTOR MATRIX", {'actor_ids': actor_ids, 'actor_matrix': actor_matrix, 'node_ids': node_ids, 'placement': app.actor_placement}, tb=True)
-
-        _log.debug("Actor Placement before network filtering %s" % (str(app.actor_placement)))
-        #self.filter_link_placement(app, status)
 
         # Weight the actors possible placement with their connectivity matrix
         if _conf.get('global', 'deployment_algorithm') == 'random':
@@ -1613,58 +1493,7 @@ class AppDeployer(object):
         else:
             placement_best = self.money_placement(app, actor_ids)
 
-        #weighted_actor_placement = { actor_id: (node_id if isinstance(node_id, list) else [node_id]) for actor_id, node_id in app.actor_placement.iteritems() }
-        ##for actor_id in actor_ids:
-        ##    # actor matrix is symmetric, so independent if read horizontal or vertical
-        ##    actor_weights = actor_matrix[actor_ids.index(actor_id)]
-        ##    # Sum the actor weights for each actors possible nodes, matrix mult AA * AN,
-        ##    # AA actor weights, AN actor * node with 1 when possible
-        ##    weights = [sum([actor_weights[actor_ids.index(_id)] if node_id in app.actor_placement[actor_id] else 0
-        ##                     for _id in actor_ids])
-        ##                     for node_id in node_ids]
-        ##    # Get first node with highest weight
-        ##    # FIXME should verify that the node actually exist also
-        ##    # TODO should select from a resource sharing perspective also, instead of picking first max
-        ##    # TODO: should also ask authorization server before selecting node to migrate to.
-        ##    _log.analyze(self._node.id, "+ WEIGHTS", {'actor_id': actor_id, 'weights': weights})
-        ##    #weighted_actor_placement[actor_id] = node_ids[weights.index(max(weights))]
-        ##    # Get a list of nodes in sorted weighted order
-        ##    weighted_actor_placement[actor_id] = [n for (w, n) in sorted(zip(weights, node_ids), reverse=True)]
-        #for actor_id, node_id in weighted_actor_placement.iteritems():
-        #    _log.debug("Actor deployment %s \t-> %s" % (app.actors[actor_id], node_id))
-        #    # FIXME add callback that recreate the actor locally
-        #    self._node.am.robust_migrate(actor_id, node_id[:], None)
-
-        #app._org_cb(status=status, placement=weighted_actor_placement)
-        #del app._org_cb
-        #_log.analyze(self._node.id, "+ DONE", {'app_id': app.id}, tb=True)
         #_log.info("Deployment: app: %s: finished placement: total elapsed time %d" % (app.id, time.time() - app.start_time))
-
-    def _actor_connectivity(self, app):
-        """ Matrix of weights between actors how close they want to be
-            0 = don't care
-            1 = same node
-
-            Currently any nodes that are connected gets 0.5, and
-            diagonal is 1:s
-        """
-        list_actors = app.get_actors()
-        l= len(list_actors)
-        actor_matrix = [[0 for x in range(l)] for x in range(l)]
-        for actor_id in list_actors:
-            connections = self._node.am.connections(actor_id)
-            for p in connections['inports'].values():
-                try:
-                    peer_actor_id = self._node.pm._get_local_port(port_id=p[1]).owner.id
-                except:
-                    # Only work while the peer still is local
-                    # TODO get it from storage
-                    continue
-                actor_matrix[list_actors.index(actor_id)][list_actors.index(peer_actor_id)] = 0.5
-                actor_matrix[list_actors.index(peer_actor_id)][list_actors.index(actor_id)] = 0.5
-        for i in range(l):
-            actor_matrix[i][i] = 1
-        return (list_actors, actor_matrix)
 
     def grasp_load_balance_cost(self, app, runtime):
         cost = (float(app.runtime_cpu[runtime])/float(app.runtime_cpu_total[runtime]))
@@ -1735,11 +1564,15 @@ class AppDeployer(object):
         return True
 
     def grasp_actor_rcl(self, app, actor_id, placement, rcl):
-        best_runtime = placement[actor_id]
+        best_runtime = ""
+        if actor_id in placement:
+            best_runtime = placement[actor_id]
         for r in rcl:
             if not self.grasp_runtime_accept_actor(app, actor_id, r, placement):
                 _log.debug("GRASP, actor id: %s runtime: %s, CANNOT host it" % (actor_id, r))
                 continue
+            if best_runtime == "":
+                best_runtime = r
 
             if _conf.get('global', 'deployment_algorithm') == 'grasp':
                 if self.cost_for_runtime_v2(app, actor_id, r) < self.cost_for_runtime_v2(app, actor_id, best_runtime):
@@ -1762,7 +1595,7 @@ class AppDeployer(object):
         rcl = sorted(rcl, key=lambda k : self.cost_for_runtime_v2(app, actor_id, k))
         _log.debug("RCL, actor: %s, list: %s" % (actor_id, str(rcl)))
         runtime = self.grasp_actor_rcl(app, actor_id, placement, rcl)
-        if placement[actor_id] != runtime:
+        if runtime != "" and placement[actor_id] != runtime:
             _log.debug("GRASP OPTIMIZATION: actor_id %s, old runtime: %s, new runtime: %s" % (actor_id, placement[actor_id], runtime))
             if update_resources:
                 old_runtime = placement[actor_id]

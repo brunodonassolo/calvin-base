@@ -72,9 +72,6 @@ class AppManager(object):
             _log.error("Trying to add link(%s) but a non existing application id (%s) specified" % (link_id, application_id))
             return
 
-    def req_done(self, status, placement=None):
-        _log.analyze(self._node.id, "+", {'status': str(status), 'placement': placement}, tb=True)
-
     def finalize(self, application_id, migrate=False, cb=None):
         _log.analyze(self._node.id, "+", {'application_id': application_id, 'migrate': migrate, 'cb': str(cb)})
         if application_id not in self.applications:
@@ -83,9 +80,28 @@ class AppManager(object):
         self.storage.add_application(self.applications[application_id])
         if migrate:
             app = self.applications[application_id]
-            self.app_deployer.execute_requirements(app, cb if cb else self.req_done)
+            self.app_deployer.execute_requirements(app, CalvinCB(self._finalize_got_placement, app=app, cb=cb))
         elif cb:
             cb(status=response.CalvinResponse(True))
+
+
+    def _finalize_got_placement(self, app, status, placement, cb):
+
+        actor_ids = app.get_actors()
+        if len(actor_ids) > len(placement.keys()):
+            print "It was impossible to place all actors(total: %d, placed: %d), aborting..." % (len(actor_ids), len(placement.keys()))
+            status = response.CalvinResponse(False, data='Impossible to place all actors')
+            if cb:
+                cb(status=status)
+            self._destroy(app, None)
+            return
+
+        actor_placement = { actor_id: (node_id if isinstance(node_id, list) else [node_id]) for actor_id, node_id in placement.iteritems() }
+        for actor_id, node_id in actor_placement.iteritems():
+            _log.debug("Actor deployment %s \t-> %s" % (app.actors[actor_id], node_id))
+            self._node.am.robust_migrate(actor_id, node_id[:], None)
+        if cb:
+            cb(status=status, placement=actor_placement)
 
     def destroy(self, application_id, cb):
         """ Destroy an application and its actors """
@@ -338,43 +354,15 @@ class AppManager(object):
         app = Application(app_id, value['name'], value['origin_node_id'],
                 self._node.am, actors=value['actors_name_map'], deploy_info=deploy_req, links=value['links_name_map'])
         app.group_components()
-        self.app_deployer.execute_requirements(app, cb if cb else self.req_done)
-        #app._migrated_actors = {a: None for a in app.actors}
-        #for actor_id, actor_name in app.actors.iteritems():
-        #    req = app.get_req(actor_name)
-        #    if not req:
-        #        _log.analyze(self._node.id, "+ NO REQ", {'actor_id': actor_id, 'actor_name': actor_name})
-        #        # No requirement then leave as is.
-        #        self._migrated_cb(response.CalvinResponse(True), app, actor_id, cb)
-        #        continue
-        #    if actor_id in self._node.am.actors:
-        #        _log.analyze(self._node.id, "+ OWN ACTOR", {'actor_id': actor_id, 'actor_name': actor_name})
-        #        self._node.am.update_requirements(actor_id, req, False, move,
-        #                                         callback=CalvinCB(self._migrated_cb, app=app,
-        #                                                           actor_id=actor_id, cb=cb))
-        #    else:
-        #        _log.analyze(self._node.id, "+ OTHER NODE", {'actor_id': actor_id, 'actor_name': actor_name})
-        #        self.storage.get_actor(actor_id, cb=CalvinCB(self._migrate_from_rt, app=app,
-        #                                                          actor_id=actor_id, req=req,
-        #                                                          move=move, cb=cb))
+        self.app_deployer.execute_requirements(app, CalvinCB(self._migrate_got_placement, app=app, cb=cb))
 
-    def _migrate_from_rt(self, key, value, app, actor_id, req, move, cb):
-        if response.isfailresponse(value):
-            self._migrated_cb(response.CalvinResponse(response.NOT_FOUND), app, actor_id, cb)
-            return
-        _log.analyze(self._node.id, "+", {'actor_id': actor_id, 'node_id': value['node_id']},
-                                                                peer_node_id=value['node_id'])
-        self._node.proto.actor_migrate(value['node_id'], CalvinCB(self._migrated_cb, app=app, actor_id=actor_id, cb=cb),
-                                     actor_id, req, False, move)
-
-    def _migrated_cb(self, status, app, actor_id, cb, **kwargs):
-        app._migrated_actors[actor_id] = status
-        _log.analyze(self._node.id, "+", {'actor_id': actor_id, 'status': status, 'statuses': app._migrated_actors})
-        if any([s is None for s in app._migrated_actors.values()]):
-            return
-        # Done
+    def _migrate_got_placement(self, app, status, placement, cb):
+        actor_placement = { actor_id: (node_id if isinstance(node_id, list) else [node_id]) for actor_id, node_id in placement.iteritems() }
+        for actor_id, node_id in actor_placement.iteritems():
+            _log.debug("Actor deployment %s \t-> %s" % (app.actors[actor_id], node_id))
+            self._node.am.robust_migrate(actor_id, node_id[:], None)
         if cb:
-            cb(status=response.CalvinResponse(all([s for s in app._migrated_actors.values()])))
+            cb(status=status, placement=actor_placement)
 
 class Deployer(object):
 
