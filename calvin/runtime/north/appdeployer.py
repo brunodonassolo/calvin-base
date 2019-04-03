@@ -1292,6 +1292,14 @@ class AppDeployer(object):
     def money_placement_finish(self, app, actor_ids, n_samples, place_set):
         _log.debug("Ending placing actors:...")
         _log.debug(str(place_set))
+        if (len(place_set) == 0):
+            status = response.CalvinResponse(True)
+            app._org_cb(status=status, placement = {})
+            del app._org_cb
+            _log.analyze(self._node.id, "+ DONE", {'app_id': app.id}, tb=True)
+            _log.info("Deployment: app: %s: finished placement: total elapsed time %d" % (app.id, time.time() - app.start_time))
+            return
+
         print "Money placement cost: %f, n_samples: %d" % (place_set[0][1], n_samples)
         placement_lat = { actor: plac.runtime for actor,plac in place_set[0][0].iteritems() }
         print placement_lat
@@ -1307,7 +1315,7 @@ class AppDeployer(object):
                 n_solutions.append({ actor: plac.runtime for actor,plac in place_set[i][0].iteritems() })
             app.actor_placement = self.grasp_optimization_v2(app, actor_ids, n_solutions, False)
         else:
-            app.actor_placement.update(placement_lat)
+            app.actor_placement = placement_lat
 
         print "FINAL"
         if app.batch == True:
@@ -1459,13 +1467,6 @@ class AppDeployer(object):
 
         actor_ids = app.get_actors()
 
-        # verify available CPU and RAM in nodes
-        for actor_id, nodes_ids in app.actor_placement.iteritems():
-            self.update_cache_cost_actor(app, actor_id)
-            nodes_to_remove = [ node_id for node_id in nodes_ids if (app.runtime_cpu[node_id] < app.cost_runtime_cpu.setdefault(actor_id, 0)) or (app.runtime_ram[node_id] < app.cost_runtime_ram.setdefault(actor_id, 0)) ]
-            _log.info("Placement actor: %s. Internal state: runtimes considered: %s, runtimes removed: %s, CPU: %s, RAM %s, CPU total: %s, RAM total: %s", actor_id, str(nodes_ids), str(nodes_to_remove), str(app.runtime_cpu), str(app.runtime_ram), str(app.runtime_cpu_total), str(app.runtime_ram_total))
-            nodes_ids -= set(nodes_to_remove)
-
         # Get list of all possible nodes
         node_ids = set([])
         for possible_nodes in app.actor_placement.values():
@@ -1475,6 +1476,13 @@ class AppDeployer(object):
         for actor_id, possible_nodes in app.actor_placement.iteritems():
             if any([isinstance(n, dynops.InfiniteElement) for n in possible_nodes]):
                 app.actor_placement[actor_id] = node_ids
+
+        # verify available CPU and RAM in nodes
+        for actor_id, nodes_ids in app.actor_placement.iteritems():
+            self.update_cache_cost_actor(app, actor_id)
+            nodes_to_remove = [ node_id for node_id in nodes_ids if (app.runtime_cpu[node_id] < app.cost_runtime_cpu.setdefault(actor_id, 0)) or (app.runtime_ram[node_id] < app.cost_runtime_ram.setdefault(actor_id, 0)) ]
+            _log.info("Placement actor: %s. Internal state: runtimes considered: %s, runtimes removed: %s, CPU: %s, RAM %s, CPU total: %s, RAM total: %s", actor_id, str(nodes_ids), str(nodes_to_remove), str(app.runtime_cpu), str(app.runtime_ram), str(app.runtime_cpu_total), str(app.runtime_ram_total))
+            nodes_ids -= set(nodes_to_remove)
 
         # Weight the actors possible placement with their connectivity matrix
         if _conf.get('global', 'deployment_algorithm') == 'random':
