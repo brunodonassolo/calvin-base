@@ -24,6 +24,7 @@ from calvin.runtime.south.async import async
 from calvin.utilities.calvin_callback import CalvinCB
 from calvin.utilities.calvinlogger import get_logger
 from calvin.utilities import calvinconfig
+from calvin.actor.actor import Actor
 
 _log = get_logger(__name__)
 _conf = calvinconfig.get()
@@ -166,6 +167,7 @@ class BaseScheduler(object):
                 pass
             else:
                 self.node.app_manager.migrate_with_requirements(actor._app_id, None, move=True, extend=True, cb=None)
+            actor.better_migrate = Actor.RECONF_STATUS.DONE
 
             #self.actor_mgr.migrate(actor.id, actor.migration_info["node_id"],
             #                       callback=CalvinCB(actor.remove_migration_info))

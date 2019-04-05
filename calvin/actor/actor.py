@@ -299,6 +299,7 @@ class Actor(object):
             return self.printable(self._state)
 
     STATUS = enum('LOADED', 'READY', 'PENDING', 'ENABLED', 'DENIED', 'MIGRATABLE')
+    RECONF_STATUS = enum('NONE', 'REQUESTED', 'DONE')
 
     VALID_TRANSITIONS = {
         STATUS.LOADED    : [STATUS.READY],
@@ -335,7 +336,7 @@ class Actor(object):
         super(Actor, self).__init__()
         self._type = actor_type
         self._name = name  # optional: human_readable_name
-        self.better_migrate = False
+        self.better_migrate = Actor.RECONF_STATUS.NONE
         self._id = actor_id or calvinuuid.uuid("ACTOR")
         _log.debug("New actor id: %s, supplied actor id %s" % (self._id, actor_id))
         self._deployment_requirements = []
@@ -579,7 +580,7 @@ class Actor(object):
         return self.fsm.state() == Actor.STATUS.DENIED
 
     def migratable(self):
-        if self.better_migrate:
+        if self.better_migrate == Actor.RECONF_STATUS.REQUESTED:
             return True
         return self.fsm.state() == Actor.STATUS.MIGRATABLE
 

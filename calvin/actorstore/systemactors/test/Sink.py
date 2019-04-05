@@ -62,6 +62,11 @@ class Sink(Actor):
             elapsed = datetime.datetime.now() - datetime.datetime.strptime(token["timestamp"][0]["date"], "%Y-%m-%d %H:%M:%S.%f")
             elapsed = elapsed.total_seconds()
             self.logger("%s<%s>: %f" % (self.__class__.__name__, self.id, elapsed))
+            # migration done, reset old values
+            if self.better_migrate == Actor.RECONF_STATUS.DONE:
+                self.token_process_time = collections.deque([0]*self.n_tokens_mean, maxlen=self.n_tokens_mean)
+                self.better_migrate = Actor.RECONF_STATUS.NONE
+
             # check processing time and migration conditions
             self.token_process_time.append(elapsed)
             mean = float(sum(self.token_process_time))/len(self.token_process_time)
@@ -69,10 +74,10 @@ class Sink(Actor):
                 _log.info("%s<%s>: Elapsed time in sink higher than threshold, elapsed: %f threshold: %f mean: %f" % (self.__class__.__name__, self.id, elapsed, self.threshold, mean))
             if mean > self.threshold:
                 _log.warning("%s<%s>: Actor must be migrated, mean: %f, threshold: %f" % (self.__class__.__name__, self.id, mean, self.threshold))
-                self.better_migrate = True
-            elif self.better_migrate:
+                self.better_migrate = Actor.RECONF_STATUS.REQUESTED
+            elif self.better_migrate == Actor.RECONF_STATUS.REQUESTED:
                 _log.info("%s<%s>: Actor doesn't need to be migrated anymore, mean: %f, threshold: %f" % (self.__class__.__name__, self.id, mean, self.threshold))
-                self.better_migrate = False
+                self.better_migrate = Actor.RECONF_STATUS.NONE
 
     action_priority = (log, )
 
