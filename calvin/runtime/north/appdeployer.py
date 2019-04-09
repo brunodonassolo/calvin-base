@@ -848,8 +848,8 @@ class AppDeployer(object):
             runtimes_set.setdefault(actorPlac.runtime, {"cpu": 0, "ram": 0})
             runtimes_set[actorPlac.runtime]["cpu"] += app.cost_runtime_cpu[actor]
             runtimes_set[actorPlac.runtime]["ram"] += app.cost_runtime_ram[actor]
-            if (runtimes_set[actorPlac.runtime]["cpu"] > app.runtime_cpu.setdefault(actorPlac.runtime, 0) or
-                    runtimes_set[actorPlac.runtime]["ram"] > app.runtime_ram.setdefault(actorPlac.runtime, 0)):
+            max_tolerance = _conf.get("global", "deployment_tolerance")
+            if (runtimes_set[actorPlac.runtime]["cpu"] > app.runtime_cpu.setdefault(actorPlac.runtime, 0)*max_tolerance or runtimes_set[actorPlac.runtime]["ram"] > app.runtime_ram.setdefault(actorPlac.runtime, 0)*max_tolerance):
                 return False
         return True
 
@@ -1455,6 +1455,32 @@ class AppDeployer(object):
         self.green_actor_placement(app, actor_ids, n_samples, orphan_actors, place_set, cb_finish_placement=CalvinCB(self.green_placement_finish, app, actor_ids, n_samples))
 
 
+    def decide_placement_filter_raw_param(self, app):
+        # verify available CPU and RAM in nodes
+        for actor_id, nodes_ids in app.actor_placement.iteritems():
+            self.update_cache_cost_actor(app, actor_id)
+            nodes_to_remove = [ node_id for node_id in nodes_ids if (app.runtime_cpu[node_id] < app.cost_runtime_cpu.setdefault(actor_id, 0)) or (app.runtime_ram[node_id] < app.cost_runtime_ram.setdefault(actor_id, 0)) ]
+
+            nodes_tolerance = []
+            tolerance = 1.1
+            max_tolerance = _conf.get("global", "deployment_tolerance")
+            while (tolerance <= max_tolerance + 1e-09):
+                nodes = [ node_id for node_id in nodes_ids if (app.runtime_cpu[node_id]*tolerance >= app.cost_runtime_cpu.setdefault(actor_id, 0)) and (app.runtime_ram[node_id]*tolerance >= app.cost_runtime_ram.setdefault(actor_id, 0)) ]
+                nodes_tolerance.append(nodes)
+                tolerance += 0.1
+
+            _log.info("Placement actor: %s. Internal state: runtimes considered: %s, runtimes removed: %s, CPU: %s, RAM %s, CPU total: %s, RAM total: %s", actor_id, str(nodes_ids), str(nodes_to_remove), str(app.runtime_cpu), str(app.runtime_ram), str(app.runtime_cpu_total), str(app.runtime_ram_total))
+            nodes_ids -= set(nodes_to_remove)
+
+            tolerance = 1.1
+            for nodes_range in nodes_tolerance:
+                if (len(nodes_ids) > 0):
+                    break
+                _log.info("Placement actor: %s. Nodes list empty: %s, adding nodes in %f range: %s" % (actor_id, str(nodes_ids), tolerance, str(nodes_range)))
+                nodes_ids |= set(nodes_range)
+                tolerance += 0.1
+
+
     def decide_placement(self, app):
         # this method can be called more than once depending on collect_* callbacks execution order (inlined calls)
         # So, we added this verification here
@@ -1477,12 +1503,7 @@ class AppDeployer(object):
             if any([isinstance(n, dynops.InfiniteElement) for n in possible_nodes]):
                 app.actor_placement[actor_id] = node_ids
 
-        # verify available CPU and RAM in nodes
-        for actor_id, nodes_ids in app.actor_placement.iteritems():
-            self.update_cache_cost_actor(app, actor_id)
-            nodes_to_remove = [ node_id for node_id in nodes_ids if (app.runtime_cpu[node_id] < app.cost_runtime_cpu.setdefault(actor_id, 0)) or (app.runtime_ram[node_id] < app.cost_runtime_ram.setdefault(actor_id, 0)) ]
-            _log.info("Placement actor: %s. Internal state: runtimes considered: %s, runtimes removed: %s, CPU: %s, RAM %s, CPU total: %s, RAM total: %s", actor_id, str(nodes_ids), str(nodes_to_remove), str(app.runtime_cpu), str(app.runtime_ram), str(app.runtime_cpu_total), str(app.runtime_ram_total))
-            nodes_ids -= set(nodes_to_remove)
+        self.decide_placement_filter_raw_param(app)
 
         # Weight the actors possible placement with their connectivity matrix
         if _conf.get('global', 'deployment_algorithm') == 'random':
@@ -1534,8 +1555,9 @@ class AppDeployer(object):
                 total_cpu += app.cost_runtime_cpu[actor]
                 total_ram += app.cost_runtime_ram[actor]
 
-        if (total_cpu > app.runtime_cpu.setdefault(runtime, 0) or
-                    total_ram > app.runtime_ram.setdefault(runtime, 0)):
+        max_tolerance = _conf.get("global", "deployment_tolerance")
+        if (total_cpu > app.runtime_cpu.setdefault(runtime, 0)*max_tolerance or
+                    total_ram > app.runtime_ram.setdefault(runtime, 0)*max_tolerance):
             return False
 
         # verify links
