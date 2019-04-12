@@ -41,8 +41,12 @@ class Sink(Actor):
         self.n_tokens_mean = n_tokens_mean
         self.setup()
 
+    def will_migrate(self):
+        _log.info("%s<%s>: Actor migration triggered" % (self.__class__.__name__, self.id))
+
     def did_migrate(self):
         self.setup()
+        _log.info("%s<%s>: Actor migration finished" % (self.__class__.__name__, self.id))
 
     def setup(self):
         self.token_process_time = collections.deque([0]*self.n_tokens_mean, maxlen=self.n_tokens_mean)

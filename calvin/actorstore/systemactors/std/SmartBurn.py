@@ -42,8 +42,12 @@ class SmartBurn(Actor):
         self.A = [[random.random() for i in range(0,self.size)] for j in range(0,self.size)]
         self.B = [[random.random() for i in range(0,self.size)] for j in range(0,self.size)]
 
+    def will_migrate(self):
+        _log.info("%s<%s>: Actor migration triggered" % (self.__class__.__name__, self.id))
+
     def did_migrate(self):
         self.setup()
+        _log.info("%s<%s>: Actor migration finished" % (self.__class__.__name__, self.id))
 
     def log(self, data):
         _log.info("%s<%s>: %s" % (self.__class__.__name__, self.id, str(data).strip()))

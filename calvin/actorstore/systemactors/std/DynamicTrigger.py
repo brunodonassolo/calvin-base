@@ -66,6 +66,11 @@ class DynamicTrigger(Actor):
 
         self.timer = calvinsys.open(self, "sys.timer.once", period = next_token)
 
+    def will_migrate(self):
+        _log.info("%s<%s>: Actor migration triggered" % (self.__class__.__name__, self.id))
+
+    def did_migrate(self):
+        _log.info("%s<%s>: Actor migration finished" % (self.__class__.__name__, self.id))
 
     def _set_state_timer(self):
         """ Set the timer to next state change """
