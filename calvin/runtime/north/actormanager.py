@@ -507,7 +507,6 @@ class ActorManager(object):
             if actor_id not in self.actors:
                 self.node.storage.get_actor(actor_id, cb=CalvinCB(self._migrate_from_rt, peer_node_id=node_id, cb=CalvinCB(self._robust_migrate_cb, actor_id=actor_id, node_ids=node_ids, callback=callback)))
             else:
-                _log.info("Actor: %s migrate from: %s to %s", actor_id, self.node.id, node_id)
                 self.migrate(actor_id, node_id,
                         CalvinCB(self._robust_migrate_cb, actor_id=actor_id, node_ids=node_ids, callback=callback))
 
@@ -533,6 +532,7 @@ class ActorManager(object):
             if callback:
                 callback(status=response.CalvinResponse(False))
             return
+        _log.info("Actor: %s migrate from: %s to %s", actor_id, self.node.id, node_id)
         actor = self.actors[actor_id]
         if actor._migrating_to is not None:
             # We can't migrate while migrating
