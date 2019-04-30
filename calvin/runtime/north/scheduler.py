@@ -158,7 +158,8 @@ class BaseScheduler(object):
         # Migrate denied actors
         algo = _conf.get("global", "reconfig_algorithm") or "app_v0"
         _log.info("Maintenance loop, reconfiguration algorithm: %s" % algo)
-        for actor in self.actor_mgr.migratable_actors():
+        if len(self.actor_mgr.migratable_actors()):
+            actor = random.choice(self.actor_mgr.migratable_actors())
             if algo == "app_v0":
                 self.node.app_manager.migrate_with_requirements(actor._app_id, None, move=True, extend=True, cb=None)
             elif algo == "actor_v0":

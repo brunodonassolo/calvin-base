@@ -79,7 +79,7 @@ class AppManager(object):
         self.storage.add_application(self.applications[application_id])
         if migrate:
             app = self.applications[application_id]
-            self.app_deployer.execute_requirements(app, CalvinCB(self._finalize_got_placement, app=app, cb=cb))
+            self.app_deployer.execute_requirements(app, CalvinCB(self._finalize_got_placement, app=app, cb=cb), move=False)
         elif cb:
             cb(status=response.CalvinResponse(True))
 
@@ -353,7 +353,7 @@ class AppManager(object):
         app = Application(app_id, value['name'], value['origin_node_id'],
                 self._node.am, actors=value['actors_name_map'], deploy_info=deploy_req, links=value['links_name_map'])
         app.group_components()
-        self.app_deployer.execute_requirements(app, CalvinCB(self._migrate_got_placement, app=app, cb=cb))
+        self.app_deployer.execute_requirements(app, CalvinCB(self._migrate_got_placement, app=app, cb=cb), move=move)
 
     def _migrate_got_placement(self, app, status, placement, cb):
         actor_placement = { actor_id: (node_id if isinstance(node_id, list) else [node_id]) for actor_id, node_id in placement.iteritems() }

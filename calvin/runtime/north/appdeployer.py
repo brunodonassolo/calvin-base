@@ -163,7 +163,7 @@ class AppDeployer(object):
 
     ### DEPLOYMENT REQUIREMENTS ###
 
-    def execute_requirements(self, app, cb):
+    def execute_requirements(self, app, cb, move):
         """ Build dynops iterator to collect all possible placements,
             then trigger migration.
 
@@ -179,6 +179,7 @@ class AppDeployer(object):
 
         _log.analyze(self._node.id, "+ APP REQ", {}, tb=True)
 
+        app.move = move
         app.start_time = time.time()
         _log.info("Deployment: app: %s: start deploying: time %d" % (application_id, app.start_time))
         app.actor_placement = {}  # Clean placement slate
@@ -685,6 +686,10 @@ class AppDeployer(object):
         _log.debug("Calculating cost v2 for actor %s, runtime %s" % (actor_id, runtime))
         cost = app.cost_runtime_cpu[actor_id]*app.monetary_cost_cpu[runtime]
         cost += app.cost_runtime_ram[actor_id]*app.monetary_cost_ram[runtime]
+        if (app.move and runtime == app.actor_storage[actor_id]['node_id']):
+            max_ram = max(app.monetary_cost_ram.values())
+            max_cpu = max(app.monetary_cost_cpu.values())
+            cost = cost*2.0*(max_cpu + max_ram)
         _log.debug("Total cost v2: %f" % cost)
         return cost
 
