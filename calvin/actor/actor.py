@@ -582,6 +582,8 @@ class Actor(object):
     def migratable(self):
         if self.better_migrate == Actor.RECONF_STATUS.REQUESTED:
             return True
+        else:
+            return False
         return self.fsm.state() == Actor.STATUS.MIGRATABLE
 
     @verify_status([STATUS.DENIED])
