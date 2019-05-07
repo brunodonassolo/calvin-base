@@ -49,6 +49,7 @@ class BaseScheduler(object):
         # FIXME: later
         self._replication_interval = 2
         self._maintenance_delay = _conf.get(None, "maintenance_delay") or 300
+        self._migration_cooldown = _conf.get(None, "migration_cooldown") or 300
         self._pressure_event_actor_ids = set([])
 
     # System entry point
@@ -158,6 +159,7 @@ class BaseScheduler(object):
         # Migrate denied actors
         algo = _conf.get("global", "reconfig_algorithm") or "app_v0"
         _log.info("Maintenance loop, reconfiguration algorithm: %s" % algo)
+        migration = False
         if len(self.actor_mgr.migratable_actors()):
             actor = random.choice(self.actor_mgr.migratable_actors())
             if algo == "app_v0":
@@ -168,6 +170,7 @@ class BaseScheduler(object):
                 pass
             else:
                 self.node.app_manager.migrate_with_requirements(actor._app_id, None, move=True, extend=True, cb=None)
+            migration = True
             actor.better_migrate = Actor.RECONF_STATUS.DONE
 
             #self.actor_mgr.migrate(actor.id, actor.migration_info["node_id"],
@@ -179,7 +182,10 @@ class BaseScheduler(object):
         # Since we may have moved stuff around, schedule strategy
         self.insert_task(self.strategy, 0)
         # Schedule next maintenance
-        self.insert_task(self._maintenance_loop, self._maintenance_delay)
+        if not migration:
+            self.insert_task(self._maintenance_loop, self._maintenance_delay)
+        else:
+            self.insert_task(self._maintenance_loop, self._migration_cooldown)
 
     def trigger_maintenance_loop(self, delay=False):
         """Public API"""
