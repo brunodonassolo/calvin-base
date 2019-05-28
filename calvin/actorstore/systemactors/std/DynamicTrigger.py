@@ -38,8 +38,6 @@ class DynamicTrigger(Actor):
         self.state_info = {}
         self.timestamps = []
         self.seq_number = 0
-        self.throughput_tick = 30
-        self.throughput_ntokens = 0
         self.initial_setup_date = None
         self.last_token_date = None
         self.last_state_date = None
@@ -115,8 +113,6 @@ class DynamicTrigger(Actor):
         self.last_token_date = None
 
     def setup(self):
-        self.throughput_timer = calvinsys.open(self, "sys.timer.repeating")
-        calvinsys.write(self.throughput_timer, self.throughput_tick)
         # File format:
         # N - number of states
         # state_name1 interval1 message1 (N times)
@@ -143,36 +139,6 @@ class DynamicTrigger(Actor):
         #print self.state_info
         #print self.timestamps
 
-    @stateguard(lambda self: calvinsys.can_read(self.throughput_timer))
-    @condition([], [])
-    def throughput_check(self):
-        calvinsys.read(self.throughput_timer) # Ack
-        # sleeping state, do nothing
-        if (self.current_token_interval < 0):
-            return
-        current_time = time.time()
-        # not enough time in active state
-        if (self.last_state_date == None or current_time - self.last_state_date < self.throughput_tick):
-            return
-
-        # not enough throughput, migrate
-        if (self.throughput_ntokens == 0):
-            self.better_migrate = Actor.RECONF_STATUS.REQUESTED
-            _log.warning("%s<%s>: Actor must be migrated, insufficient throughput rate, no token received" % (self.__class__.__name__, self.id))
-            return
-
-        mean = float(self.throughput_tick)/float(self.throughput_ntokens)
-        _log.info("%s<%s>: Actor throughput rate mean: %f" % (self.__class__.__name__, self.id, mean))
-
-        if (mean > 2*self.current_token_interval):
-            self.better_migrate = Actor.RECONF_STATUS.REQUESTED
-            _log.warning("%s<%s>: Actor must be migrated, rate mean: %f, limit: %f" % (self.__class__.__name__, self.id, mean, 2*self.current_token_interval))
-        elif self.better_migrate == Actor.RECONF_STATUS.REQUESTED:
-            _log.info("%s<%s>: Actor doesn't need to be migrated anymore, rate mean: %f, limit: %f" % (self.__class__.__name__, self.id, mean, 2*self.current_token_interval))
-            self.better_migrate = Actor.RECONF_STATUS.NONE
-
-        # reset
-        self.throughput_ntokens = 0
 
     @stateguard(lambda self: calvinsys.can_read(self.state_timer))
     @condition([], [])
@@ -190,7 +156,6 @@ class DynamicTrigger(Actor):
         calvinsys.read(self.timer) # Ack
         calvinsys.close(self.timer) # Ack
         current_time = time.time()
-        self.throughput_ntokens += 1
         # log if we are more than 50% token_interval late
         delta = 1.5*self.current_token_interval
         if (self.verbose and self.last_token_date != None and (current_time > (self.last_token_date + delta))):
@@ -205,6 +170,6 @@ class DynamicTrigger(Actor):
         self.last_token_date = current_time #save last token date only in the end. _set_timer uses it to configure next token interval and log warning message
         return (message, )
 
-    action_priority = (set_state, trigger, throughput_check)
-    requires = ['sys.timer.once', 'sys.timer.repeating']
+    action_priority = (set_state, trigger)
+    requires = ['sys.timer.once']
 
