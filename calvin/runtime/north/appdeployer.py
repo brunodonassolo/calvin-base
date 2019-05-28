@@ -2,6 +2,7 @@ import os
 import time
 import collections
 import copy
+import random
 from heapq import heappush, heapify, heappop
 from calvin.utilities.calvin_callback import CalvinCB
 from calvin.utilities import calvinconfig
@@ -163,7 +164,7 @@ class AppDeployer(object):
 
     ### DEPLOYMENT REQUIREMENTS ###
 
-    def execute_requirements(self, app, cb, move):
+    def execute_requirements(self, app, cb, move, migration):
         """ Build dynops iterator to collect all possible placements,
             then trigger migration.
 
@@ -180,6 +181,7 @@ class AppDeployer(object):
         _log.analyze(self._node.id, "+ APP REQ", {}, tb=True)
 
         app.move = move
+        app.migration = migration
         app.start_time = time.time()
         _log.info("Deployment: app: %s: start deploying: time %d" % (application_id, app.start_time))
         app.actor_placement = {}  # Clean placement slate
@@ -1724,9 +1726,19 @@ class AppDeployer(object):
 
     def grasp_optimization_v2(self, app, actor_ids, placement, update_resources=False, alpha=0.1):
         best = None
+        optimized_opts = []
         for plac in placement:
             plac_opt = self.grasp_optimization(app, actor_ids, plac, update_resources, alpha)
+            optimized_opts.append(plac_opt)
             if best == None or self.grasp_evaluate_solution(app, best, plac_opt, alpha):
                 best = plac_opt
 
-        return best
+        if not app.migration:
+            return best
+
+        #migration exploit
+        if (random.random() > _conf.get('global', 'deployment_epsilon_greedy')):
+            return best
+
+        #migration explore
+        return random.choice(optimized_opts)

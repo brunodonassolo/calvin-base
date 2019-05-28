@@ -104,6 +104,7 @@ class CalvinConfig(object):
                 "calvinsys_paths": ['calvin/runtime/south/calvinsys', 'calvinextras/calvinsys'],
                 'deployment_algorithm': 'money',
                 'deployment_tolerance': 1.3,
+                'deployment_epsilon_greedy': 0.3,
                 'grasp': "none",
                 'deployment_n_samples': 50
             },
