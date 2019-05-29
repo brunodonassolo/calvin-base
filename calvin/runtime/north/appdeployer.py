@@ -1738,7 +1738,10 @@ class AppDeployer(object):
 
         #migration exploit
         if (random.random() > _conf.get('global', 'deployment_epsilon_greedy')):
+            _log.info("Application: %s, migration exploit: %s" % (app.id, str(best)))
             return best
 
         #migration explore
-        return random.choice(optimized_opts)
+        best = random.choice(optimized_opts)
+        _log.info("Application: %s, migration explore: %s, options: %s" % (app.id, str(best), str(optimized_opts)))
+        return best
