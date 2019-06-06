@@ -342,6 +342,15 @@ class AppManager(object):
             if cb:
                 cb(status=response.CalvinResponse(response.NOT_FOUND))
             return
+        #FIXME: workaround to avoir running deployment algorithm in A8 nodes...
+        if value['origin_node_id'] == self._node.id and "endpoint" in self._node.node_name:
+            _log.warning("Application original node is an Endpoint node (%s), migration process will be slow..." % (value['origin_node_id']))
+
+        if value['origin_node_id'] != self._node.id and "endpoint" in self._node.node_name:
+            _log.info("Endpoint node, send migration request to original node id: %s" % (value['origin_node_id']))
+            self._node.proto.app_migrate_with_requirements(value['origin_node_id'], app_id, deploy_info, move, extend)
+            return
+
         deploy_req = { "requirements" : {} }
         if value['deploy_info'] is not None:
             deploy_req = value['deploy_info']

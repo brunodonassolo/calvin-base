@@ -200,7 +200,9 @@ class CalvinProto(CalvinCBClass):
             'AUTHENTICATION_DECISION': [CalvinCB(self.authentication_decision_handler)],
             'AUTHORIZATION_REGISTER': [CalvinCB(self.authorization_register_handler)],
             'AUTHORIZATION_DECISION': [CalvinCB(self.authorization_decision_handler)],
-            'AUTHORIZATION_SEARCH': [CalvinCB(self.authorization_search_handler)]})
+            'AUTHORIZATION_SEARCH': [CalvinCB(self.authorization_search_handler)],
+            'APP_MIGRATE_WITH_REQUIREMENTS': [CalvinCB(self.app_migrate_with_requrements_handler)]
+            })
 
         self.rt_id = node.id
         self.node = node
@@ -244,7 +246,8 @@ class CalvinProto(CalvinCBClass):
             'AUTHENTICATION_DECISION': response.INTERNAL_ERROR,
             'AUTHORIZATION_REGISTER': response.NOT_FOUND,
             'AUTHORIZATION_DECISION': response.NOT_FOUND,
-            'AUTHORIZATION_SEARCH': response.INTERNAL_ERROR
+            'AUTHORIZATION_SEARCH': response.INTERNAL_ERROR,
+            'APP_MIGRATE_WITH_REQUIREMENTS': response.NOT_FOUND
         }
         if payload['cmd'] not in resp:
             return False
@@ -355,6 +358,25 @@ class CalvinProto(CalvinCBClass):
                                          callback=None)
 
     #### APPS ####
+
+    def app_migrate_with_requirements(self, to_rt_uuid, app_id, deploy_info, move, extend):
+        """ Request "migration with requirements" on to_rt_uuid node
+            callback: called when finished with the peer's respons as argument
+            app_id: the application to migrate
+            deploy_info: new deployment info
+            move: move actors when possible
+            extend: extend requirements list
+        """
+        # Request link before continue in _app_destroy
+        msg = {'cmd': 'APP_MIGRATE_WITH_REQUIREMENTS', 'app_uuid': app_id, 'deploy_info': deploy_info, 'move': move, 'extend': extend}
+        self.node.network.link_request(to_rt_uuid, CalvinCB(send_message,
+            msg=msg,
+            callback=None))
+
+    def app_migrate_with_requrements_handler(self, payload):
+        reply = self.node.app_manager.migrate_with_requirements(payload['app_uuid'],
+                                                      payload['deploy_info'], payload['move'], payload['extend'],
+                                                      cb=None)
 
     def app_destroy(self, to_rt_uuid, callback, app_id, actor_ids, **kwargs):
         """ Destroys an application with remote actors on to_rt_uuid node
