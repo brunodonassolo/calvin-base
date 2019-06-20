@@ -48,6 +48,7 @@ from calvin.utilities.calvinlogger import get_logger, set_file
 from calvin.utilities import calvinconfig
 from calvin.runtime.north.resource_monitor.cpu import CpuMonitor
 from calvin.runtime.north.resource_monitor.memory import MemMonitor
+from calvin.runtime.north.resource_monitor.dockerIntf import DockerIntf
 from calvin.runtime.north.proxyhandler import ProxyHandler
 from calvin.runtime.north.resource_monitor.link import LinkMonitor
 
@@ -148,6 +149,7 @@ class Node(object):
         self.cpu_monitor = CpuMonitor(self.id, self.storage, cpuTotal)
         self.mem_monitor = MemMonitor(self.id, self.storage, memTotal)
         self.link_monitor = LinkMonitor(self.id, self.storage)
+        self.docker = DockerIntf()
 
         self.proxy_handler = ProxyHandler(self)
 

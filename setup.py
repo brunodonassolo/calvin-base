@@ -55,6 +55,7 @@ setup(name='er-calvin',
         'pystache==0.5.4',
         'jsonschema==2.6.0',
         'u-msgpack-python==2.4.1',
+        'docker==2.5.1',
         'cbor==1.0.0'
       ],
       description="Calvin is a distributed runtime and development framework for an actor based dataflow"

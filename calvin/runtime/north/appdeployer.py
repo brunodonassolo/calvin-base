@@ -1739,9 +1739,39 @@ class AppDeployer(object):
         #migration exploit
         if (random.random() > _conf.get('global', 'deployment_epsilon_greedy')):
             _log.info("Application: %s, migration exploit: %s" % (app.id, str(best)))
-            return best
+        else:
+            #migration explore
+            best = random.choice(optimized_opts)
+            _log.info("Application: %s, migration explore: %s, options: %s" % (app.id, str(best), str(optimized_opts)))
 
-        #migration explore
-        best = random.choice(optimized_opts)
-        _log.info("Application: %s, migration explore: %s, options: %s" % (app.id, str(best), str(optimized_opts)))
+        # request update resource for each node
+        for node_id in set(best.values()):
+            if node_id == self._node.id:
+                cpu = self._node.docker.get_cpu_usage()
+                ram = self._node.docker.get_ram_usage()
+                if (cpu != -1):
+                    self._node.cpu_monitor.set_avail(100 - cpu)
+                if (ram != -1):
+                    self._node.mem_monitor.set_avail(100 - ram)
+            else:
+                self._node.proto.runtime_update_resources(node_id, CalvinCB(self.grasp_v2_update_resources_cb, app = app, solution = best))
+
         return best
+
+    def grasp_v2_update_resources_cb(self, status, app, solution):
+        if (status.data["cpu"] == -1 or status.data["ram"] == -1):
+            return
+
+        max_tolerance = _conf.get("global", "deployment_tolerance")
+        node_id = status.data["node_id"]
+        cpu = app.runtime_cpu_total[node_id]*(100-status.data["cpu"])/100
+        ram = app.runtime_ram_total[node_id]*(100-status.data["ram"])/100
+        _log.info("Resources after deployment: node: %s, CPU before: %d, CPU after %d, RAM before: %d RAM after: %d" % (node_id, app.runtime_cpu[node_id], cpu, app.runtime_ram[node_id], ram))
+
+        for actor_id, node_id in solution.iteritems():
+            if node_id == status.data["node_id"]:
+                if (app.cost_runtime_cpu[actor_id] > max_tolerance*cpu):
+                    _log.warning("Insufficient CPU for actor: %s, node: %s, after resource update: requested: %d, available: %d" % (actor_id, node_id, app.cost_runtime_cpu[actor_id], cpu))
+                if (app.cost_runtime_ram[actor_id] > max_tolerance*ram):
+                    _log.warning("Insufficient RAM for actor: %s, node: %s, after resource update: requested: %d, available: %d" % (actor_id, node_id, app.cost_runtime_ram[actor_id], ram))
+
