@@ -8,7 +8,6 @@ class DockerIntf():
     def __init__(self):
         cmd = "cat /proc/self/cgroup | grep 'docker' | sed 's/^.*\///' | tail -n1"
         self.container_id = output = subprocess.check_output(cmd, shell=True).strip('\n')
-        print self.container_id
         if not self.container_id:
             _log.warning("DockerIntf impossible to get container ID")
         self.client = docker.APIClient(base_url='unix://var/run/docker.sock')
