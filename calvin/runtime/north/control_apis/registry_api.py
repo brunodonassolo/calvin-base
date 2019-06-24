@@ -326,3 +326,21 @@ def handle_resource_latency(self, handle, connection, match, data, hdr):
     Response: none
     """
     self.node.link_monitor.set_latency(match.group(1), match.group(2), data['value'], CalvinCB(self.index_cb, handle, connection))
+
+@handler(method="GET", path="/node/resource")
+@authentication_decorator
+def handle_get_node_resource(self, handle, connection, match, data, hdr):
+    """
+    GET /node/resource
+    Gets node available CPU and RAM
+    Response status code: OK
+    Response: none
+    """
+    cpu = self.node.docker.get_cpu_usage()
+    ram = self.node.docker.get_ram_usage()
+    reponse = {'cpu': cpu, 'ram': ram}
+    self.send_response(handle, connection, json.dumps(reponse), calvinresponse.OK)
+    if (cpu != -1):
+        self.node.cpu_monitor.set_avail(100 - cpu)
+    if (ram != -1):
+        self.node.mem_monitor.set_avail(100 - ram)

@@ -201,8 +201,7 @@ class CalvinProto(CalvinCBClass):
             'AUTHORIZATION_REGISTER': [CalvinCB(self.authorization_register_handler)],
             'AUTHORIZATION_DECISION': [CalvinCB(self.authorization_decision_handler)],
             'AUTHORIZATION_SEARCH': [CalvinCB(self.authorization_search_handler)],
-            'APP_MIGRATE_WITH_REQUIREMENTS': [CalvinCB(self.app_migrate_with_requrements_handler)],
-            'RUNTIME_UPDATE_AVAIL_RESOURCES': [CalvinCB(self.runtime_update_resources_handler)]
+            'APP_MIGRATE_WITH_REQUIREMENTS': [CalvinCB(self.app_migrate_with_requrements_handler)]
             })
 
         self.rt_id = node.id
@@ -913,30 +912,6 @@ class CalvinProto(CalvinCBClass):
         # Send reply
         msg = {'cmd': 'REPLY', 'msg_uuid': payload['msg_uuid'], 'value': reply.encode()}
         self.network.link_request(payload['from_rt_uuid'], callback=CalvinCB(send_message, msg=msg))
-
-    #### RUNTIME ####
-
-    def runtime_update_resources(self, to_rt_uuid, callback):
-        """ Request "updated resource information" to to_rt_uuid node
-            callback: called when finished with the peer's response as argument
-        """
-        # Request link before continue in _app_destroy
-        msg = {'cmd': 'RUNTIME_UPDATE_AVAIL_RESOURCES'}
-        self.node.network.link_request(to_rt_uuid, CalvinCB(send_message,
-            msg=msg,
-            callback=callback))
-
-    def runtime_update_resources_handler(self, payload):
-        cpu = self.node.docker.get_cpu_usage()
-        ram = self.node.docker.get_ram_usage()
-        data_response = { "node_id": self.node.id, "cpu": cpu, "ram": ram }
-        reply = response.CalvinResponse(response.OK, data_response)
-        msg = {'cmd': 'REPLY', 'msg_uuid': payload['msg_uuid'], 'value': reply.encode()}
-        self.node.network.link_request(payload['from_rt_uuid'], callback=CalvinCB(send_message, msg=msg))
-        if (cpu != -1):
-            self.node.cpu_monitor.set_avail(100 - cpu)
-        if (ram != -1):
-            self.node.mem_monitor.set_avail(100 - ram)
 
 if __name__ == '__main__':
     import pytest
