@@ -338,7 +338,7 @@ def handle_get_node_resource(self, handle, connection, match, data, hdr):
     """
     cpu = self.node.docker.get_cpu_usage()
     ram = self.node.docker.get_ram_usage()
-    reponse = {'cpu': cpu, 'ram': ram}
+    reponse = {'node_id': self.node.id, 'cpu': cpu, 'ram': ram}
     self.send_response(handle, connection, json.dumps(reponse), calvinresponse.OK)
     if (cpu != -1):
         self.node.cpu_monitor.set_avail(100 - cpu)

@@ -4,6 +4,7 @@ import collections
 import copy
 import random
 from heapq import heappush, heapify, heappop
+from calvin.runtime.south.async import async
 from calvin.utilities.calvin_callback import CalvinCB
 from calvin.utilities import calvinconfig
 from calvin.utilities import dynops
@@ -15,6 +16,9 @@ _log = calvinlogger.get_logger(__name__)
 _conf = calvinconfig.get()
 
 COST_LINK=0.01
+
+from requests_futures.sessions import FuturesSession
+session = FuturesSession(max_workers=10)
 
 class Application(object):
 
@@ -208,6 +212,7 @@ class AppDeployer(object):
         app.phys_link_bandwidth = {}# available bandwidth in physical link
         app.monetary_cost_ram = {}
         app.control_uri = {}
+        app.futures = []
         app.monetary_cost_cpu = {}
         app.runtimes_nbr = set()
         app.dynamic_capabilities = collections.Counter()
@@ -1758,31 +1763,42 @@ class AppDeployer(object):
                     self._node.mem_monitor.set_avail(100 - ram)
             else:
                 try:
-                    import requests
                     #workaround for local tests
-                    #session = requests.Session()
                     #session.trust_env = False
-                    #r = session.get(app.control_uri[node_id] + '/node/resource', timeout = 10)
-                    r = requests.get(app.control_uri[node_id] + '/node/resource', timeout = 10)
+                    app.futures.append(session.get(app.control_uri[node_id] + '/node/resource'))
                 except:
                     _log.warning("Error getting resource utilization: %s" % (app.control_uri[node_id]))
                     continue
-                data = r.json()
-                if (data['cpu'] == -1 or data['ram'] == -1):
-                    continue
 
-                max_tolerance = _conf.get("global", "deployment_tolerance")
-                cpu = app.runtime_cpu_total[node_id]*(100-data["cpu"])/100
-                ram = app.runtime_ram_total[node_id]*(100-data["ram"])/100
-                _log.info("Resources after deployment: node: %s, CPU before: %d, CPU after %d, RAM before: %d RAM after: %d" % (node_id, app.runtime_cpu[node_id], cpu, app.runtime_ram[node_id], ram))
-
-                for actor_id, node_id_sol in best.iteritems():
-                    if node_id_sol != node_id:
-                        continue
-                    if (app.cost_runtime_cpu[actor_id] > max_tolerance*cpu):
-                        _log.warning("Insufficient CPU for actor: %s, node: %s, after resource update: requested: %d, available: %d" % (actor_id, node_id, app.cost_runtime_cpu[actor_id], cpu))
-                    if (app.cost_runtime_ram[actor_id] > max_tolerance*ram):
-                        _log.warning("Insufficient RAM for actor: %s, node: %s, after resource update: requested: %d, available: %d" % (actor_id, node_id, app.cost_runtime_ram[actor_id], ram))
-
+        async.DelayedCall(1, self.grasp_v2_update_resources_check, app, best)
         return best
+
+
+    def grasp_v2_update_resources_check(self, app, best):
+
+        for future in app.futures:
+            if not future.done():
+                continue
+            data = future.result().json()
+            if (data['cpu'] == -1 or data['ram'] == -1):
+                continue
+
+            node_id = data["node_id"]
+            max_tolerance = _conf.get("global", "deployment_tolerance")
+            cpu = app.runtime_cpu_total[node_id]*(100-data["cpu"])/100
+            ram = app.runtime_ram_total[node_id]*(100-data["ram"])/100
+            _log.info("Resources after deployment: node: %s, CPU before: %d, CPU after %d, RAM before: %d RAM after: %d" % (node_id, app.runtime_cpu[node_id], cpu, app.runtime_ram[node_id], ram))
+
+            for actor_id, node_id_sol in best.iteritems():
+                if node_id_sol != node_id:
+                    continue
+                if (app.cost_runtime_cpu[actor_id] > max_tolerance*cpu):
+                    _log.warning("Insufficient CPU for actor: %s, node: %s, after resource update: requested: %d, available: %d" % (actor_id, node_id, app.cost_runtime_cpu[actor_id], cpu))
+                if (app.cost_runtime_ram[actor_id] > max_tolerance*ram):
+                    _log.warning("Insufficient RAM for actor: %s, node: %s, after resource update: requested: %d, available: %d" % (actor_id, node_id, app.cost_runtime_ram[actor_id], ram))
+
+        app.futures = [x for x in app.futures if not future.done()]
+
+        if len(app.futures) > 0:
+            async.DelayedCall(1, self.grasp_v2_update_resources_check, app, best)
 
