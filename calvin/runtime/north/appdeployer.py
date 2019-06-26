@@ -1780,7 +1780,12 @@ class AppDeployer(object):
         for node_id,future in app.futures.iteritems():
             if not future.done():
                 continue
-            data = future.result().json()
+            data = None
+            try:
+                data = future.result().json()
+            except:
+                continue
+
             if (data['cpu'] == -1 or data['ram'] == -1):
                 continue
 
