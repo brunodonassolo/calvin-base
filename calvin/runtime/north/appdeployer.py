@@ -212,7 +212,7 @@ class AppDeployer(object):
         app.phys_link_bandwidth = {}# available bandwidth in physical link
         app.monetary_cost_ram = {}
         app.control_uri = {}
-        app.futures = []
+        app.futures = {}
         app.monetary_cost_cpu = {}
         app.runtimes_nbr = set()
         app.dynamic_capabilities = collections.Counter()
@@ -1765,7 +1765,9 @@ class AppDeployer(object):
                 try:
                     #workaround for local tests
                     #session.trust_env = False
-                    app.futures.append(session.get(app.control_uri[node_id] + '/node/resource'))
+                    import re
+                    ip_addr = re.match("(http://[a-zA-Z0-9\.]*):[0-9]*", app.control_uri[node_id]).group(1)
+                    app.futures[node_id] = session.get(ip_addr + ':6000/node/resource')
                 except:
                     _log.warning("Error getting resource utilization: %s" % (app.control_uri[node_id]))
                     continue
@@ -1775,15 +1777,13 @@ class AppDeployer(object):
 
 
     def grasp_v2_update_resources_check(self, app, best):
-
-        for future in app.futures:
+        for node_id,future in app.futures.iteritems():
             if not future.done():
                 continue
             data = future.result().json()
             if (data['cpu'] == -1 or data['ram'] == -1):
                 continue
 
-            node_id = data["node_id"]
             max_tolerance = _conf.get("global", "deployment_tolerance")
             cpu = app.runtime_cpu_total[node_id]*(100-data["cpu"])/100
             ram = app.runtime_ram_total[node_id]*(100-data["ram"])/100
@@ -1797,7 +1797,7 @@ class AppDeployer(object):
                 if (app.cost_runtime_ram[actor_id] > max_tolerance*ram):
                     _log.warning("Insufficient RAM for actor: %s, node: %s, after resource update: requested: %d, available: %d" % (actor_id, node_id, app.cost_runtime_ram[actor_id], ram))
 
-        app.futures = [x for x in app.futures if not future.done()]
+        app.futures = {x:y for x,y in app.futures.iteritems() if not future.done()}
 
         if len(app.futures) > 0:
             async.DelayedCall(1, self.grasp_v2_update_resources_check, app, best)
