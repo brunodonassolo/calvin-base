@@ -33,6 +33,7 @@ from calvin.utilities import calvinconfig
 from calvin.runtime.north.appdeployer import AppDeployer,Application
 
 _log = calvinlogger.get_logger(__name__)
+_conf = calvinconfig.get()
 
 class AppManager(object):
 
@@ -346,8 +347,13 @@ class AppManager(object):
         if value['origin_node_id'] == self._node.id and "endpoint" in self._node.node_name:
             _log.warning("Application original node is an Endpoint node (%s), migration process will be slow..." % (value['origin_node_id']))
 
-        if value['origin_node_id'] != self._node.id and "endpoint" in self._node.node_name:
-            _log.info("Endpoint node, send migration request to original node id: %s" % (value['origin_node_id']))
+        algo = _conf.get("global", "reconfig_algorithm") or "app_v0"
+        if value['origin_node_id'] != self._node.id and ("endpoint" in self._node.node_name or algo == "app_v1"):
+            if "endpoint" in self._node.node_name:
+                _log.info("Endpoint node, send migration request to original node id: %s" % (value['origin_node_id']))
+            if algo == "app_v1":
+                _log.info("Algo: %s, send migration request to original node id: %s" % (algo, value['origin_node_id']))
+
             self._node.proto.app_migrate_with_requirements(value['origin_node_id'], app_id, deploy_info, move, extend)
             return
 

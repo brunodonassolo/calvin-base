@@ -162,7 +162,7 @@ class BaseScheduler(object):
         migration = False
         if len(self.actor_mgr.migratable_actors()):
             actor = random.choice(self.actor_mgr.migratable_actors())
-            if algo == "app_v0":
+            if algo == "app_v0" or algo == "app_v1":
                 self.node.app_manager.migrate_with_requirements(actor._app_id, None, move=True, extend=True, cb=None)
             elif algo == "actor_v0":
                 self.actor_mgr.update_requirements(actor.id, [], True, True)
