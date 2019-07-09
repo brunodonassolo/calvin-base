@@ -29,7 +29,7 @@ class DynamicTrigger(Actor):
     """
 
     @manage()
-    def init(self, filename, verbose=True):
+    def init(self, filename, verbose=True, tick_check = 0, rate_multiplier_check = 2):
         self.filename = filename
         self.data = ""
         self.timer = None
@@ -38,8 +38,9 @@ class DynamicTrigger(Actor):
         self.state_info = {}
         self.timestamps = []
         self.seq_number = 0
-        self.throughput_tick = 30
+        self.throughput_tick = tick_check
         self.throughput_ntokens = 0
+        self.throughput_multiplier = rate_multiplier_check
         self.initial_setup_date = None
         self.last_token_date = None
         self.last_state_date = None
@@ -116,7 +117,8 @@ class DynamicTrigger(Actor):
 
     def setup(self):
         self.throughput_timer = calvinsys.open(self, "sys.timer.repeating")
-        calvinsys.write(self.throughput_timer, self.throughput_tick)
+        if self.throughput_tick != 0:
+            calvinsys.write(self.throughput_timer, self.throughput_tick)
         # File format:
         # N - number of states
         # state_name1 interval1 message1 (N times)
@@ -164,11 +166,12 @@ class DynamicTrigger(Actor):
         mean = float(self.throughput_tick)/float(self.throughput_ntokens)
         _log.info("%s<%s>: Actor throughput rate mean: %f" % (self.__class__.__name__, self.id, mean))
 
-        if (mean > 2*self.current_token_interval):
+        rate_limit = self.throughput_multiplier*self.current_token_interval
+        if (mean > rate_limit):
             self.better_migrate = Actor.RECONF_STATUS.REQUESTED
-            _log.warning("%s<%s>: Actor must be migrated, rate mean: %f, limit: %f" % (self.__class__.__name__, self.id, mean, 2*self.current_token_interval))
+            _log.warning("%s<%s>: Actor must be migrated, rate mean: %f, limit: %f" % (self.__class__.__name__, self.id, mean, rate_limit))
         elif self.better_migrate == Actor.RECONF_STATUS.REQUESTED:
-            _log.info("%s<%s>: Actor doesn't need to be migrated anymore, rate mean: %f, limit: %f" % (self.__class__.__name__, self.id, mean, 2*self.current_token_interval))
+            _log.info("%s<%s>: Actor doesn't need to be migrated anymore, rate mean: %f, limit: %f" % (self.__class__.__name__, self.id, mean, rate_limit))
             self.better_migrate = Actor.RECONF_STATUS.NONE
 
         # reset
