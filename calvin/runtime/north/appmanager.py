@@ -30,7 +30,7 @@ from calvin.utilities.security import Security
 from calvin.utilities.requirement_matching import ReqMatch
 from heapq import heappush, heapify, heappop
 from calvin.utilities import calvinconfig
-from calvin.runtime.north.appdeployer import AppDeployer,Application
+from calvin.runtime.north.appdeployer import AppDeployer,Application,ReconfigAlgos
 
 _log = calvinlogger.get_logger(__name__)
 _conf = calvinconfig.get()
@@ -46,6 +46,7 @@ class AppManager(object):
         self.app_deployer = AppDeployer(node, node.storage)
         self.actor_by_runtime = {}
         self.phys_link_placement_runtimes = {}  # This information is quite stable, save it here to avoid collecting it each app deployment. Clean placement slate, saves the runtimes that the physical link connects
+        self.reconfig = ReconfigAlgos()
 
     def new(self, name, deploy_info=None):
         application_id = calvinuuid.uuid("APP")
@@ -347,12 +348,11 @@ class AppManager(object):
         if value['origin_node_id'] == self._node.id and "endpoint" in self._node.node_name:
             _log.warning("Application original node is an Endpoint node (%s), migration process will be slow..." % (value['origin_node_id']))
 
-        algo = _conf.get("global", "reconfig_algorithm") or "app_v0"
-        if value['origin_node_id'] != self._node.id and ("endpoint" in self._node.node_name or algo == "app_v1"):
+        if value['origin_node_id'] != self._node.id and ("endpoint" in self._node.node_name or self.reconfig.is_fake_centralized()):
             if "endpoint" in self._node.node_name:
                 _log.info("Endpoint node, send migration request to original node id: %s" % (value['origin_node_id']))
-            if algo == "app_v1":
-                _log.info("Algo: %s, send migration request to original node id: %s" % (algo, value['origin_node_id']))
+            if self.reconfig.is_fake_centralized():
+                _log.info("Algo: fake centralized, send migration request to original node id: %s" % (value['origin_node_id']))
 
             self._node.proto.app_migrate_with_requirements(value['origin_node_id'], app_id, deploy_info, move, extend)
             return

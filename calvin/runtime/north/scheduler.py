@@ -25,6 +25,7 @@ from calvin.utilities.calvin_callback import CalvinCB
 from calvin.utilities.calvinlogger import get_logger
 from calvin.utilities import calvinconfig
 from calvin.actor.actor import Actor
+from calvin.runtime.north.appdeployer import ReconfigAlgos
 
 _log = get_logger(__name__)
 _conf = calvinconfig.get()
@@ -46,6 +47,7 @@ class BaseScheduler(object):
         self.done = False
         self._tasks = []
         self._scheduled = None
+        self.reconfig = ReconfigAlgos()
         # FIXME: later
         self._replication_interval = 2
         self._maintenance_delay = _conf.get(None, "maintenance_delay") or 300
@@ -157,21 +159,26 @@ class BaseScheduler(object):
     #
     def _maintenance_loop(self):
         # Migrate denied actors
-        algo = _conf.get("global", "reconfig_algorithm") or "app_v0"
+        algo = _conf.get("global", "reconfig_algorithm")
         _log.info("Maintenance loop, reconfiguration algorithm: %s" % algo)
         migration = False
-        if len(self.actor_mgr.migratable_actors()):
-            actor = random.choice(self.actor_mgr.migratable_actors())
-            if algo == "app_v0" or algo == "app_v1":
-                self.node.app_manager.migrate_with_requirements(actor._app_id, None, move=True, extend=True, cb=None)
-            elif algo == "actor_v0":
-                self.actor_mgr.update_requirements(actor.id, [], True, True)
-            elif algo == "NA":
-                pass
-            else:
-                self.node.app_manager.migrate_with_requirements(actor._app_id, None, move=True, extend=True, cb=None)
-            migration = True
-            actor.better_migrate = Actor.RECONF_STATUS.DONE
+        number = self.reconfig.get_random()
+        if number == 0:
+            number = len(self.actor_mgr.migratable_actors())
+        else:
+            number = min(number, len(self.actor_mgr.migratable_actors()))
+
+        if number > 0:
+            actors = random.sample(self.actor_mgr.migratable_actors(), k=number)
+            for actor in actors:
+                if algo == "actor_v0":
+                    self.actor_mgr.update_requirements(actor.id, [], True, True)
+                elif algo == "NA":
+                    pass
+                else:
+                    self.node.app_manager.migrate_with_requirements(actor._app_id, None, move=True, extend=True, cb=None)
+                migration = True
+                actor.better_migrate = Actor.RECONF_STATUS.DONE
 
             #self.actor_mgr.migrate(actor.id, actor.migration_info["node_id"],
             #                       callback=CalvinCB(actor.remove_migration_info))

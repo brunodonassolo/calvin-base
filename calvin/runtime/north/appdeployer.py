@@ -157,12 +157,54 @@ class ActorPlacement():
     def __eq__(self, other):
         return self.runtime == other.runtime
 
+class ReconfigAlgos():
+    def __init__(self):
+        self.algo = _conf.get("global", "reconfig_algorithm")
+        self.algos = {
+                "app_v0": {"greedy": True, "lazyUpdate": True, "random": 1, "fake_centralized": False},    # lazy
+                "app_v1": {"greedy": True, "lazyUpdate": True, "random": 1, "fake_centralized": True},     # fake centralized
+                "app_cooldown": {"greedy": False, "lazyUpdate": False, "random": 1, "fake_centralized": False}, # cooldown
+                "app_greedy": {"greedy": True, "lazyUpdate": False, "random": 1, "fake_centralized": False} # greedy
+                }
+
+    def is_fake_centralized(self):
+        centralized = False
+        try:
+            centralized = self.algos[self.algo]["fake_centralized"]
+        except KeyError:
+            pass
+        return centralized
+
+    def is_greedy(self):
+        greedy = False
+        try:
+            greedy = self.algos[self.algo]["greedy"]
+        except KeyError:
+            pass
+        return greedy
+
+    def is_lazy(self):
+        lazy = False
+        try:
+            lazy = self.algos[self.algo]["lazyUpdate"]
+        except KeyError:
+            pass
+        return lazy
+
+    def get_random(self):
+        number = 1
+        try:
+            number = self.algos[self.algo]["random"]
+        except KeyError:
+            pass
+        return number
 
 class AppDeployer(object):
 
     def __init__(self, node, storage):
         self._node = node
         self.storage = storage
+        self.reconfig = ReconfigAlgos()
         self.actor_by_runtime = {}
         self.phys_link_placement_runtimes = {}  # This information is quite stable, save it here to avoid collecting it each app deployment. Clean placement slate, saves the runtimes that the physical link connects
 
@@ -1744,35 +1786,37 @@ class AppDeployer(object):
         if not app.migration:
             return best
 
-        #migration exploit
-        if (random.random() > _conf.get('global', 'deployment_epsilon_greedy')):
-            _log.info("Application: %s, migration exploit: %s" % (app.id, str(best)))
-        else:
-            #migration explore
-            best = random.choice(optimized_opts)
-            _log.info("Application: %s, migration explore: %s, options: %s" % (app.id, str(best), str(optimized_opts)))
+        if self.reconfig.is_greedy():
+            #migration exploit
+            if (random.random() > _conf.get('global', 'deployment_epsilon_greedy')):
+                _log.info("Application: %s, migration exploit: %s" % (app.id, str(best)))
+            else:
+                #migration explore
+                best = random.choice(optimized_opts)
+                _log.info("Application: %s, migration explore: %s, options: %s" % (app.id, str(best), str(optimized_opts)))
 
         # request update resource for each node
-        for node_id in set(best.values()):
-            if node_id == self._node.id:
-                cpu = self._node.docker.get_cpu_usage()
-                ram = self._node.docker.get_ram_usage()
-                if (cpu != -1):
-                    self._node.cpu_monitor.set_avail(100 - cpu)
-                if (ram != -1):
-                    self._node.mem_monitor.set_avail(100 - ram)
-            else:
-                try:
-                    #workaround for local tests
-                    #session.trust_env = False
-                    import re
-                    ip_addr = re.match("(http://[a-zA-Z0-9\.]*):[0-9]*", app.control_uri[node_id]).group(1)
-                    app.futures[node_id] = session.get(ip_addr + ':6000/node/resource')
-                except:
-                    _log.warning("Error getting resource utilization: %s" % (app.control_uri[node_id]))
-                    continue
+        if self.reconfig.is_lazy():
+            for node_id in set(best.values()):
+                if node_id == self._node.id:
+                    cpu = self._node.docker.get_cpu_usage()
+                    ram = self._node.docker.get_ram_usage()
+                    if (cpu != -1):
+                        self._node.cpu_monitor.set_avail(100 - cpu)
+                    if (ram != -1):
+                        self._node.mem_monitor.set_avail(100 - ram)
+                else:
+                    try:
+                        #workaround for local tests
+                        #session.trust_env = False
+                        import re
+                        ip_addr = re.match("(http://[a-zA-Z0-9\.]*):[0-9]*", app.control_uri[node_id]).group(1)
+                        app.futures[node_id] = session.get(ip_addr + ':6000/node/resource')
+                    except:
+                        _log.warning("Error getting resource utilization: %s" % (app.control_uri[node_id]))
+                        continue
+            async.DelayedCall(1, self.grasp_v2_update_resources_check, app, best)
 
-        async.DelayedCall(1, self.grasp_v2_update_resources_check, app, best)
         return best
 
 

@@ -103,6 +103,7 @@ class CalvinConfig(object):
                 'compiled_actors_path': None,
                 "calvinsys_paths": ['calvin/runtime/south/calvinsys', 'calvinextras/calvinsys'],
                 'deployment_algorithm': 'money',
+                'reconfig_algorithm': 'app_v0',
                 'deployment_tolerance': 1.3,
                 'deployment_epsilon_greedy': 0.3,
                 'grasp': "none",
