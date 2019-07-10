@@ -161,16 +161,55 @@ class ReconfigAlgos():
     def __init__(self):
         self.algo = _conf.get("global", "reconfig_algorithm")
         self.algos = {
-                "app_v0": {"greedy": True, "lazyUpdate": True, "random": 1, "fake_centralized": False},    # lazy
-                "app_v1": {"greedy": True, "lazyUpdate": True, "random": 1, "fake_centralized": True},     # fake centralized
-                "app_cooldown": {"greedy": False, "lazyUpdate": False, "random": 1, "fake_centralized": False}, # cooldown
-                "app_greedy": {"greedy": True, "lazyUpdate": False, "random": 1, "fake_centralized": False} # greedy
+                "app_cooldown": {
+                    "greedy": False,
+                    "lazyUpdate": False,
+                    "random": 1,
+                    "fake_centralized": False,
+                    "centralized": False
+                    }, # cooldown
+                "app_greedy": {
+                    "greedy": True,
+                    "lazyUpdate": False,
+                    "random": 1,
+                    "fake_centralized": False,
+                    "centralized": False
+                    }, # greedy
+                "app_v0": {
+                    "greedy": True,
+                    "lazyUpdate": True,
+                    "random": 1,
+                    "fake_centralized": False,
+                    "centralized": False
+                    },    # lazy
+                "app_v1": {
+                    "greedy": True,
+                    "lazyUpdate": True,
+                    "random": 1,
+                    "fake_centralized": True,
+                    "centralized": False
+                    },     # fake centralized
+                "app_central": {
+                    "greedy": True,
+                    "lazyUpdate": True,
+                    "random": 1,
+                    "fake_centralized": False,
+                    "centralized": True
+                    } # real centralized
                 }
 
     def is_fake_centralized(self):
         centralized = False
         try:
             centralized = self.algos[self.algo]["fake_centralized"]
+        except KeyError:
+            pass
+        return centralized
+
+    def is_centralized(self):
+        centralized = False
+        try:
+            centralized = self.algos[self.algo]["centralized"]
         except KeyError:
             pass
         return centralized

@@ -53,6 +53,7 @@ class BaseScheduler(object):
         self._maintenance_delay = _conf.get(None, "maintenance_delay") or 300
         self._migration_cooldown = _conf.get(None, "migration_cooldown") or 300
         self._pressure_event_actor_ids = set([])
+        self.migratable_apps = set()
 
     # System entry point
     def run(self):
@@ -162,26 +163,38 @@ class BaseScheduler(object):
         algo = _conf.get("global", "reconfig_algorithm")
         _log.info("Maintenance loop, reconfiguration algorithm: %s" % algo)
         migration = False
-        number = self.reconfig.get_random()
-        if number == 0:
-            number = len(self.actor_mgr.migratable_actors())
-        else:
-            number = min(number, len(self.actor_mgr.migratable_actors()))
 
-        if number > 0:
-            actors = random.sample(self.actor_mgr.migratable_actors(), k=number)
-            for actor in actors:
-                if algo == "actor_v0":
-                    self.actor_mgr.update_requirements(actor.id, [], True, True)
-                elif algo == "NA":
-                    pass
+        if algo == "actor_v0":
+            actor = random.choice(self.actor_mgr.migratable_actors())
+            self.actor_mgr.update_requirements(actor.id, [], True, True)
+            migration = True
+        elif algo == "NA":
+            pass
+        else: # by app
+            for actor in self.actor_mgr.migratable_actors():
+                if actor._app_id in self.node.app_manager.list_applications():
+                    self.migratable_apps.add(actor._app_id)
+                elif self.reconfig.is_centralized():
+                    _log.info("Maintenance centralized, sending app: %s" % actor._app_id)
+                    self.node.app_manager.app_ask_migration(actor._app_id)
                 else:
-                    self.node.app_manager.migrate_with_requirements(actor._app_id, None, move=True, extend=True, cb=None)
-                migration = True
-                actor.better_migrate = Actor.RECONF_STATUS.DONE
+                    self.migratable_apps.add(actor._app_id)
 
-            #self.actor_mgr.migrate(actor.id, actor.migration_info["node_id"],
-            #                       callback=CalvinCB(actor.remove_migration_info))
+            _log.info("Maintenance loop: Migratable apps: %s" % str(self.migratable_apps))
+            number = self.reconfig.get_random()
+            if number == 0:
+                number = len(self.migratable_apps)
+            else:
+                number = min(number, len(self.migratable_apps))
+
+            if number > 0:
+                apps = random.sample(self.migratable_apps, k=number)
+                for app in apps:
+                    self.node.app_manager.migrate_with_requirements(app, None, move=True, extend=True, cb=None)
+                migration = True
+            self.migratable_apps.clear()
+
+
         # Enable denied actors again if access is permitted. Will try to migrate if access still denied.
         for actor in self.actor_mgr.denied_actors():
             actor.enable_or_migrate()
@@ -204,6 +217,8 @@ class BaseScheduler(object):
     ######################################################################
     # Quite-private stuff, fairly generic
     ######################################################################
+    def app_add_migratable_app(self, app_id):
+        self.migratable_apps.add(app_id)
 
     def insert_task(self, what, delay):
         """Call to insert a task"""

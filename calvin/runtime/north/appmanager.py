@@ -331,6 +331,20 @@ class AppManager(object):
 
     # Remigration
 
+    def app_ask_migration(self, app_id):
+        """ Ask migration for origin node
+        """
+        self.storage.get_application(app_id, cb=CalvinCB(self._app_ask_migration_got_app,
+            app_id=app_id))
+
+    def _app_ask_migration_got_app(self, key, value, app_id):
+        if response.isfailresponse(value):
+            if cb:
+                cb(status=response.CalvinResponse(response.NOT_FOUND))
+            return
+
+        self._node.proto.app_ask_migration(value['origin_node_id'], app_id)
+
     def migrate_with_requirements(self, app_id, deploy_info, move=False, extend=False, cb=None):
         """ Migrate actors of app app_id based on newly supplied deploy_info.
             Optional argument move controls if actors prefers to stay when possible.

@@ -46,6 +46,7 @@ class Sink(Actor):
 
     def did_migrate(self):
         self.setup()
+        self.better_migrate = Actor.RECONF_STATUS.DONE
         _log.info("%s<%s>: Actor migration finished" % (self.__class__.__name__, self.id))
 
     def setup(self):
