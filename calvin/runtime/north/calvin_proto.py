@@ -392,7 +392,7 @@ class CalvinProto(CalvinCBClass):
             callback=None))
 
     def app_ask_migration_handler(self, payload):
-        reply = self.node.sched.app_add_migratable_app(payload['app_uuid'])
+        reply = self.node.sched.app_add_migratable_app(payload['app_uuid'], payload['from_rt_uuid'])
 
     def app_destroy(self, to_rt_uuid, callback, app_id, actor_ids, **kwargs):
         """ Destroys an application with remote actors on to_rt_uuid node

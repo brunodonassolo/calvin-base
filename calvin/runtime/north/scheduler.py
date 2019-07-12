@@ -53,7 +53,8 @@ class BaseScheduler(object):
         self._maintenance_delay = _conf.get(None, "maintenance_delay") or 300
         self._migration_cooldown = _conf.get(None, "migration_cooldown") or 300
         self._pressure_event_actor_ids = set([])
-        self.migratable_apps = set()
+        self._migratable_apps = {}
+        self._runtimes_in_cooldown = {}
 
     # System entry point
     def run(self):
@@ -162,37 +163,40 @@ class BaseScheduler(object):
         # Migrate denied actors
         algo = _conf.get("global", "reconfig_algorithm")
         _log.info("Maintenance loop, reconfiguration algorithm: %s" % algo)
-        migration = False
+
+        for runtime, timestamp in self._runtimes_in_cooldown.items():
+            if time.time() - timestamp >= self._migration_cooldown:
+                del self._runtimes_in_cooldown[runtime]
 
         if algo == "actor_v0":
             actor = random.choice(self.actor_mgr.migratable_actors())
             self.actor_mgr.update_requirements(actor.id, [], True, True)
-            migration = True
+            self._runtimes_in_cooldown[self.node.id] = time.time()
         elif algo == "NA":
             pass
         else: # by app
             for actor in self.actor_mgr.migratable_actors():
                 if actor._app_id in self.node.app_manager.list_applications():
-                    self.migratable_apps.add(actor._app_id)
+                    self.app_add_migratable_app(actor._app_id, self.node.id)
                 elif self.reconfig.is_centralized():
                     _log.info("Maintenance centralized, sending app: %s" % actor._app_id)
                     self.node.app_manager.app_ask_migration(actor._app_id)
                 else:
-                    self.migratable_apps.add(actor._app_id)
+                    self.app_add_migratable_app(actor._app_id, self.node.id)
 
-            _log.info("Maintenance loop: Migratable apps: %s" % str(self.migratable_apps))
+            _log.info("Maintenance loop: Migratable apps: %s" % str(self._migratable_apps.keys()))
             number = self.reconfig.get_random()
             if number == 0:
-                number = len(self.migratable_apps)
+                number = len(self._migratable_apps.keys())
             else:
-                number = min(number, len(self.migratable_apps))
+                number = min(number, len(self._migratable_apps.keys()))
 
             if number > 0:
-                apps = random.sample(self.migratable_apps, k=number)
+                apps = random.sample(self._migratable_apps.keys(), k=number)
                 for app in apps:
                     self.node.app_manager.migrate_with_requirements(app, None, move=True, extend=True, cb=None)
-                migration = True
-            self.migratable_apps.clear()
+                    self._runtimes_in_cooldown[self._migratable_apps[app]] = time.time()
+            self._migratable_apps.clear()
 
 
         # Enable denied actors again if access is permitted. Will try to migrate if access still denied.
@@ -202,10 +206,7 @@ class BaseScheduler(object):
         # Since we may have moved stuff around, schedule strategy
         self.insert_task(self.strategy, 0)
         # Schedule next maintenance
-        if not migration:
-            self.insert_task(self._maintenance_loop, self._maintenance_delay)
-        else:
-            self.insert_task(self._maintenance_loop, self._migration_cooldown)
+        self.insert_task(self._maintenance_loop, self._maintenance_delay)
 
     def trigger_maintenance_loop(self, delay=False):
         """Public API"""
@@ -217,8 +218,11 @@ class BaseScheduler(object):
     ######################################################################
     # Quite-private stuff, fairly generic
     ######################################################################
-    def app_add_migratable_app(self, app_id):
-        self.migratable_apps.add(app_id)
+    def app_add_migratable_app(self, app_id, runtime_origin):
+        if runtime_origin in self._runtimes_in_cooldown.keys():
+            _log.info("Scheduler does not add app: %s, reason runtime: %s in cooldown" % (app_id, runtime_origin))
+            return
+        self._migratable_apps[app_id] = runtime_origin
 
     def insert_task(self, what, delay):
         """Call to insert a task"""
