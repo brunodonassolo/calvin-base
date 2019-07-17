@@ -195,6 +195,13 @@ class ReconfigAlgos():
                     "random": 1,
                     "fake_centralized": False,
                     "centralized": True
+                    }, # real centralized
+                "app_central_nogreedy": {
+                    "greedy": False,
+                    "lazyUpdate": True,
+                    "random": 1,
+                    "fake_centralized": False,
+                    "centralized": True
                     } # real centralized
                 }
 
