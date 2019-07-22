@@ -186,7 +186,7 @@ class BaseScheduler(object):
 
             _log.info("Maintenance loop: Migratable apps: %s" % str(self._migratable_apps.keys()))
             number = self.reconfig.get_random()
-            if number == 0:
+            if number < 0:
                 number = len(self._migratable_apps.keys())
             else:
                 number = min(number, len(self._migratable_apps.keys()))

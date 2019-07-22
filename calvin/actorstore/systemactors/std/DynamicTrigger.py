@@ -41,7 +41,7 @@ class DynamicTrigger(Actor):
         self.throughput_tick = tick_check
         self.throughput_ntokens = 0
         self.throughput_multiplier = rate_multiplier_check
-        self.initial_setup_date = None
+        self.initial_setup_date = time.time()
         self.last_token_date = None
         self.last_state_date = None
         self.current_token_interval = None
@@ -140,7 +140,6 @@ class DynamicTrigger(Actor):
                 self.timestamps.append((float(split_line[0]), split_line[1]))
             f.close()
 
-        self.initial_setup_date = time.time()
         self._set_state_timer()
         #print self.state_info
         #print self.timestamps

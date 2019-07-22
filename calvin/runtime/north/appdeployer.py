@@ -3,6 +3,7 @@ import time
 import collections
 import copy
 import random
+import heapq
 from heapq import heappush, heapify, heappop
 from calvin.runtime.south.async import async
 from calvin.utilities.calvin_callback import CalvinCB
@@ -202,7 +203,14 @@ class ReconfigAlgos():
                     "random": 1,
                     "fake_centralized": False,
                     "centralized": True
-                    } # real centralized
+                    }, # real centralized
+                "app_farseeing": {
+                    "greedy": False,
+                    "lazyUpdate": True,
+                    "random": 0,
+                    "fake_centralized": False,
+                    "centralized": False
+                    } # farseeing
                 }
 
     def is_fake_centralized(self):
@@ -1608,6 +1616,20 @@ class AppDeployer(object):
 
         self.decide_placement_filter_raw_param(app)
 
+        # farseeing...
+        if app.migration and self.reconfig.algo == "app_farseeing":
+            okay = True
+            for actor_id in actor_ids:
+                if app.actor_storage[actor_id]['type'] == "std.DynamicTrigger":
+                    continue
+                if (app.actor_storage[actor_id]['node_id'] not in app.actor_placement[actor_id]):
+                    okay = False
+                    _log.info("Farseeing: placement not okay for actor: %s, current runtime: %s available: %s" % (actor_id, app.actor_storage[actor_id]['node_id'], str(app.actor_placement[actor_id])))
+                    break
+            if okay:
+                _log.info('Farseeing: current placement is okay for application')
+                return
+
         # Weight the actors possible placement with their connectivity matrix
         if _conf.get('global', 'deployment_algorithm') == 'random':
             placement_best = self.random_placement(app, actor_ids)
@@ -1896,4 +1918,71 @@ class AppDeployer(object):
 
         if len(app.futures) > 0:
             async.DelayedCall(1, self.grasp_v2_update_resources_check, app, best)
+
+class FarseeingApp():
+    def __init__(self, app_id, actor_id, state_info, trigger_timestamps):
+        self.app_id = app_id
+        self.actor_id = actor_id
+        self.state_info = state_info
+        self.trigger_timestamps = trigger_timestamps
+        self.initial_date = time.time()
+
+    def __str__(self):
+        s = 'app_id: %s actor_id: %s state_info: %s timestamps: %s' % (self.app_id, self.actor_id, self.state_info, self.trigger_timestamps)
+        return s
+
+
+class Farseeing():
+    def __init__(self, node, oracle_time=10):
+        self.node = node
+        self.apps = {}
+        self.events = []
+        self.next_schedule = None
+        self.oracle = oracle_time
+
+    def __str__(self):
+        s = 'Apps: \n'
+        for app_id, app in self.apps.iteritems():
+            s += '\t Id: %s App: %s\n' % (app_id, str(app))
+
+        return s
+
+
+    def add_app(self, app_id, app):
+        self.apps[app_id] = app
+        current_date = time.time()
+
+        for ev in app.trigger_timestamps:
+            date = ev[0] + app.initial_date
+            state = ev[1]
+            if (app.state_info[state] > 0):
+                date -= self.oracle
+                if (date > current_date):
+                    heapq.heappush(self.events, (date, app))
+
+        first = self.events[0][0]
+        if (self.next_schedule == None or first < self.next_schedule):
+            self.next_schedule = first
+            async.DelayedCall(first - time.time(), self.app_wake_up)
+
+    def app_wake_up(self):
+        ev = self.events[0]
+        current = time.time()
+        # too early
+        if (ev[0] > current):
+            return
+
+        ev = heapq.heappop(self.events)
+        date = ev[0]
+        app_id = ev[1].app_id
+        _log.info("Farseeing, app: %s will wake up in %d seconds, event date: %f current date %d" % (app_id, self.oracle, date, current))
+
+        self.node.app_manager.migrate_with_requirements(app_id, None, move=True, extend=True, cb=None)
+
+        try:
+            next_event = self.events[0][0]
+            async.DelayedCall(next_event - time.time(), self.app_wake_up)
+            self.next_schedule = next_event
+        except:
+            _log.warning("Farseeing, no more events in the queue")
 

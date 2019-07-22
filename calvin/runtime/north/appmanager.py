@@ -30,7 +30,7 @@ from calvin.utilities.security import Security
 from calvin.utilities.requirement_matching import ReqMatch
 from heapq import heappush, heapify, heappop
 from calvin.utilities import calvinconfig
-from calvin.runtime.north.appdeployer import AppDeployer,Application,ReconfigAlgos
+from calvin.runtime.north.appdeployer import *
 
 _log = calvinlogger.get_logger(__name__)
 _conf = calvinconfig.get()
@@ -47,6 +47,7 @@ class AppManager(object):
         self.actor_by_runtime = {}
         self.phys_link_placement_runtimes = {}  # This information is quite stable, save it here to avoid collecting it each app deployment. Clean placement slate, saves the runtimes that the physical link connects
         self.reconfig = ReconfigAlgos()
+        self.farseeing = Farseeing(node)
 
     def new(self, name, deploy_info=None):
         application_id = calvinuuid.uuid("APP")
@@ -393,6 +394,40 @@ class AppManager(object):
         if cb:
             cb(status=status, placement=actor_placement)
 
+    def instantiate_centralized_farseeing(self, app_id, actor_id, info):
+        # FIXME: ugly...
+        if not info['actor_type'] == "std.DynamicTrigger":
+            return
+
+        _log.info("Initializing farseeing app: %s actor: %s Info: %s" % (app_id, actor_id, info))
+
+        # File format:
+        # N - number of states
+        # state_name1 interval1 message1 (N times)
+        # timestamp state_name (ordered, until EOF)
+        filename = info["args"]["filename"]
+        trigger_timestamps = []
+        state_info = {}
+        with open(filename, "r") as f:
+            number_states = int(f.readline())
+            for i in range(0, number_states):
+                split_line = f.readline().replace('\n', '').split(' ')
+                interval = float(split_line[1])
+
+                _log.info("Setup farseeing, state: %s, token interval: %f" % (split_line[0], interval))
+                if interval < 0:
+                    state_info[split_line[0]] = (interval,"")
+                else:
+                    state_info[split_line[0]] = (float(split_line[1]), split_line[2])
+
+            for line in f.readlines():
+                split_line = line.replace('\n', '').split(' ')
+                trigger_timestamps.append((float(split_line[0]), split_line[1]))
+            f.close()
+
+        self.farseeing.add_app(app_id, FarseeingApp(app_id, actor_id, state_info, trigger_timestamps))
+
+
 class Deployer(object):
 
     """
@@ -536,6 +571,7 @@ class Deployer(object):
             actor_id = self.node.am.new(actor_type=info['actor_type'], args=info['args'], signature=info['signature'],
                                         actor_def=actor_def, security=self.sec, access_decision=access_decision,
                                         shadow_actor='shadow_actor' in info, port_properties=port_properties, app_id=self.app_id)
+
             if not actor_id:
                 raise Exception("Could not instantiate actor %s" % actor_name)
             deploy_req = self.get_req(actor_name)
@@ -558,6 +594,7 @@ class Deployer(object):
             self.store_complete_requirements(actor_id)
             self.actor_map[actor_name] = actor_id
             self.node.app_manager.add(self.app_id, actor_id)
+            self.node.app_manager.instantiate_centralized_farseeing(self.app_id, actor_id, info)
         except Exception as e:
             _log.exception("INSTANTIATE FAILED")
             # FIXME: what should happen here?
