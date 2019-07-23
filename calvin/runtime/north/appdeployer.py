@@ -1955,7 +1955,7 @@ class Farseeing():
         for ev in app.trigger_timestamps:
             date = ev[0] + app.initial_date
             state = ev[1]
-            if (app.state_info[state] > 0):
+            if (app.state_info[state][0] > 0):
                 date -= self.oracle
                 if (date > current_date):
                     heapq.heappush(self.events, (date, app))
