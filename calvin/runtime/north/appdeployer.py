@@ -1964,7 +1964,7 @@ class Farseeing():
         first = self.events[0][0]
         if (self.next_schedule == None or first < self.next_schedule):
             self.next_schedule = first
-            async.DelayedCall(first - time.time(), self.app_wake_up)
+            async.DelayedCall(max(0, first - time.time()), self.app_wake_up)
 
     def app_wake_up(self):
         current = time.time()
@@ -1978,7 +1978,11 @@ class Farseeing():
 
         try:
             next_event = self.events[0][0]
-            async.DelayedCall(next_event - time.time(), self.app_wake_up)
+            next_sched = next_event - time.time()
+            if next_sched < 0:
+                _log.warning("Farseeing, next event missed by %f", next_sched)
+                next_sched = 0
+            async.DelayedCall(next_sched, self.app_wake_up)
             self.next_schedule = next_event
         except:
             _log.warning("Farseeing, no more events in the queue")
