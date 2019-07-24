@@ -369,8 +369,8 @@ class AppDeployer(object):
         app.actor_storage[actor_id] = value
         for port in value['inports'] + value['outports']:
             port_id = port['id']
-            self.storage.get_port(port['id'], cb=CalvinCB(self.collect_port_storage, app=app, port_id=port_id))
             app.port_nbr.add(port_id)
+            self.storage.get_port(port['id'], cb=CalvinCB(self.collect_port_storage, app=app, port_id=port_id))
 
         self._verify_collect_placement(app)
 
@@ -1960,24 +1960,21 @@ class Farseeing():
                 if (date > current_date):
                     heapq.heappush(self.events, (date, app))
 
+        _log.info("Farseeing, queue size: %d" % len(self.events))
         first = self.events[0][0]
         if (self.next_schedule == None or first < self.next_schedule):
             self.next_schedule = first
             async.DelayedCall(first - time.time(), self.app_wake_up)
 
     def app_wake_up(self):
-        ev = self.events[0]
         current = time.time()
-        # too early
-        if (ev[0] > current):
-            return
-
         ev = heapq.heappop(self.events)
         date = ev[0]
         app_id = ev[1].app_id
         _log.info("Farseeing, app: %s will wake up in %d seconds, event date: %f current date %d" % (app_id, self.oracle, date, current))
 
         self.node.app_manager.migrate_with_requirements(app_id, None, move=True, extend=True, cb=None)
+        _log.info("Farseeing, queue size: %d" % len(self.events))
 
         try:
             next_event = self.events[0][0]
