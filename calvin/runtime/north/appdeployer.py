@@ -809,6 +809,28 @@ class AppDeployer(object):
         _log.debug("Total cost: %f" % cost)
         return cost
 
+    def get_neighbors_actors(self, app, actors_ids, actor_id, place_set):
+        neigh_actors = {}
+        try:
+            for i in app.actor_storage[actor_id]['outports']:
+                for p in app.port_storage[i['id']]['peers']:
+                    try:
+                        neigh_id = app.port_storage[p[1]]['actor_id']
+                    except:
+                        _log.debug("Didn't find neighbor actor")
+                        continue
+                    if not neigh_id in neigh_actors:
+                        neigh_actors[neigh_id] = -1
+                    else:
+                        neigh_actors[neigh_id] -= 1
+        except:
+            for i in set(actors_ids):
+                already_placed = { x for placement in place_set for x in placement[0].keys() }
+                if i not in already_placed:
+                    neigh_actors[i] = -1
+
+        return neigh_actors
+
     def random_actor_placement(self, app, actor_ids):
         orphan_actors = []
         for actor_id in actor_ids:
@@ -1135,18 +1157,7 @@ class AppDeployer(object):
                 place_set_for_actor.append((new_actor_placement, 0.0))
 
         # update next actors to be placed
-        neigh_actors = {}
-        for i in app.actor_storage[actor_id]['outports']:
-            for p in app.port_storage[i['id']]['peers']:
-                try:
-                    neigh_id = app.port_storage[p[1]]['actor_id']
-                except:
-                    _log.debug("Didn't find neighbor actor")
-                    continue
-                if not neigh_id in neigh_actors:
-                    neigh_actors[neigh_id] = -1
-                else:
-                    neigh_actors[neigh_id] -= 1
+        neigh_actors = self.get_neighbors_actors(app, actor_ids, actor_id, place_set)
         for actor, val in neigh_actors.iteritems():
             heappush(orphan_actors, (val, actor))
 
@@ -1219,18 +1230,7 @@ class AppDeployer(object):
                 place_set_for_actor.append((new_actor_placement, 0.0))
 
         # update next actors to be placed
-        neigh_actors = {}
-        for i in app.actor_storage[actor_id]['outports']:
-            for p in app.port_storage[i['id']]['peers']:
-                try:
-                    neigh_id = app.port_storage[p[1]]['actor_id']
-                except:
-                    _log.debug("Didn't find neighbor actor")
-                    continue
-                if not neigh_id in neigh_actors:
-                    neigh_actors[neigh_id] = -1
-                else:
-                    neigh_actors[neigh_id] -= 1
+        neigh_actors = self.get_neighbors_actors(app, actor_ids, actor_id, place_set)
         for actor, val in neigh_actors.iteritems():
             heappush(orphan_actors, (val, actor))
 
@@ -1264,18 +1264,7 @@ class AppDeployer(object):
                 place_set_for_actor.append((new_actor_placement, 0.0))
 
         # update next actors to be placed
-        neigh_actors = {}
-        for i in app.actor_storage[actor_id]['outports']:
-            for p in app.port_storage[i['id']]['peers']:
-                try:
-                    neigh_id = app.port_storage[p[1]]['actor_id']
-                except:
-                    _log.debug("Didn't find neighbor actor")
-                    continue
-                if not neigh_id in neigh_actors:
-                    neigh_actors[neigh_id] = -1
-                else:
-                    neigh_actors[neigh_id] -= 1
+        neigh_actors = self.get_neighbors_actors(app, actor_ids, actor_id, place_set)
         for actor, val in neigh_actors.iteritems():
             heappush(orphan_actors, (val, actor))
 
@@ -1352,18 +1341,7 @@ class AppDeployer(object):
                 place_set_for_actor.append((new_actor_placement, 0.0))
 
         # update next actors to be placed
-        neigh_actors = {}
-        for i in app.actor_storage[actor_id]['outports']:
-            for p in app.port_storage[i['id']]['peers']:
-                try:
-                    neigh_id = app.port_storage[p[1]]['actor_id']
-                except:
-                    _log.debug("Didn't find neighbor actor")
-                    continue
-                if not neigh_id in neigh_actors:
-                    neigh_actors[neigh_id] = -1
-                else:
-                    neigh_actors[neigh_id] -= 1
+        neigh_actors = self.get_neighbors_actors(app, actor_ids, actor_id, place_set)
         for actor, val in neigh_actors.iteritems():
             heappush(orphan_actors, (val, actor))
 
@@ -1938,6 +1916,7 @@ class Farseeing():
         self.apps = {}
         self.events = []
         self.next_schedule = None
+        self.next_schedule_date = None
         self.oracle = oracle_time
 
     def __str__(self):
@@ -1962,9 +1941,11 @@ class Farseeing():
 
         _log.info("Farseeing, queue size: %d" % len(self.events))
         first = self.events[0][0]
-        if (self.next_schedule == None or first < self.next_schedule):
-            self.next_schedule = first
-            async.DelayedCall(max(0, first - time.time()), self.app_wake_up)
+        if (self.next_schedule == None or first < self.next_schedule_date):
+            if self.next_schedule != None:
+                self.next_schedule.cancel()
+            self.next_schedule = async.DelayedCall(max(0, first - time.time()), self.app_wake_up)
+            self.next_schedule_date = first
 
     def app_wake_up(self):
         current = time.time()
@@ -1977,13 +1958,13 @@ class Farseeing():
         _log.info("Farseeing, queue size: %d" % len(self.events))
 
         try:
-            next_event = self.events[0][0]
-            next_sched = next_event - time.time()
+            next_event_date = self.events[0][0]
+            next_sched = next_event_date - time.time()
             if next_sched < 0:
-                _log.warning("Farseeing, next event missed by %f", next_sched)
+                _log.warning("Farseeing, next event missed by %f" % next_sched)
                 next_sched = 0
-            async.DelayedCall(next_sched, self.app_wake_up)
-            self.next_schedule = next_event
+            self.next_schedule = async.DelayedCall(next_sched, self.app_wake_up)
+            self.next_schedule_date = next_event_date
         except:
             _log.warning("Farseeing, no more events in the queue")
 
