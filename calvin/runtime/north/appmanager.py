@@ -395,6 +395,10 @@ class AppManager(object):
             cb(status=status, placement=actor_placement)
 
     def instantiate_centralized_farseeing(self, app_id, actor_id, info):
+        if self.reconfig.algo != "app_farseeing":
+            _log.info("Farseeing not enabled")
+            return
+
         # FIXME: ugly...
         if not info['actor_type'] == "std.DynamicTrigger":
             return

@@ -41,6 +41,24 @@ class Application(object):
         self.components = {}
         self.deploy_info = deploy_info
         self._collect_placement_cb = None
+        self.cpu_raw = {}
+        self.ram_raw = {}
+        self.app_update_used_resources()
+
+
+    def app_update_used_resources(self):
+        for a_id, a in self.actors.iteritems():
+            req = self.get_req(a)
+            cpu_raw = 0.0
+            ram_raw = 0.0
+            for i in req:
+                if i["op"] == "node_attr_match":
+                    if "cpuRaw" in i["kwargs"]["index"]:
+                        cpu_raw += float(i["kwargs"]["index"]["cpuRaw"])
+                    if "ramRaw" in i["kwargs"]["index"]:
+                        ram_raw += float(i["kwargs"]["index"]["ramRaw"])
+            self.cpu_raw[a_id] = cpu_raw
+            self.ram_raw[a_id] = ram_raw
 
     def add_actor(self, actor_id):
         # Save actor_id and mapping to name while the actor is still on this node
@@ -48,6 +66,7 @@ class Application(object):
             actor_id = [actor_id]
         for a in actor_id:
             self.actors[a] = self.am.actors[a].name if a in self.am.actors else None
+        self.app_update_used_resources()
 
     def add_link(self, link_id, link_name):
         """ Add links to the application structure
@@ -261,6 +280,15 @@ class AppDeployer(object):
         self.reconfig = ReconfigAlgos()
         self.actor_by_runtime = {}
         self.phys_link_placement_runtimes = {}  # This information is quite stable, save it here to avoid collecting it each app deployment. Clean placement slate, saves the runtimes that the physical link connects
+        self.farseeing_active_apps = set() # set active apps
+        self.farseeing_placement = {} # actor: runtime
+
+
+    def farseeing_set_app_state(self, app_id, active):
+        if active:
+            self.farseeing_active_apps.add(app_id)
+        else:
+            self.farseeing_active_apps.discard(app_id)
 
     ### DEPLOYMENT REQUIREMENTS ###
 
@@ -1410,6 +1438,10 @@ class AppDeployer(object):
         if app.batch == True:
             self.batch_update_available_resources(app)
 
+        # farseeing placement update
+        for actor_id, node_id in app.actor_placement.iteritems():
+            self.farseeing_placement[actor_id] = node_id
+
         print app.actor_placement
         status = response.CalvinResponse(True)
         app._org_cb(status=status, placement = app.actor_placement)
@@ -1544,6 +1576,36 @@ class AppDeployer(object):
         self.green_actor_placement(app, actor_ids, n_samples, orphan_actors, place_set, cb_finish_placement=CalvinCB(self.green_placement_finish, app, actor_ids, n_samples))
 
 
+    def decide_placement_filter_raw_param_farseeing(self, app):
+        farseeing_cpu_used = {}
+        farseeing_ram_used = {}
+
+        # update resources
+        for app_id in self.farseeing_active_apps:
+            # do not count this application
+            if app_id == app.id:
+                continue
+            app_temp = self._node.app_manager.applications[app_id]
+            for actor_id in app_temp.get_actors():
+                if actor_id not in self.farseeing_placement:
+                    continue
+                runtime = self.farseeing_placement[actor_id]
+                cpu = farseeing_cpu_used.setdefault(runtime, 0)
+                ram = farseeing_ram_used.setdefault(runtime, 0)
+                farseeing_cpu_used[runtime] = cpu + app_temp.cpu_raw[actor_id]
+                farseeing_ram_used[runtime] = ram + app_temp.ram_raw[actor_id]
+
+        _log.info("Farseeing filter: app id: %s, CPU consumed: %s, RAM: consumed: %s, active apps: %s, placement: %s" % (app.id, str(farseeing_cpu_used), str(farseeing_ram_used), str(self.farseeing_active_apps), str(self.farseeing_placement)))
+
+        # verify available CPU and RAM in nodes
+        for actor_id, nodes_ids in app.actor_placement.iteritems():
+            self.update_cache_cost_actor(app, actor_id)
+            nodes_to_remove = [ node_id for node_id in nodes_ids if (app.runtime_cpu_total[node_id] - farseeing_cpu_used.setdefault(node_id, 0) < app.cost_runtime_cpu.setdefault(actor_id, 0)) or (app.runtime_ram_total[node_id] - farseeing_ram_used.setdefault(node_id, 0) < app.cost_runtime_ram.setdefault(actor_id, 0)) ]
+
+            _log.info("Placement actor: %s. Internal state: runtimes considered: %s, runtimes removed: %s, CPU used: %s, RAM used %s, CPU total: %s, RAM total: %s", actor_id, str(nodes_ids), str(nodes_to_remove), str(farseeing_cpu_used), str(farseeing_ram_used), str(app.runtime_cpu_total), str(app.runtime_ram_total))
+            nodes_ids -= set(nodes_to_remove)
+
+
     def decide_placement_filter_raw_param(self, app):
         # verify available CPU and RAM in nodes
         for actor_id, nodes_ids in app.actor_placement.iteritems():
@@ -1592,10 +1654,9 @@ class AppDeployer(object):
             if any([isinstance(n, dynops.InfiniteElement) for n in possible_nodes]):
                 app.actor_placement[actor_id] = node_ids
 
-        self.decide_placement_filter_raw_param(app)
-
         # farseeing...
         if app.migration and self.reconfig.algo == "app_farseeing":
+            self.decide_placement_filter_raw_param_farseeing(app)
             okay = True
             for actor_id in actor_ids:
                 if app.actor_storage[actor_id]['type'] == "std.DynamicTrigger":
@@ -1607,6 +1668,8 @@ class AppDeployer(object):
             if okay:
                 _log.info('Farseeing: current placement is okay for application')
                 return
+        else:
+            self.decide_placement_filter_raw_param(app)
 
         # Weight the actors possible placement with their connectivity matrix
         if _conf.get('global', 'deployment_algorithm') == 'random':
@@ -1906,7 +1969,7 @@ class FarseeingApp():
         self.initial_date = time.time()
 
     def __str__(self):
-        s = 'app_id: %s actor_id: %s state_info: %s timestamps: %s' % (self.app_id, self.actor_id, self.state_info, self.trigger_timestamps)
+        s = 'app_id: %s actor_id: %s state_info: %s timestamps: %s initial_date: %d' % (self.app_id, self.actor_id, self.state_info, self.trigger_timestamps, self.initial_date)
         return s
 
 
@@ -1929,32 +1992,38 @@ class Farseeing():
 
     def add_app(self, app_id, app):
         self.apps[app_id] = app
-        current_date = time.time()
 
         for ev in app.trigger_timestamps:
             date = ev[0] + app.initial_date
             state = ev[1]
-            if (app.state_info[state][0] > 0):
-                date -= self.oracle
-                if (date > current_date):
-                    heapq.heappush(self.events, (date, app))
+            # just set initial state for first event
+            if ev[0] == 0:
+                self.node.app_manager.app_deployer.farseeing_set_app_state(app_id, app.state_info[state][0] > 0)
+                continue
+            date -= self.oracle
+            heapq.heappush(self.events, (date, state, app))
 
         _log.info("Farseeing, queue size: %d" % len(self.events))
         first = self.events[0][0]
         if (self.next_schedule == None or first < self.next_schedule_date):
             if self.next_schedule != None:
                 self.next_schedule.cancel()
-            self.next_schedule = async.DelayedCall(max(0, first - time.time()), self.app_wake_up)
+            self.next_schedule = async.DelayedCall(max(0, first - time.time()), self.app_change_state)
             self.next_schedule_date = first
 
-    def app_wake_up(self):
+    def app_change_state(self):
         current = time.time()
         ev = heapq.heappop(self.events)
         date = ev[0]
-        app_id = ev[1].app_id
-        _log.info("Farseeing, app: %s will wake up in %d seconds, event date: %f current date %d" % (app_id, self.oracle, date, current))
+        state = ev[1]
+        app = ev[2]
+        _log.info("Farseeing, app: %s will change to state: %s, event date: %f current date %d" % (app.app_id, state, date, current))
 
-        self.node.app_manager.migrate_with_requirements(app_id, None, move=True, extend=True, cb=None)
+        if app.state_info[state][0] > 0:
+            self.node.app_manager.app_deployer.farseeing_set_app_state(app.app_id, True)
+            self.node.app_manager.migrate_with_requirements(app.app_id, None, move=True, extend=True, cb=None)
+        else:
+            self.node.app_manager.app_deployer.farseeing_set_app_state(app.app_id, False)
         _log.info("Farseeing, queue size: %d" % len(self.events))
 
         try:
@@ -1963,7 +2032,7 @@ class Farseeing():
             if next_sched < 0:
                 _log.warning("Farseeing, next event missed by %f" % next_sched)
                 next_sched = 0
-            self.next_schedule = async.DelayedCall(next_sched, self.app_wake_up)
+            self.next_schedule = async.DelayedCall(next_sched, self.app_change_state)
             self.next_schedule_date = next_event_date
         except:
             _log.warning("Farseeing, no more events in the queue")
