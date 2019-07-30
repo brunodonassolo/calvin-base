@@ -1057,6 +1057,7 @@ class AppDeployer(object):
         place_set_sorted = []
         for opt,old_cost in place_set:
             if not self.is_resource_usage_in_placement_ok(app, opt):
+                _log.info("Placement app: %s, opt: %s, discarded, resource usage not okay" % (app.id, str(opt)))
                 continue
             cost = 0.0
             runtimes_set = set()
@@ -1420,6 +1421,7 @@ class AppDeployer(object):
         print "Money placement cost: %f, n_samples: %d" % (place_set[0][1], n_samples)
         placement_lat = { actor: plac.runtime for actor,plac in place_set[0][0].iteritems() }
         print placement_lat
+        _log.info("Money placement cost: %f, n_samples: %d, placement: %s" % (place_set[0][1], n_samples, str(placement_lat)))
 
         if _conf.get('global', 'grasp') == "v0":
             app.actor_placement = self.grasp_optimization(app, actor_ids, placement_lat, False)
@@ -1447,6 +1449,7 @@ class AppDeployer(object):
         app._org_cb(status=status, placement = app.actor_placement)
         del app._org_cb
         _log.analyze(self._node.id, "+ DONE", {'app_id': app.id}, tb=True)
+        _log.info("FINAL placement: %s" % (str(app.actor_placement)))
         _log.info("Deployment: app: %s: finished placement: total elapsed time %d" % (app.id, time.time() - app.start_time))
 
     def grasp_placement_finish(self, app, actor_ids, N, place_set):
@@ -1604,6 +1607,11 @@ class AppDeployer(object):
 
             _log.info("Placement actor: %s. Internal state: runtimes considered: %s, runtimes removed: %s, CPU used: %s, RAM used %s, CPU total: %s, RAM total: %s", actor_id, str(nodes_ids), str(nodes_to_remove), str(farseeing_cpu_used), str(farseeing_ram_used), str(app.runtime_cpu_total), str(app.runtime_ram_total))
             nodes_ids -= set(nodes_to_remove)
+
+        # update app.runtime_cpu app.runtime_ram used in is_resource_usage_in_placement_ok
+        for runtime,value in farseeing_cpu_used.iteritems():
+            app.runtime_cpu[runtime] = app.runtime_cpu_total[runtime] - farseeing_cpu_used[runtime]
+            app.runtime_ram[runtime] = app.runtime_ram_total[runtime] - farseeing_ram_used[runtime]
 
 
     def decide_placement_filter_raw_param(self, app):
