@@ -172,7 +172,13 @@ class TunnelConnection(BaseConnection):
             return response.CalvinResponse(False)
         if 'tunnel_id' not in payload:
             raise NotImplementedError()
-        tunnel = self.token_tunnel.tunnels[self.peer_port_meta.node_id]
+        try:
+            tunnel = self.token_tunnel.tunnels[self.peer_port_meta.node_id]
+        except KeyError:
+            self.connect()
+            import traceback
+            traceback.print_exc()
+
         if tunnel.id != payload['tunnel_id']:
             # For some reason does the tunnel id not match the one we have to connect to the peer
             # Likely due to that we have not yet received a tunnel request from the peer that replace our tunnel id
