@@ -229,7 +229,14 @@ class ReconfigAlgos():
                     "random": 0,
                     "fake_centralized": False,
                     "centralized": False
-                    } # farseeing
+                    }, # farseeing
+                "app_none": {
+                    "greedy": False,
+                    "lazyUpdate": False,
+                    "random": -1,
+                    "fake_centralized": False,
+                    "centralized": False
+                    } # none
                 }
 
     def is_fake_centralized(self):
