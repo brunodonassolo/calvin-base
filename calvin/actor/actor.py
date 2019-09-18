@@ -32,9 +32,12 @@ from calvin.utilities.calvin_callback import CalvinCB
 from calvin.csparser.port_property_syntax import get_port_property_capabilities, get_port_property_runtime
 from calvin.runtime.north.calvinsys import get_calvinsys
 from calvin.runtime.north.calvinlib import get_calvinlib
+from calvin.utilities import calvinconfig
+from calvin.runtime.north.ewlearning import EwLearning
 
 _log = get_logger(__name__)
 
+_conf = calvinconfig.get()
 
 # Tests in test_manage_decorator.py
 def manage(include=None, exclude=None):
@@ -259,7 +262,7 @@ class Actor(object):
 
     # These are the instance variables that will always be serialized, see serialize()/deserialize() below
     _private_state_keys = ('_id', '_name', '_has_started', '_deployment_requirements',
-                           '_signature', '_migration_info', "_port_property_capabilities", "_replication_id", "_app_id")
+                           '_signature', '_migration_info', "_port_property_capabilities", "_replication_id", "_app_id", "_elapsed_time", "_learn")
 
     # Internal state (status)
     class FSM(object):
@@ -346,6 +349,8 @@ class Actor(object):
         self._managed = set()
         self._has_started = False
         self._app_id = app_id
+        self._elapsed_time = 0
+        self._learn = EwLearning(app_id)
         # self.control = calvincontrol.get_calvincontrol()
         self._migration_info = None
         self._migrating_to = None  # During migration while on the previous node set to the next node id
@@ -580,6 +585,12 @@ class Actor(object):
         return self.fsm.state() == Actor.STATUS.DENIED
 
     def migratable(self):
+        algo = _conf.get("global", "reconfig_algorithm")
+        if algo == "app_learn_v0":
+            if self._elapsed_time > 0:
+                return True
+            else:
+                return False
         if self.better_migrate == Actor.RECONF_STATUS.REQUESTED:
             return True
         else:

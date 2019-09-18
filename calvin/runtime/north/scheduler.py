@@ -168,7 +168,16 @@ class BaseScheduler(object):
             if time.time() - timestamp >= self._migration_cooldown:
                 del self._runtimes_in_cooldown[runtime]
 
-        if algo == "actor_v0":
+        if algo == "app_learn_v0":
+            for actor in self.actor_mgr.migratable_actors():
+                actor._learn.set_feedback(actor._elapsed_time)
+                burn_id, burn_runtime = actor._learn.choose_k()
+                _log.info("EW learn: app_id=%s burn_id=%s runtime=%s" % (actor._app_id, burn_id, burn_runtime))
+                _log.info("EW learn\n%s" % actor._learn)
+                #print("EW learn\n--------------\n%s\n----------------" % actor._learn)
+                #print("EW learn: app_id=%s burn_id=%s runtime=%s" % (actor._app_id, burn_id, burn_runtime))
+                self.actor_mgr.robust_migrate(burn_id, [burn_runtime], None)
+        elif algo == "actor_v0":
             actor = random.choice(self.actor_mgr.migratable_actors())
             self.actor_mgr.update_requirements(actor.id, [], True, True)
             self._runtimes_in_cooldown[self.node.id] = time.time()

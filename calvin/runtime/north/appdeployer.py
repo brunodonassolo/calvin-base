@@ -1669,6 +1669,8 @@ class AppDeployer(object):
             if any([isinstance(n, dynops.InfiniteElement) for n in possible_nodes]):
                 app.actor_placement[actor_id] = node_ids
 
+        # initialize learn
+        self.ew_learning_init(app)
         # farseeing...
         if app.migration and self.reconfig.algo == "app_farseeing":
             self.decide_placement_filter_raw_param_farseeing(app)
@@ -1975,6 +1977,20 @@ class AppDeployer(object):
         if len(app.futures) > 0:
             async.DelayedCall(1, self.grasp_v2_update_resources_check, app, best)
 
+    def ew_learning_init(self, app):
+        if app.migration or self.reconfig.algo != "app_learn_v0":
+            return
+
+        burn_id = None
+        sink_id = None
+        for actor_id, actor in app.actor_storage.iteritems():
+            if actor['type'] == "std.SmartBurn":
+                burn_id = actor_id
+            if actor['type'] == "test.Sink":
+                sink_id = actor_id
+
+        self._node.am.actors[sink_id]._learn.set_burn(burn_id, app.actor_placement[burn_id])
+
 class FarseeingApp():
     def __init__(self, app_id, actor_id, state_info, trigger_timestamps):
         self.app_id = app_id
@@ -2051,4 +2067,3 @@ class Farseeing():
             self.next_schedule_date = next_event_date
         except:
             _log.warning("Farseeing, no more events in the queue")
-

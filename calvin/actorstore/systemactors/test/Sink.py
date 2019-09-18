@@ -75,6 +75,7 @@ class Sink(Actor):
             # check processing time and migration conditions
             self.token_process_time.append(elapsed)
             mean = float(sum(self.token_process_time))/len(self.token_process_time)
+            self._elapsed_time = mean
             if elapsed > self.threshold:
                 _log.info("%s<%s>: Elapsed time in sink higher than threshold, elapsed: %f threshold: %f mean: %f" % (self.__class__.__name__, self.id, elapsed, self.threshold, mean))
             if mean > self.threshold:
