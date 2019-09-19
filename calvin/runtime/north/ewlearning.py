@@ -67,6 +67,7 @@ class EwLearning(object):
         f_max = self.f_max
         if elapsed_time > f_max:
             _log.warning("EW learning: elapsed_time=%f greater than f_max=%f" % (elapsed_time, f_max))
+            f_max = elapsed_time
         v = { i : 0 if i != self.burn_runtime else ((f_max - elapsed_time)/(f_max))*(1/self.x[self.burn_runtime]) for i in self.k }
         step = 1/math.sqrt(self.t)
         self.y = { i : j + step*v[i] for i,j in self.y.iteritems() }
