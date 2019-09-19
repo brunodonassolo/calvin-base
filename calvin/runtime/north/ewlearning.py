@@ -58,7 +58,7 @@ class EwLearning(object):
         self.K = min(len(possible_runtimes), self.K)
         self.k = random.sample(possible_runtimes, k=self.K)
         self.y = { i : 0 for i in self.k }
-        self.x = { i : 1 for i in self.k }
+        self.x = { i : 0 for i in self.k }
 
     def set_feedback(self, elapsed_time):
         if self.burn_runtime == None or elapsed_time == 0:
@@ -69,7 +69,7 @@ class EwLearning(object):
             _log.warning("EW learning: elapsed_time=%f greater than f_max=%f" % (elapsed_time, f_max))
             f_max = elapsed_time
         v = { i : 0 if i != self.burn_runtime else ((f_max - elapsed_time)/(f_max))*(1/self.x[self.burn_runtime]) for i in self.k }
-        step = 1/math.sqrt(self.t)
+        step = .1/math.sqrt(self.t)
         self.y = { i : j + step*v[i] for i,j in self.y.iteritems() }
         _log.info("EW learning: Setting feedback: app_id=%s t=%d f=%f v=%s new y=%s" % (self.app_id, self.t, elapsed_time, str(v), str(self.y)))
         #print "fffffffffffffff"
