@@ -19,12 +19,13 @@ class EwLearning(object):
         self.y = {} # feedback
         self.k = [] # runtimes
         self.t = 0  # time step
+        self.count = {} # count number of times each runtime was selected
         self.burn_id = None
         self.burn_runtime = None
         self.app_id = app_id
 
     def __str__(self):
-        return "x = %s\ny = %s\nk = %s\nburn id = %s\nk_t = %s\nt = %d" % (str(self.x), str(self.y), str(self.k), self.burn_id, self.burn_runtime, self.t)
+        return "x=%s\ny=%s\nk=%s\nburn id=%s\nk_t=%s\nt=%d\ncount=%s" % (str(self.x), str(self.y), str(self.k), self.burn_id, self.burn_runtime, self.t, self.count)
 
 
     def state(self):
@@ -34,6 +35,7 @@ class EwLearning(object):
         state['k'] = self.k
         state['t'] = self.t
         state['K'] = self.K
+        state['count'] = self.count
         state['eps'] = self.eps
         state['f_max'] = self.f_max
         state['burn_id'] = self.burn_id
@@ -44,6 +46,7 @@ class EwLearning(object):
     def set_state(self, state):
         self.x = state.get('x', {})
         self.y = state.get('y', {})
+        self.count = state.get('count', {})
         self.k = state.get('k', [])
         self.K = state.get('K', _conf.get("learn", "K") or 5)
         self.eps = state.get('eps', _conf.get("learn", "eps") or 0)
@@ -59,6 +62,7 @@ class EwLearning(object):
         self.k = random.sample(possible_runtimes, k=self.K)
         self.y = { i : 0 for i in self.k }
         self.x = { i : 0 for i in self.k }
+        self.count = { i : 0 for i in self.k }
 
     def set_feedback(self, elapsed_time):
         if self.burn_runtime == None or elapsed_time == 0:
@@ -84,6 +88,7 @@ class EwLearning(object):
         prob = [ self.x[i] for i in self.k ]
         self.burn_runtime = numpy.random.choice(self.k, p=prob)
         _log.info("EW learning: Choosing k: app_id=%s x=%s burn_id=%s burn_runtime=%s" % (self.app_id, str(self.x), self.burn_id, self.burn_runtime))
+        self.count[self.burn_runtime] += 1
         #print "kkkkkkkkkkkkkk"
         #print("EW learning: Choosing k: app_id=%s x=%s burn_id=%s burn_runtime=%s" % (self.app_id, str(self.x), self.burn_id, self.burn_runtime))
         return self.burn_id, self.burn_runtime
