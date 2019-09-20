@@ -54,7 +54,7 @@ class BaseScheduler(object):
         self._migration_cooldown = _conf.get(None, "migration_cooldown") or 300
         self._pressure_event_actor_ids = set([])
         self._migratable_apps = {}
-        self._runtimes_in_cooldown = {}
+        self._cooldown = {}
 
     # System entry point
     def run(self):
@@ -164,23 +164,27 @@ class BaseScheduler(object):
         algo = _conf.get("global", "reconfig_algorithm")
         _log.info("Maintenance loop, reconfiguration algorithm: %s" % algo)
 
-        for runtime, timestamp in self._runtimes_in_cooldown.items():
+        for runtime, timestamp in self._cooldown.items():
             if time.time() - timestamp >= self._migration_cooldown:
-                del self._runtimes_in_cooldown[runtime]
+                del self._cooldown[runtime]
 
         if algo == "app_learn_v0":
             for actor in self.actor_mgr.migratable_actors():
+                if actor._app_id in self._cooldown:
+                    _log.info("EW lean: in cooldown since=%f time=%f" % (self._cooldown[actor._app_id], time.time()))
+                    continue
                 actor._learn.set_feedback(actor._elapsed_time)
                 burn_id, burn_runtime = actor._learn.choose_k()
                 _log.info("EW learn: app_id=%s burn_id=%s runtime=%s" % (actor._app_id, burn_id, burn_runtime))
                 _log.info("EW learn\n%s" % actor._learn)
                 #print("EW learn\n--------------\n%s\n----------------" % actor._learn)
                 #print("EW learn: app_id=%s burn_id=%s runtime=%s" % (actor._app_id, burn_id, burn_runtime))
-                self.actor_mgr.robust_migrate(burn_id, [burn_runtime], None)
+                self._cooldown[actor._app_id] = time.time() + 60*60*24 # adding 1 day to avoid cooldown, it will be configured to the right value at learn_migrated callback
+                self.actor_mgr.robust_migrate(burn_id, [burn_runtime], callback=CalvinCB(self.learn_migrated, actor = actor))
         elif algo == "actor_v0":
             actor = random.choice(self.actor_mgr.migratable_actors())
             self.actor_mgr.update_requirements(actor.id, [], True, True)
-            self._runtimes_in_cooldown[self.node.id] = time.time()
+            self._cooldown[self.node.id] = time.time()
         elif algo == "NA":
             pass
         else: # by app
@@ -204,7 +208,7 @@ class BaseScheduler(object):
                 apps = random.sample(self._migratable_apps.keys(), k=number)
                 for app in apps:
                     self.node.app_manager.migrate_with_requirements(app, None, move=True, extend=True, cb=None)
-                    self._runtimes_in_cooldown[self._migratable_apps[app]] = time.time()
+                    self._cooldown[self._migratable_apps[app]] = time.time()
             self._migratable_apps.clear()
 
 
@@ -224,11 +228,16 @@ class BaseScheduler(object):
             return
         self.insert_task(self._maintenance_loop, 0)
 
+    def learn_migrated(self, actor, status, **kwargs):
+        self._cooldown[actor._app_id] = time.time()
+        actor.better_migrate = Actor.RECONF_STATUS.DONE
+
+
     ######################################################################
     # Quite-private stuff, fairly generic
     ######################################################################
     def app_add_migratable_app(self, app_id, runtime_origin):
-        if runtime_origin in self._runtimes_in_cooldown.keys():
+        if runtime_origin in self._cooldown.keys():
             _log.info("Scheduler does not add app: %s, reason runtime: %s in cooldown" % (app_id, runtime_origin))
             return
         self._migratable_apps[app_id] = runtime_origin
