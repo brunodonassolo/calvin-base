@@ -521,9 +521,10 @@ class ActorManager(object):
                 cb(status=response.CalvinResponse(False))
             return
 
-        self.node.proto.actor_migrate_direct_async(value['node_id'], key, peer_node_id)
-        if cb:
-            cb(status=response.CalvinResponse(True))
+        self.node.proto.actor_migrate_direct(value['node_id'], cb, key, peer_node_id)
+        #self.node.proto.actor_migrate_direct_async(value['node_id'], key, peer_node_id)
+        #if cb:
+        #    cb(status=response.CalvinResponse(True))
 
     def migrate(self, actor_id, node_id, callback=None):
         """ Migrate an actor actor_id to peer node node_id """
