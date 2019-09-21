@@ -180,7 +180,8 @@ class BaseScheduler(object):
                 #print("EW learn\n--------------\n%s\n----------------" % actor._learn)
                 #print("EW learn: app_id=%s burn_id=%s runtime=%s" % (actor._app_id, burn_id, burn_runtime))
                 self._cooldown[actor._app_id] = time.time() + 60*60*24 # adding 1 day to avoid cooldown, it will be configured to the right value at learn_migrated callback
-                self.actor_mgr.robust_migrate(burn_id, [burn_runtime], callback=CalvinCB(self.learn_migrated, actor = actor))
+                if burn_id != None and burn_runtime != None:
+                    self.actor_mgr.robust_migrate(burn_id, [burn_runtime], callback=CalvinCB(self.learn_migrated, actor = actor))
         elif algo == "actor_v0":
             actor = random.choice(self.actor_mgr.migratable_actors())
             self.actor_mgr.update_requirements(actor.id, [], True, True)
