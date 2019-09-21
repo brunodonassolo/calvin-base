@@ -57,6 +57,7 @@ class EwLearning(object):
         self.app_id = state.get('app_id', None)
 
     def set_burn(self, burn_id, possible_runtimes):
+        _log.info("EW learn: app_id=%s possible runtimes init=%s" % (self.app_id, str(possible_runtimes)))
         self.burn_id = burn_id
         self.K = min(len(possible_runtimes), self.K)
         self.k = random.sample(possible_runtimes, k=self.K)

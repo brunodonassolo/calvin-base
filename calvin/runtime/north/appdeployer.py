@@ -1989,7 +1989,9 @@ class AppDeployer(object):
             if actor['type'] == "test.Sink":
                 sink_id = actor_id
 
-        self._node.am.actors[sink_id]._learn.set_burn(burn_id, app.actor_placement[burn_id])
+        self.update_cache_cost_actor(app, burn_id)
+        # FIXME: maybe filter memory too
+        self._node.am.actors[sink_id]._learn.set_burn(burn_id, [r for r in app.actor_placement[burn_id] if app.runtime_cpu_total[r] > app.cost_runtime_cpu.get(burn_id, 0)])
 
 class FarseeingApp():
     def __init__(self, app_id, actor_id, state_info, trigger_timestamps):
