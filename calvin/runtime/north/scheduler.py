@@ -171,7 +171,7 @@ class BaseScheduler(object):
         if algo == "app_learn_v0":
             for actor in self.actor_mgr.migratable_actors():
                 if actor._app_id in self._cooldown:
-                    _log.info("EW lean: in cooldown since=%f time=%f" % (self._cooldown[actor._app_id], time.time()))
+                    _log.info("EW lean: app_id=%s in cooldown since=%f time=%f" % (actor._app_id, self._cooldown[actor._app_id], time.time()))
                     continue
                 actor._learn.set_feedback(actor._elapsed_time)
                 burn_id, burn_runtime = actor._learn.choose_k()
@@ -179,8 +179,8 @@ class BaseScheduler(object):
                 _log.info("EW learn\n%s" % actor._learn)
                 #print("EW learn\n--------------\n%s\n----------------" % actor._learn)
                 #print("EW learn: app_id=%s burn_id=%s runtime=%s" % (actor._app_id, burn_id, burn_runtime))
-                self._cooldown[actor._app_id] = time.time() + 60*60*24 # adding 1 day to avoid cooldown, it will be configured to the right value at learn_migrated callback
                 if burn_id != None and burn_runtime != None:
+                    self._cooldown[actor._app_id] = time.time() + self._migration_cooldown*3 # adding 3x _migration_cooldown to avoid cooldown, it will be configured to the right value at learn_migrated callback
                     self.actor_mgr.robust_migrate(burn_id, [burn_runtime], callback=CalvinCB(self.learn_migrated, actor = actor))
         elif algo == "actor_v0":
             actor = random.choice(self.actor_mgr.migratable_actors())
