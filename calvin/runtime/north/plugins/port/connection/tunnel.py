@@ -127,11 +127,12 @@ class TunnelConnection(BaseConnection):
             # about the tunnel in time
             _log.analyze(self.node.id, "+ RETRY", {'local_port': self.port, 'peer_port': self.peer_port_meta},
                             peer_node_id=self.peer_port_meta.node_id)
-            if self.peer_port_meta.retries < 3:
+            if self.peer_port_meta.retries < 10:
                 self.peer_port_meta.retries += 1
                 # Status here just indicate that we should have a tunnel
                 self._connect_via_tunnel(status=response.CalvinResponse(True))
             else:
+                _log.error("Impossible to establish connection from: %s to: %s" % (self.node.id, self.peer_port_meta.node_id))
                 self.async_reply(status=response.CalvinResponse(False))
             return
 
@@ -172,12 +173,14 @@ class TunnelConnection(BaseConnection):
             return response.CalvinResponse(False)
         if 'tunnel_id' not in payload:
             raise NotImplementedError()
-        try:
-            tunnel = self.token_tunnel.tunnels[self.peer_port_meta.node_id]
-        except KeyError:
+
+        if self.peer_port_meta.node_id not in self.token_tunnel.tunnels.iterkeys():
             self.connect()
             import traceback
             traceback.print_exc()
+            return response.CalvinResponse(response.GONE)
+
+        tunnel = self.token_tunnel.tunnels[self.peer_port_meta.node_id]
 
         if tunnel.id != payload['tunnel_id']:
             # For some reason does the tunnel id not match the one we have to connect to the peer
