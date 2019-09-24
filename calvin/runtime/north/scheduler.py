@@ -171,7 +171,7 @@ class BaseScheduler(object):
         if algo == "app_learn_v0":
             for actor in self.actor_mgr.migratable_actors():
                 if actor._app_id in self._cooldown:
-                    _log.info("EW lean: app_id=%s in cooldown since=%f time=%f" % (actor._app_id, self._cooldown[actor._app_id], time.time()))
+                    _log.info("EW learn: app_id=%s in cooldown since=%f time=%f" % (actor._app_id, self._cooldown[actor._app_id], time.time()))
                     continue
                 actor._learn.set_feedback(actor._elapsed_time)
                 burn_id, burn_runtime = actor._learn.choose_k()
@@ -231,6 +231,7 @@ class BaseScheduler(object):
 
     def learn_migrated(self, actor, status, **kwargs):
         self._cooldown[actor._app_id] = time.time()
+        actor._elapsed_time = 0
         actor.better_migrate = Actor.RECONF_STATUS.DONE
 
 
