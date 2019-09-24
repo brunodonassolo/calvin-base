@@ -88,7 +88,7 @@ class EwLearning(object):
         self.t += 1
         prob = [ self.x[i] for i in self.k ]
         burn_runtime = numpy.random.choice(self.k, p=prob)
-        _log.info("EW learning: Choosing k: app_id=%s x=%s burn_id=%s burn_runtime=%s" % (self.app_id, str(self.x), self.burn_id, burn_runtime))
+        _log.info("EW learning: Choosing k: app_id=%s t=%d x=%s burn_id=%s burn_runtime=%s" % (self.app_id, self.t, str(self.x), self.burn_id, burn_runtime))
         self.count[burn_runtime] += 1
         if burn_runtime != self.burn_runtime:
             self.burn_runtime = burn_runtime
