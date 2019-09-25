@@ -156,6 +156,12 @@ class BaseScheduler(object):
         if not [True for t in self._tasks if t[1] == self._check_pressure]:
             self.insert_task(self._check_pressure, 30)
 
+
+    def _update_runtimes_info(self, actor):
+        """ Ugly... update CPU available for EW algo in action """
+        for r in actor._learn.k:
+            self.node.storage.get("nodeCpu-", r, cb=CalvinCB(func=actor._learn.collect_runtime_cpu))
+
     #
     # Maintenance loop
     #
@@ -168,8 +174,9 @@ class BaseScheduler(object):
             if time.time() - timestamp >= self._migration_cooldown:
                 del self._cooldown[runtime]
 
-        if algo == "app_learn_v0":
+        if self.reconfig.is_learn():
             for actor in self.actor_mgr.migratable_actors():
+                self._update_runtimes_info(actor)
                 if actor._app_id in self._cooldown:
                     _log.info("EW learn: app_id=%s in cooldown since=%f time=%f" % (actor._app_id, self._cooldown[actor._app_id], time.time()))
                     continue

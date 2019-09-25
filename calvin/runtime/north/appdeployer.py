@@ -186,57 +186,73 @@ class ReconfigAlgos():
                     "lazyUpdate": False,
                     "random": 1,
                     "fake_centralized": False,
-                    "centralized": False
+                    "centralized": False,
+                    "learn": False
                     }, # cooldown
                 "app_greedy": {
                     "greedy": True,
                     "lazyUpdate": False,
                     "random": 1,
                     "fake_centralized": False,
-                    "centralized": False
+                    "centralized": False,
+                    "learn": False
                     }, # greedy
                 "app_v0": {
                     "greedy": True,
                     "lazyUpdate": True,
                     "random": 1,
                     "fake_centralized": False,
-                    "centralized": False
+                    "centralized": False,
+                    "learn": False
                     },    # lazy
                 "app_v1": {
                     "greedy": True,
                     "lazyUpdate": True,
                     "random": 1,
                     "fake_centralized": True,
-                    "centralized": False
+                    "centralized": False,
+                    "learn": False
                     },     # fake centralized
                 "app_central": {
                     "greedy": True,
                     "lazyUpdate": True,
                     "random": 1,
                     "fake_centralized": False,
-                    "centralized": True
+                    "centralized": True,
+                    "learn": False
                     }, # real centralized
                 "app_central_nogreedy": {
                     "greedy": False,
                     "lazyUpdate": True,
                     "random": 1,
                     "fake_centralized": False,
-                    "centralized": True
+                    "centralized": True,
+                    "learn": False
                     }, # real centralized
                 "app_farseeing": {
                     "greedy": False,
                     "lazyUpdate": True,
                     "random": 0,
                     "fake_centralized": False,
-                    "centralized": False
+                    "centralized": False,
+                    "learn": False
                     }, # farseeing
                 "app_none": {
                     "greedy": False,
                     "lazyUpdate": False,
                     "random": -1,
                     "fake_centralized": False,
-                    "centralized": False
-                    } # none
+                    "centralized": False,
+                    "learn": False
+                    }, # none
+                "app_learn_v0": {
+                    "greedy": False,
+                    "lazyUpdate": False,
+                    "random": -1,
+                    "fake_centralized": False,
+                    "centralized": False,
+                    "learn": True
+                    } # learn
                 }
 
     def is_fake_centralized(self):
@@ -270,6 +286,14 @@ class ReconfigAlgos():
         except KeyError:
             pass
         return lazy
+
+    def is_learn(self):
+        learn = False
+        try:
+            learn = self.algos[self.algo]["learn"]
+        except KeyError:
+            pass
+        return learn
 
     def get_random(self):
         number = 1
@@ -1978,7 +2002,7 @@ class AppDeployer(object):
             async.DelayedCall(1, self.grasp_v2_update_resources_check, app, best)
 
     def ew_learning_init(self, app):
-        if app.migration or self.reconfig.algo != "app_learn_v0":
+        if app.migration or not self.reconfig.is_learn():
             return
 
         burn_id = None
@@ -1991,7 +2015,7 @@ class AppDeployer(object):
 
         self.update_cache_cost_actor(app, burn_id)
         # FIXME: maybe filter memory too
-        self._node.am.actors[sink_id]._learn.set_burn(burn_id, [r for r in app.actor_placement[burn_id] if (app.runtime_cpu_total[r] >= app.cost_runtime_cpu.get(burn_id, 0) and (app.runtime_cpu_total[r] > 50))])
+        self._node.am.actors[sink_id]._learn.set_burn(burn_id, app.cost_runtime_cpu.get(burn_id, 0), [r for r in app.actor_placement[burn_id] if (app.runtime_cpu_total[r] >= app.cost_runtime_cpu.get(burn_id, 0) and (app.runtime_cpu_total[r] > 50))], app.runtime_cpu_total)
 
 class FarseeingApp():
     def __init__(self, app_id, actor_id, state_info, trigger_timestamps):
