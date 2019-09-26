@@ -18,7 +18,7 @@ class EwLearning(object):
         self.K = _conf.get("learn", "K") or 5
         self.eps = _conf.get("learn", "eps") or 0
         self.f_max = _conf.get("learn", "f_max") or 10
-        self.lamb = _conf.get("learn", "lambda") or 0.5
+        self.lamb = _conf.get("learn", "lambda") or 0
         self.x = {} # prob
         self.y = {} # feedback
         self.k = [] # runtimes
