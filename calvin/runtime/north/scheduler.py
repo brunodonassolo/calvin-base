@@ -175,8 +175,11 @@ class BaseScheduler(object):
                 del self._cooldown[runtime]
 
         if self.reconfig.is_learn():
+            # update CPU resources more frequently
+            for actor_id in self.actor_mgr.list_actors():
+                if self.actor_mgr.actors[actor_id]._type == "test.Sink":
+                    self._update_runtimes_info(self.actor_mgr.actors[actor_id])
             for actor in self.actor_mgr.migratable_actors():
-                self._update_runtimes_info(actor)
                 if actor._app_id in self._cooldown:
                     _log.info("EW learn: app_id=%s in cooldown since=%f time=%f" % (actor._app_id, self._cooldown[actor._app_id], time.time()))
                     continue

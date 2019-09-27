@@ -245,6 +245,12 @@ class CalvinConfig(object):
                         "module": "regexp.PyRegexp",
                     }
                 }
+            },
+            'learn': {
+                "K": 5,
+                "epsilon": 0.0,
+                "f_max": 10.0,
+                "lambda": 1.0
             }
         }
         return default

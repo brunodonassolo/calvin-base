@@ -15,10 +15,10 @@ class EwLearning(object):
     """ Exponential Weights Learning """
 
     def __init__(self, app_id):
-        self.K = _conf.get("learn", "K") or 5
-        self.eps = _conf.get("learn", "eps") or 0
-        self.f_max = _conf.get("learn", "f_max") or 10
-        self.lamb = _conf.get("learn", "lambda") or 0
+        self.K = _conf.get("learn", "K")
+        self.eps = _conf.get("learn", "epsilon")
+        self.f_max = _conf.get("learn", "f_max")
+        self.lamb = _conf.get("learn", "lambda")
         self.x = {} # prob
         self.y = {} # feedback
         self.k = [] # runtimes
@@ -57,10 +57,10 @@ class EwLearning(object):
         self.y = state.get('y', {})
         self.count = state.get('count', {})
         self.k = state.get('k', [])
-        self.K = state.get('K', _conf.get("learn", "K") or 5)
+        self.K = state.get('K', _conf.get("learn", "K"))
         self.algo = state.get('algo', _conf.get("global", "reconfig_algorithm"))
-        self.eps = state.get('eps', _conf.get("learn", "eps") or 0)
-        self.f_max = state.get('f_max', _conf.get("learn", "f_max") or 10)
+        self.eps = state.get('eps', _conf.get("learn", "epsilon"))
+        self.f_max = state.get('f_max', _conf.get("learn", "f_max"))
         self.t = state.get('t', 0)
         self.burn_id = state.get('burn_id', None)
         self.burn_mips = state.get('burn_mips', 0)
@@ -96,7 +96,7 @@ class EwLearning(object):
         v_obs = { i : 0 if i != self.burn_runtime else ((f_max - elapsed_time)/(f_max))*(1/self.x[self.burn_runtime]) for i in self.k }
         v_est = { i : self.estimator(i) for i in self.k }
         v = { i : self.lamb*v_obs[i] + (1 - self.lamb)*v_est[i] for i in self.k }
-        _log.info("EW learning: Calculating v: app_id=%s t=%d lambda=%f v_obs=%s v_est=%s" % (self.app_id, self.t, self.lamb, str(v_obs), str(v_est)))
+        _log.info("EW learning: Calculating v: app_id=%s t=%d lambda=%f v_obs=%s v_est=%s burn_mips=%f cpu_available=%s" % (self.app_id, self.t, self.lamb, str(v_obs), str(v_est), self.burn_mips, str(self.runtime_cpu)))
         return v
 
     def set_feedback(self, elapsed_time):
