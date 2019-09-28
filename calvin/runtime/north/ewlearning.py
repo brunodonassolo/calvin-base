@@ -80,21 +80,24 @@ class EwLearning(object):
         self.x = { i : 0 for i in self.k }
         self.count = { i : 0 for i in self.k }
 
-    def estimator(self, x):
-        if x == self.burn_runtime:
-            return 0
-        if self.burn_mips > self.runtime_cpu[x]:
-            return ((self.f_max - POOR_ELAPSED)/(self.f_max))*(1/self.x[self.burn_runtime])
-        else:
-            return ((self.f_max - GOOD_ELAPSED)/(self.f_max))*(1/self.x[self.burn_runtime])
-
-    def _get_vector_v(self, elapsed_time):
+    def calculate_v(self, elapsed_time, burn_runtime):
         f_max = self.f_max
         if elapsed_time > f_max:
             _log.warning("EW learning: elapsed_time=%f greater than f_max=%f" % (elapsed_time, f_max))
             f_max = elapsed_time
-        v_obs = { i : 0 if i != self.burn_runtime else ((f_max - elapsed_time)/(f_max))*(1/self.x[self.burn_runtime]) for i in self.k }
-        v_est = { i : self.estimator(i) for i in self.k }
+        return ((f_max - elapsed_time)/(f_max))*(1/self.x[burn_runtime])
+
+    def estimator(self, x, elapsed_time):
+        if x == self.burn_runtime:
+            return self.calculate_v(elapsed_time, x)
+        if self.burn_mips > self.runtime_cpu[x]:
+            return self.calculate_v(POOR_ELAPSED, x)
+        else:
+            return self.calculate_v(GOOD_ELAPSED, x)
+
+    def _get_vector_v(self, elapsed_time):
+        v_obs = { i : 0 if i != self.burn_runtime else self.calculate_v(elapsed_time, i) for i in self.k }
+        v_est = { i : self.estimator(i, elapsed_time) for i in self.k }
         v = { i : self.lamb*v_obs[i] + (1 - self.lamb)*v_est[i] for i in self.k }
         _log.info("EW learning: Calculating v: app_id=%s t=%d lambda=%f v_obs=%s v_est=%s burn_mips=%f cpu_available=%s" % (self.app_id, self.t, self.lamb, str(v_obs), str(v_est), self.burn_mips, str(self.runtime_cpu)))
         return v
