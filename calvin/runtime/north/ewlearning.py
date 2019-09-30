@@ -46,6 +46,7 @@ class EwLearning(object):
         state['count'] = self.count
         state['eps'] = self.eps
         state['f_max'] = self.f_max
+        state['lamb'] = self.lamb
         state['burn_id'] = self.burn_id
         state['burn_mips'] = self.burn_mips
         state['burn_runtime'] = self.burn_runtime
@@ -61,6 +62,7 @@ class EwLearning(object):
         self.algo = state.get('algo', _conf.get("global", "reconfig_algorithm"))
         self.eps = state.get('eps', _conf.get("learn", "epsilon"))
         self.f_max = state.get('f_max', _conf.get("learn", "f_max"))
+        self.lamb = state.get('lamb', _conf.get("learn", "lambda"))
         self.t = state.get('t', 0)
         self.burn_id = state.get('burn_id', None)
         self.burn_mips = state.get('burn_mips', 0)
