@@ -252,7 +252,15 @@ class ReconfigAlgos():
                     "fake_centralized": False,
                     "centralized": False,
                     "learn": True
-                    } # learn
+                    }, # learn bandit
+                "app_learn_v1": {
+                    "greedy": False,
+                    "lazyUpdate": False,
+                    "random": -1,
+                    "fake_centralized": False,
+                    "centralized": False,
+                    "learn": True
+                    } # learn semi-bandit
                 }
 
     def is_fake_centralized(self):
