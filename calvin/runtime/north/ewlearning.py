@@ -8,8 +8,9 @@ import calvin.requests.calvinresponse as response
 _conf = calvinconfig.get()
 _log = calvinlogger.get_logger(__name__)
 
-POOR_ELAPSED=3.0
+POOR_ELAPSED=10.0
 GOOD_ELAPSED=0.5
+TOLERANCE=1.2
 
 class EwLearning(object):
     """ Exponential Weights Learning """
@@ -28,7 +29,8 @@ class EwLearning(object):
         self.burn_runtime = None
         self.burn_mips = 0
         self.app_id = app_id
-        self.runtime_cpu = {}
+        self.runtime_cpu_avail = {}
+        self.runtime_cpu_total = {}
         self.algo = _conf.get("global", "reconfig_algorithm")
 
     def __str__(self):
@@ -50,6 +52,8 @@ class EwLearning(object):
         state['burn_id'] = self.burn_id
         state['burn_mips'] = self.burn_mips
         state['burn_runtime'] = self.burn_runtime
+        state['runtime_cpu_avail'] = self.runtime_cpu_avail
+        state['runtime_cpu_total'] = self.runtime_cpu_total
         state['app_id'] = self.app_id
         return state
 
@@ -68,6 +72,8 @@ class EwLearning(object):
         self.burn_mips = state.get('burn_mips', 0)
         self.burn_runtime = state.get('burn_runtime', None)
         self.app_id = state.get('app_id', None)
+        self.runtime_cpu_avail = state.get('runtime_cpu_avail', {})
+        self.runtime_cpu_total = state.get('runtime_cpu_total', {})
 
     def set_burn(self, burn_id, burn_mips, possible_runtimes, runtime_cpu_total):
         _log.info("EW learn: app_id=%s burn_id=%s burn_mips=%f, possible runtimes init=%s" % (self.app_id, burn_id, burn_mips, str(possible_runtimes)))
@@ -76,7 +82,8 @@ class EwLearning(object):
         self.K = min(len(possible_runtimes), self.K)
         self.k = random.sample(possible_runtimes, k=self.K)
         for r in self.k:
-            self.runtime_cpu[r] = runtime_cpu_total.get(r, 10000) # high value to avoid filtering
+            self.runtime_cpu_avail[r] = runtime_cpu_total.get(r, 10000) # high value to avoid filtering
+            self.runtime_cpu_total[r] = runtime_cpu_total.get(r, 0)
 
         self.y = { i : 0 for i in self.k }
         self.x = { i : 0 for i in self.k }
@@ -93,12 +100,19 @@ class EwLearning(object):
             return (f_max - elapsed_time)/(f_max)
 
     def estimator(self, x, elapsed_time):
-        if x == self.burn_runtime:
-            return self.calculate_v(elapsed_time, x, False)
-        if self.burn_mips > self.runtime_cpu[x]:
+        used_est = (self.runtime_cpu_total[x] - self.runtime_cpu_avail[x]) + self.burn_mips # current use + this app
+        if used_est < self.runtime_cpu_total[x]:
+            return self.calculate_v(GOOD_ELAPSED, x, False)
+        elif used_est > self.runtime_cpu_total[x]*TOLERANCE:
             return self.calculate_v(POOR_ELAPSED, x, False)
         else:
-            return self.calculate_v(GOOD_ELAPSED, x, False)
+            # a = x2 - x1/y2 - y1
+            a = (POOR_ELAPSED - GOOD_ELAPSED)/(TOLERANCE*self.runtime_cpu_total[x] - self.runtime_cpu_total[x])
+            # b = y - ax
+            b = GOOD_ELAPSED - a*self.runtime_cpu_total[x]
+            # y = ax + b
+            elapsed = a*used_est + b
+            return self.calculate_v(elapsed, x, False)
 
     def _get_vector_v(self, elapsed_time):
         v_obs = { i : 0 if i != self.burn_runtime else self.calculate_v(elapsed_time, i) for i in self.k }
@@ -108,7 +122,7 @@ class EwLearning(object):
             v = { i : self.lamb*v_obs[i] + (1 - self.lamb)*v_est[i] for i in self.k }
         else:
             v = v_obs
-        _log.info("EW learning: Calculating v: app_id=%s t=%d lambda=%f v_obs=%s v_est=%s burn_mips=%f cpu_available=%s algo=%s" % (self.app_id, self.t, self.lamb, str(v_obs), str(v_est), self.burn_mips, str(self.runtime_cpu), self.algo))
+        _log.info("EW learning: Calculating v: app_id=%s t=%d lambda=%f v_obs=%s v_est=%s burn_mips=%f cpu_available=%s algo=%s" % (self.app_id, self.t, self.lamb, str(v_obs), str(v_est), self.burn_mips, str(self.runtime_cpu_avail), self.algo))
         return v
 
     def set_feedback(self, elapsed_time):
@@ -145,4 +159,4 @@ class EwLearning(object):
         if not value or value == response.NOT_FOUND:
             value = 0
 
-        self.runtime_cpu[key] = value
+        self.runtime_cpu_avail[key] = value
