@@ -101,6 +101,8 @@ class EwLearning(object):
 
     def estimator(self, x, elapsed_time):
         used_est = (self.runtime_cpu_total[x] - self.runtime_cpu_avail[x]) + self.burn_mips # current use + this app
+        if x == self.burn_runtime:
+            used_est = (self.runtime_cpu_total[x] - self.runtime_cpu_avail[x]) # considers that CPU usage is updated if app is running on the runtime
         if used_est < self.runtime_cpu_total[x]:
             return self.calculate_v(GOOD_ELAPSED, x, False)
         elif used_est > self.runtime_cpu_total[x]*TOLERANCE:
