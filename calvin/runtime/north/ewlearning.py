@@ -132,7 +132,7 @@ class EwLearning(object):
             return
 
         v = self._get_vector_v(elapsed_time)
-        step = .3/math.sqrt(self.t)
+        step = .64/math.sqrt(self.t)
         self.y = { i : j + step*v[i] for i,j in self.y.iteritems() }
         _log.info("EW learning: Setting feedback: app_id=%s t=%d f=%f v=%s new y=%s" % (self.app_id, self.t, elapsed_time, str(v), str(self.y)))
         #print "fffffffffffffff"
