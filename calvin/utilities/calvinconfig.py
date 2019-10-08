@@ -250,7 +250,8 @@ class CalvinConfig(object):
                 "K": 5,
                 "epsilon": 0.0,
                 "f_max": 10.0,
-                "lambda": 1.0
+                "lambda": 1.0,
+                "learn_rate": 0.1
             }
         }
         return default

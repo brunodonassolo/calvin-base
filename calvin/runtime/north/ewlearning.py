@@ -8,7 +8,6 @@ import calvin.requests.calvinresponse as response
 _conf = calvinconfig.get()
 _log = calvinlogger.get_logger(__name__)
 
-POOR_ELAPSED=10.0
 GOOD_ELAPSED=0.5
 TOLERANCE=1.2
 
@@ -24,6 +23,7 @@ class EwLearning(object):
         self.y = {} # feedback
         self.k = [] # runtimes
         self.t = 0  # time step
+        self.learn_rate = _conf.get("learn", "learn_rate")
         self.count = {} # count number of times each runtime was selected
         self.burn_id = None
         self.burn_runtime = None
@@ -48,6 +48,7 @@ class EwLearning(object):
         state['count'] = self.count
         state['eps'] = self.eps
         state['f_max'] = self.f_max
+        state['learn_rate'] = self.learn_rate
         state['lamb'] = self.lamb
         state['burn_id'] = self.burn_id
         state['burn_mips'] = self.burn_mips
@@ -67,6 +68,7 @@ class EwLearning(object):
         self.eps = state.get('eps', _conf.get("learn", "epsilon"))
         self.f_max = state.get('f_max', _conf.get("learn", "f_max"))
         self.lamb = state.get('lamb', _conf.get("learn", "lambda"))
+        self.learn_rate = state.get('learn_rate', _conf.get("learn", "learn_rate"))
         self.t = state.get('t', 0)
         self.burn_id = state.get('burn_id', None)
         self.burn_mips = state.get('burn_mips', 0)
@@ -106,10 +108,10 @@ class EwLearning(object):
         if used_est < self.runtime_cpu_total[x]:
             return self.calculate_v(GOOD_ELAPSED, x, False)
         elif used_est > self.runtime_cpu_total[x]*TOLERANCE:
-            return self.calculate_v(POOR_ELAPSED, x, False)
+            return self.calculate_v(self.f_max, x, False)
         else:
             # a = x2 - x1/y2 - y1
-            a = (POOR_ELAPSED - GOOD_ELAPSED)/(TOLERANCE*self.runtime_cpu_total[x] - self.runtime_cpu_total[x])
+            a = (self.f_max - GOOD_ELAPSED)/(TOLERANCE*self.runtime_cpu_total[x] - self.runtime_cpu_total[x])
             # b = y - ax
             b = GOOD_ELAPSED - a*self.runtime_cpu_total[x]
             # y = ax + b
@@ -132,9 +134,9 @@ class EwLearning(object):
             return
 
         v = self._get_vector_v(elapsed_time)
-        step = .3/math.sqrt(self.t)
+        step = self.learn_rate/math.sqrt(self.t)
         self.y = { i : j + step*v[i] for i,j in self.y.iteritems() }
-        _log.info("EW learning: Setting feedback: app_id=%s t=%d f=%f v=%s new y=%s" % (self.app_id, self.t, elapsed_time, str(v), str(self.y)))
+        _log.info("EW learning: Setting feedback: app_id=%s t=%d f=%f v=%s new y=%s learn_rate=%f step=%f" % (self.app_id, self.t, elapsed_time, str(v), str(self.y), self.learn_rate, step))
         #print "fffffffffffffff"
         #print("EW learning: Setting feedback: app_id=%s t=%d f=%f v=%s new y=%s" % (self.app_id, self.t, elapsed_time, str(v), str(self.y)))
 
