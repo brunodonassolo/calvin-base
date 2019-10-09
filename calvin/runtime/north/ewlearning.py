@@ -120,12 +120,8 @@ class EwLearning(object):
 
     def _get_vector_v(self, elapsed_time):
         v_obs = { i : 0 if i != self.burn_runtime else self.calculate_v(elapsed_time, i) for i in self.k }
-        v_est = {}
-        if self.algo == "app_learn_v1": #semi bandit
-            v_est = { i : self.estimator(i, elapsed_time) for i in self.k }
-            v = { i : self.lamb*v_obs[i] + (1 - self.lamb)*v_est[i] for i in self.k }
-        else:
-            v = v_obs
+        v_est = { i : self.estimator(i, elapsed_time) for i in self.k }
+        v = { i : self.lamb*v_obs[i] + (1 - self.lamb)*v_est[i] for i in self.k }
         _log.info("EW learning: Calculating v: app_id=%s t=%d lambda=%f v_obs=%s v_est=%s burn_mips=%f cpu_available=%s algo=%s" % (self.app_id, self.t, self.lamb, str(v_obs), str(v_est), self.burn_mips, str(self.runtime_cpu_avail), self.algo))
         return v
 
@@ -141,13 +137,15 @@ class EwLearning(object):
         #print("EW learning: Setting feedback: app_id=%s t=%d f=%f v=%s new y=%s" % (self.app_id, self.t, elapsed_time, str(v), str(self.y)))
 
 
-    def choose_k(self):
+    def choose_k(self, need_migration):
         for k_t, y_t in self.y.iteritems():
             total = sum([math.exp(j - y_t) for i,j in self.y.iteritems()])
             self.x[k_t] = (1 - self.eps)*(1/(total)) + self.eps*1/self.K
         self.t += 1
         prob = [ self.x[i] for i in self.k ]
-        burn_runtime = numpy.random.choice(self.k, p=prob)
+        burn_runtime = self.burn_runtime
+        if need_migration or burn_runtime == None:
+            burn_runtime = numpy.random.choice(self.k, p=prob)
         _log.info("EW learning: Choosing k: app_id=%s t=%d x=%s burn_id=%s burn_runtime=%s" % (self.app_id, self.t, str(self.x), self.burn_id, burn_runtime))
         self.count[burn_runtime] += 1
         if burn_runtime != self.burn_runtime:

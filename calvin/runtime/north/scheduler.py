@@ -184,7 +184,11 @@ class BaseScheduler(object):
                     _log.info("EW learn: app_id=%s in cooldown since=%f time=%f" % (actor._app_id, self._cooldown[actor._app_id], time.time()))
                     continue
                 actor._learn.set_feedback(actor._elapsed_time)
-                burn_id, burn_runtime = actor._learn.choose_k()
+                need_migrate = True
+                if algo == "app_learn_v2":
+                    need_migrate = (actor.better_migrate == Actor.RECONF_STATUS.REQUESTED)
+                burn_id, burn_runtime = actor._learn.choose_k(need_migrate)
+
                 _log.info("EW learn: app_id=%s burn_id=%s runtime=%s" % (actor._app_id, burn_id, burn_runtime))
                 _log.info("EW learn\n%s" % actor._learn)
                 #print("EW learn\n--------------\n%s\n----------------" % actor._learn)
