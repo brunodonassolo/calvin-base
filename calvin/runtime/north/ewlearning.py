@@ -212,6 +212,7 @@ class EwLearning(object):
             return
 
         v = self._get_vector_v(elapsed_time)
+        v[self.burn_runtime] = self.calculate_v(elapsed_time, self.burn_runtime, bandit=False)
         self.trial.update_v(v, self.burn_runtime)
         step = self.learn_rate/math.sqrt(self.t)
         self.y = { i : j + step*v[i] for i,j in self.y.iteritems() }
