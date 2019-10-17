@@ -2,6 +2,7 @@ import random
 import math
 import numpy
 from calvin.utilities import calvinconfig
+from calvin.utilities.utils import enum
 from calvin.utilities import calvinlogger
 import calvin.requests.calvinresponse as response
 
@@ -10,6 +11,86 @@ _log = calvinlogger.get_logger(__name__)
 
 GOOD_ELAPSED=0.5
 TOLERANCE=1.2
+
+class TrialAndError(object):
+    class FSM(object):
+
+        def __init__(self, states, initial, transitions, hooks=None, allow_invalid_transitions=False):
+            self.states = states
+            self._state = initial
+            self.transitions = transitions
+            self.hooks = hooks or {}
+            self.allow_invalid_transitions = allow_invalid_transitions
+
+        def state(self):
+            return self._state
+
+        def transition_to(self, new_state):
+            if new_state in self.transitions[self._state]:
+                hook = self.hooks.get((self._state, new_state), None)
+                if hook:
+                    hook()
+                self._state = new_state
+            else:
+                msg = "Invalid transition %s -> %s" % (self, self.printable(new_state))
+                if self.allow_invalid_transitions:
+                    _log.warning("ALLOWING " + msg)
+                    self._state = new_state
+                else:
+                    raise Exception(msg)
+
+        def printable(self, state):
+            return self.states.reverse_mapping[state]
+
+        def __str__(self):
+            return self.printable(self._state)
+
+    STATE = enum('CONTENT', 'DISCONTENT', 'WATCHFUL')
+
+    VALID_TRANSITIONS = {
+        STATE.CONTENT    : [STATE.CONTENT, STATE.WATCHFUL, STATE.DISCONTENT],
+        STATE.DISCONTENT : [STATE.CONTENT, STATE.DISCONTENT],
+        STATE.WATCHFUL   : [STATE.CONTENT, STATE.WATCHFUL, STATE.DISCONTENT],
+    }
+
+    def __init__(self, enabled=True):
+        self.fsm = TrialAndError.FSM(TrialAndError.STATE, TrialAndError.STATE.CONTENT, TrialAndError.VALID_TRANSITIONS)
+        self.current_runtime = None
+        self.enabled = enabled
+
+    def CONTENT(self, v, burn_runtime):
+        best = max(v, key= lambda x: v.get(x))
+        _log.info("Trial and error: state: content, current_runtime=%s, best=%s" % (self.current_runtime, best))
+        if best != self.current_runtime:
+            self.fsm.transition_to(TrialAndError.STATE.WATCHFUL)
+
+    def DISCONTENT(self, v, burn_runtime):
+        _log.info("Trial and error: state: discontent, current_runtime=%s, new=%s" % (self.current_runtime, burn_runtime))
+        self.current_runtime = burn_runtime
+        self.fsm.transition_to(TrialAndError.STATE.CONTENT)
+
+    def WATCHFUL(self, v, burn_runtime):
+        best = max(v, key= lambda x: v.get(x))
+        _log.info("Trial and error: state: watchful, current_runtime=%s, best=%s" % (self.current_runtime, best))
+        if best == self.current_runtime:
+            self.fsm.transition_to(TrialAndError.STATE.CONTENT)
+        else:
+            self.fsm.transition_to(TrialAndError.STATE.DISCONTENT)
+
+    def update_v(self, v, burn_runtime):
+        if not self.enabled:
+            return
+        method = getattr(self, str(self.fsm), lambda : _log.error("Invalid state transition"))
+        method(v, burn_runtime)
+
+
+    def should_migrate(self):
+        return self.fsm.state() == TrialAndError.STATE.DISCONTENT
+
+    def set_discontent(self):
+        if not self.enabled:
+            return
+        self.fsm.transition_to(TrialAndError.STATE.DISCONTENT)
 
 class EwLearning(object):
     """ Exponential Weights Learning """
@@ -32,6 +113,7 @@ class EwLearning(object):
         self.runtime_cpu_avail = {}
         self.runtime_cpu_total = {}
         self.algo = _conf.get("global", "reconfig_algorithm")
+        self.trial = TrialAndError(self.algo == "app_learn_v3")
 
     def __str__(self):
         return "x=%s y=%s k=%s burn_id=%s k_t=%s t=%d count=%s K=%d eps=%f f_max=%f lambda=%f" % (str(self.x), str(self.y), str(self.k), self.burn_id, self.burn_runtime, self.t, self.count, self.K, self.eps, self.f_max, self.lamb)
@@ -130,6 +212,7 @@ class EwLearning(object):
             return
 
         v = self._get_vector_v(elapsed_time)
+        self.trial.update_v(v, self.burn_runtime)
         step = self.learn_rate/math.sqrt(self.t)
         self.y = { i : j + step*v[i] for i,j in self.y.iteritems() }
         _log.info("EW learning: Setting feedback: app_id=%s t=%d f=%f v=%s new y=%s learn_rate=%f step=%f" % (self.app_id, self.t, elapsed_time, str(v), str(self.y), self.learn_rate, step))
@@ -144,8 +227,9 @@ class EwLearning(object):
         self.t += 1
         prob = [ self.x[i] for i in self.k ]
         burn_runtime = self.burn_runtime
-        if need_migration or burn_runtime == None:
+        if need_migration or burn_runtime == None or self.trial.should_migrate():
             burn_runtime = numpy.random.choice(self.k, p=prob)
+            self.trial.set_discontent()
         _log.info("EW learning: Choosing k: app_id=%s t=%d x=%s burn_id=%s burn_runtime=%s" % (self.app_id, self.t, str(self.x), self.burn_id, burn_runtime))
         self.count[burn_runtime] += 1
         if burn_runtime != self.burn_runtime:

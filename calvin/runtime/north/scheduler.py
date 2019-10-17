@@ -185,7 +185,7 @@ class BaseScheduler(object):
                     continue
                 actor._learn.set_feedback(actor._elapsed_time)
                 need_migrate = True
-                if algo == "app_learn_v2":
+                if self.reconfig.is_selective_migration():
                     need_migrate = (actor.better_migrate == Actor.RECONF_STATUS.REQUESTED)
                 burn_id, burn_runtime = actor._learn.choose_k(need_migrate)
 

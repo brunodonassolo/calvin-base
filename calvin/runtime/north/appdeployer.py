@@ -187,7 +187,8 @@ class ReconfigAlgos():
                     "random": 1,
                     "fake_centralized": False,
                     "centralized": False,
-                    "learn": False
+                    "learn": False,
+                    "sel_migrate": False
                     }, # cooldown
                 "app_greedy": {
                     "greedy": True,
@@ -195,7 +196,8 @@ class ReconfigAlgos():
                     "random": 1,
                     "fake_centralized": False,
                     "centralized": False,
-                    "learn": False
+                    "learn": False,
+                    "sel_migrate": False
                     }, # greedy
                 "app_v0": {
                     "greedy": True,
@@ -203,7 +205,8 @@ class ReconfigAlgos():
                     "random": 1,
                     "fake_centralized": False,
                     "centralized": False,
-                    "learn": False
+                    "learn": False,
+                    "sel_migrate": False
                     },    # lazy
                 "app_v1": {
                     "greedy": True,
@@ -211,7 +214,8 @@ class ReconfigAlgos():
                     "random": 1,
                     "fake_centralized": True,
                     "centralized": False,
-                    "learn": False
+                    "learn": False,
+                    "sel_migrate": False
                     },     # fake centralized
                 "app_central": {
                     "greedy": True,
@@ -219,7 +223,8 @@ class ReconfigAlgos():
                     "random": 1,
                     "fake_centralized": False,
                     "centralized": True,
-                    "learn": False
+                    "learn": False,
+                    "sel_migrate": False
                     }, # real centralized
                 "app_central_nogreedy": {
                     "greedy": False,
@@ -227,7 +232,8 @@ class ReconfigAlgos():
                     "random": 1,
                     "fake_centralized": False,
                     "centralized": True,
-                    "learn": False
+                    "learn": False,
+                    "sel_migrate": False
                     }, # real centralized
                 "app_farseeing": {
                     "greedy": False,
@@ -235,7 +241,8 @@ class ReconfigAlgos():
                     "random": 0,
                     "fake_centralized": False,
                     "centralized": False,
-                    "learn": False
+                    "learn": False,
+                    "sel_migrate": False
                     }, # farseeing
                 "app_none": {
                     "greedy": False,
@@ -243,7 +250,8 @@ class ReconfigAlgos():
                     "random": -1,
                     "fake_centralized": False,
                     "centralized": False,
-                    "learn": False
+                    "learn": False,
+                    "sel_migrate": False
                     }, # none
                 "app_learn_v0": {
                     "greedy": False,
@@ -251,7 +259,8 @@ class ReconfigAlgos():
                     "random": -1,
                     "fake_centralized": False,
                     "centralized": False,
-                    "learn": True
+                    "learn": True,
+                    "sel_migrate": False
                     }, # learn bandit
                 "app_learn_v1": {
                     "greedy": False,
@@ -259,7 +268,8 @@ class ReconfigAlgos():
                     "random": -1,
                     "fake_centralized": False,
                     "centralized": False,
-                    "learn": True
+                    "learn": True,
+                    "sel_migrate": False
                     }, # learn semi-bandit
                 "app_learn_v2": {
                     "greedy": False,
@@ -267,8 +277,18 @@ class ReconfigAlgos():
                     "random": -1,
                     "fake_centralized": False,
                     "centralized": False,
-                    "learn": True
-                    } # learn semi-bandit with selective migration
+                    "learn": True,
+                    "sel_migrate": True
+                    }, # learn semi-bandit with selective migration
+                "app_learn_v3": {
+                    "greedy": False,
+                    "lazyUpdate": False,
+                    "random": -1,
+                    "fake_centralized": False,
+                    "centralized": False,
+                    "learn": True,
+                    "sel_migrate": True
+                    } # learn with trial and error
                 }
 
     def is_fake_centralized(self):
@@ -310,6 +330,14 @@ class ReconfigAlgos():
         except KeyError:
             pass
         return learn
+
+    def is_selective_migration(self):
+        mig = False
+        try:
+            mig = self.algos[self.algo]["sel_migrate"]
+        except KeyError:
+            pass
+        return mig
 
     def get_random(self):
         number = 1
