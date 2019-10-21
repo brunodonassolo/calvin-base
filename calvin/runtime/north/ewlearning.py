@@ -212,11 +212,11 @@ class EwLearning(object):
             return
 
         v = self._get_vector_v(elapsed_time)
-        v[self.burn_runtime] = self.calculate_v(elapsed_time, self.burn_runtime, bandit=False)
-        self.trial.update_v(v, self.burn_runtime)
         step = self.learn_rate/math.sqrt(self.t)
         self.y = { i : j + step*v[i] for i,j in self.y.iteritems() }
         _log.info("EW learning: Setting feedback: app_id=%s t=%d f=%f v=%s new y=%s learn_rate=%f step=%f" % (self.app_id, self.t, elapsed_time, str(v), str(self.y), self.learn_rate, step))
+        v[self.burn_runtime] = self.calculate_v(elapsed_time, self.burn_runtime, bandit=False)
+        self.trial.update_v(v, self.burn_runtime)
         #print "fffffffffffffff"
         #print("EW learning: Setting feedback: app_id=%s t=%d f=%f v=%s new y=%s" % (self.app_id, self.t, elapsed_time, str(v), str(self.y)))
 
