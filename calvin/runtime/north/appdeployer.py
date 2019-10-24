@@ -260,7 +260,9 @@ class ReconfigAlgos():
                     "fake_centralized": False,
                     "centralized": False,
                     "learn": True,
-                    "sel_migrate": False
+                    "sel_migrate": False,
+                    "trialAndError": False,
+                    "estimator": "estimator"
                     }, # learn bandit
                 "app_learn_v1": {
                     "greedy": False,
@@ -269,7 +271,9 @@ class ReconfigAlgos():
                     "fake_centralized": False,
                     "centralized": False,
                     "learn": True,
-                    "sel_migrate": False
+                    "sel_migrate": False,
+                    "trialAndError": False,
+                    "estimator": "estimator"
                     }, # learn semi-bandit
                 "app_learn_v2": {
                     "greedy": False,
@@ -278,7 +282,9 @@ class ReconfigAlgos():
                     "fake_centralized": False,
                     "centralized": False,
                     "learn": True,
-                    "sel_migrate": True
+                    "sel_migrate": True,
+                    "trialAndError": False,
+                    "estimator": "estimator"
                     }, # learn semi-bandit with selective migration
                 "app_learn_v3": {
                     "greedy": False,
@@ -287,8 +293,21 @@ class ReconfigAlgos():
                     "fake_centralized": False,
                     "centralized": False,
                     "learn": True,
-                    "sel_migrate": True
-                    } # learn with trial and error
+                    "sel_migrate": True,
+                    "trialAndError": True,
+                    "estimator": "estimator"
+                    }, # learn with trial and error
+                "app_learn_v4": {
+                    "greedy": False,
+                    "lazyUpdate": False,
+                    "random": -1,
+                    "fake_centralized": False,
+                    "centralized": False,
+                    "learn": True,
+                    "sel_migrate": True,
+                    "trialAndError": True,
+                    "estimator": "estimator_v2"
+                    } # learn with trial and error and estimator_v2
                 }
 
     def is_fake_centralized(self):
@@ -339,6 +358,14 @@ class ReconfigAlgos():
             pass
         return mig
 
+    def is_trial_and_error(self):
+        trial = False
+        try:
+            trial = self.algos[self.algo]["trialAndError"]
+        except KeyError:
+            pass
+        return trial
+
     def get_random(self):
         number = 1
         try:
@@ -346,6 +373,14 @@ class ReconfigAlgos():
         except KeyError:
             pass
         return number
+
+    def get_estimator(self):
+        est = "estimator"
+        try:
+            est = self.algos[self.algo]["estimator"]
+        except KeyError:
+            pass
+        return est
 
 class AppDeployer(object):
 

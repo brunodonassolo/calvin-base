@@ -5,6 +5,7 @@ from calvin.utilities import calvinconfig
 from calvin.utilities.utils import enum
 from calvin.utilities import calvinlogger
 import calvin.requests.calvinresponse as response
+from calvin.runtime.north.appdeployer import ReconfigAlgos
 
 _conf = calvinconfig.get()
 _log = calvinlogger.get_logger(__name__)
@@ -113,7 +114,8 @@ class EwLearning(object):
         self.runtime_cpu_avail = {}
         self.runtime_cpu_total = {}
         self.algo = _conf.get("global", "reconfig_algorithm")
-        self.trial = TrialAndError(self.algo == "app_learn_v3")
+        self.reconfig = ReconfigAlgos()
+        self.trial = TrialAndError(self.reconfig.is_trial_and_error())
 
     def __str__(self):
         return "x=%s y=%s k=%s burn_id=%s k_t=%s t=%d count=%s K=%d eps=%f f_max=%f lambda=%f" % (str(self.x), str(self.y), str(self.k), self.burn_id, self.burn_runtime, self.t, self.count, self.K, self.eps, self.f_max, self.lamb)
@@ -200,9 +202,27 @@ class EwLearning(object):
             elapsed = a*used_est + b
             return self.calculate_v(elapsed, x, False)
 
+    def estimator_v2(self, x, elapsed_time):
+        used_est = (self.runtime_cpu_total[x] - self.runtime_cpu_avail[x]) + self.burn_mips # current use + this app
+        if x == self.burn_runtime:
+            used_est = (self.runtime_cpu_total[x] - self.runtime_cpu_avail[x]) # considers that CPU usage is updated if app is running on the runtime
+        if used_est < self.runtime_cpu_total[x]:
+            return self.calculate_v(0.25 + self.burn_mips/self.runtime_cpu_avail[x], x, False)
+        elif used_est > self.runtime_cpu_total[x]*TOLERANCE:
+            return self.calculate_v(self.f_max, x, False)
+        else:
+            # a = x2 - x1/y2 - y1
+            a = (self.f_max - GOOD_ELAPSED)/(TOLERANCE*self.runtime_cpu_total[x] - self.runtime_cpu_total[x])
+            # b = y - ax
+            b = GOOD_ELAPSED - a*self.runtime_cpu_total[x]
+            # y = ax + b
+            elapsed = a*used_est + b
+            return self.calculate_v(elapsed, x, False)
+
     def _get_vector_v(self, elapsed_time):
         v_obs = { i : 0 if i != self.burn_runtime else self.calculate_v(elapsed_time, i) for i in self.k }
-        v_est = { i : self.estimator(i, elapsed_time) for i in self.k }
+        method = getattr(self, str(self.reconfig.get_estimator()))
+        v_est = { i : method(i, elapsed_time) for i in self.k }
         v = { i : self.lamb*v_obs[i] + (1 - self.lamb)*v_est[i] for i in self.k }
         _log.info("EW learning: Calculating v: app_id=%s t=%d lambda=%f v_obs=%s v_est=%s burn_mips=%f cpu_available=%s algo=%s" % (self.app_id, self.t, self.lamb, str(v_obs), str(v_est), self.burn_mips, str(self.runtime_cpu_avail), self.algo))
         return v
