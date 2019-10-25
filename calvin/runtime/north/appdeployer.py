@@ -4,6 +4,7 @@ import collections
 import copy
 import random
 import heapq
+import operator
 from heapq import heappush, heapify, heappop
 from calvin.runtime.south.async import async
 from calvin.utilities.calvin_callback import CalvinCB
@@ -295,6 +296,7 @@ class ReconfigAlgos():
                     "learn": True,
                     "sel_migrate": True,
                     "trialAndError": True,
+                    "trialAndErrorVersion": "TrialAndError",
                     "estimator": "estimator"
                     }, # learn with trial and error
                 "app_learn_v4": {
@@ -306,8 +308,21 @@ class ReconfigAlgos():
                     "learn": True,
                     "sel_migrate": True,
                     "trialAndError": True,
+                    "trialAndErrorVersion": "TrialAndError",
                     "estimator": "estimator_v2"
-                    } # learn with trial and error and estimator_v2
+                    }, # learn with trial and error and estimator_v2
+                "app_learn_v5": {
+                    "greedy": False,
+                    "lazyUpdate": False,
+                    "random": -1,
+                    "fake_centralized": False,
+                    "centralized": False,
+                    "learn": True,
+                    "sel_migrate": True,
+                    "trialAndError": True,
+                    "trialAndErrorVersion": "NiceTrialAndError",
+                    "estimator": "estimator_v2"
+                    } # learn with nice trial and error and estimator_v2
                 }
 
     def is_fake_centralized(self):
@@ -365,6 +380,14 @@ class ReconfigAlgos():
         except KeyError:
             pass
         return trial
+
+    def get_trial_and_error_version(self):
+        ver = "TrialAndError"
+        try:
+            ver = self.algos[self.algo]["trialAndErrorVersion"]
+        except KeyError:
+            pass
+        return ver
 
     def get_random(self):
         number = 1
@@ -2094,7 +2117,10 @@ class AppDeployer(object):
 
         self.update_cache_cost_actor(app, burn_id)
         # FIXME: maybe filter memory too
-        self._node.am.actors[sink_id]._learn.set_burn(burn_id, app.cost_runtime_cpu.get(burn_id, 0), [r for r in app.actor_placement[burn_id] if (app.runtime_cpu_total[r] >= app.cost_runtime_cpu.get(burn_id, 0) and (app.runtime_cpu_total[r] > 50))], app.runtime_cpu_total)
+        dump_runtime = None
+        if (self.reconfig.get_trial_and_error_version() == "NiceTrialAndError"):
+            dump_runtime = max(app.runtime_cpu_total.iteritems(), key=operator.itemgetter(1))[0]
+        self._node.am.actors[sink_id]._learn.set_burn(burn_id, app.cost_runtime_cpu.get(burn_id, 0), [r for r in app.actor_placement[burn_id] if (app.runtime_cpu_total[r] >= app.cost_runtime_cpu.get(burn_id, 0) and (app.runtime_cpu_total[r] > 50) and (r != dump_runtime))], app.runtime_cpu_total, dump_runtime)
 
 class FarseeingApp():
     def __init__(self, app_id, actor_id, state_info, trigger_timestamps):

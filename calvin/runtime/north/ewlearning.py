@@ -1,6 +1,9 @@
 import random
 import math
 import numpy
+import sys
+import time
+import collections
 from calvin.utilities import calvinconfig
 from calvin.utilities.utils import enum
 from calvin.utilities import calvinlogger
@@ -13,7 +16,7 @@ _log = calvinlogger.get_logger(__name__)
 GOOD_ELAPSED=0.5
 TOLERANCE=1.2
 
-class TrialAndError(object):
+class TrialAndErrorBase(object):
     class FSM(object):
 
         def __init__(self, states, initial, transitions, hooks=None, allow_invalid_transitions=False):
@@ -46,6 +49,28 @@ class TrialAndError(object):
         def __str__(self):
             return self.printable(self._state)
 
+
+    def __init__(self, enabled=True):
+        self.enabled = enabled
+
+    def update_v(self, v, burn_runtime):
+        if not self.enabled:
+            return
+        method = getattr(self, str(self.fsm), lambda : _log.error("Invalid state transition"))
+        method(v, burn_runtime)
+
+    def should_migrate(self):
+        raise Exception("not implemented")
+
+    def set_discontent(self):
+        raise Exception("not implemented")
+
+    def has_given_up(self):
+        raise Exception("not implemented")
+
+
+class TrialAndError(TrialAndErrorBase):
+
     STATE = enum('CONTENT', 'DISCONTENT', 'WATCHFUL')
 
     VALID_TRANSITIONS = {
@@ -54,11 +79,12 @@ class TrialAndError(object):
         STATE.WATCHFUL   : [STATE.CONTENT, STATE.WATCHFUL, STATE.DISCONTENT],
     }
 
-    def __init__(self, enabled=True):
-        self.fsm = TrialAndError.FSM(TrialAndError.STATE, TrialAndError.STATE.CONTENT, TrialAndError.VALID_TRANSITIONS)
+    def __init__(self, enabled=True, n_watch = 10):
+        super(TrialAndError, self).__init__(enabled)
+        self.fsm = TrialAndErrorBase.FSM(TrialAndError.STATE, TrialAndError.STATE.CONTENT, TrialAndError.VALID_TRANSITIONS)
         self.current_runtime = None
-        self.enabled = enabled
         self.count = 0
+        self.n_watch = n_watch
 
     def CONTENT(self, v, burn_runtime):
         best = max(v, key= lambda x: v.get(x))
@@ -78,15 +104,8 @@ class TrialAndError(object):
         _log.info("Trial and error: state: watchful, current_runtime=%s, best=%s" % (self.current_runtime, best))
         if best == self.current_runtime:
             self.fsm.transition_to(TrialAndError.STATE.CONTENT)
-        elif self.count >= 10:
+        elif self.count >= self.n_watch:
             self.fsm.transition_to(TrialAndError.STATE.DISCONTENT)
-
-    def update_v(self, v, burn_runtime):
-        if not self.enabled:
-            return
-        method = getattr(self, str(self.fsm), lambda : _log.error("Invalid state transition"))
-        method(v, burn_runtime)
-
 
     def should_migrate(self):
         return self.fsm.state() == TrialAndError.STATE.DISCONTENT
@@ -95,6 +114,74 @@ class TrialAndError(object):
         if not self.enabled:
             return
         self.fsm.transition_to(TrialAndError.STATE.DISCONTENT)
+
+    def has_given_up(self):
+        return False
+
+class NiceTrialAndError(TrialAndErrorBase):
+
+    STATE = enum('CONTENT', 'DISCONTENT', 'WATCHFUL', 'GIVEUP')
+
+    VALID_TRANSITIONS = {
+        STATE.CONTENT    : [STATE.CONTENT, STATE.WATCHFUL, STATE.DISCONTENT],
+        STATE.DISCONTENT : [STATE.CONTENT, STATE.DISCONTENT, STATE.GIVEUP],
+        STATE.WATCHFUL   : [STATE.CONTENT, STATE.WATCHFUL, STATE.DISCONTENT],
+        STATE.GIVEUP     : [STATE.CONTENT, STATE.GIVEUP],
+    }
+
+    def __init__(self, enabled=True, n_watch = 5, n_giveup=3, time_giveup=300):
+        super(NiceTrialAndError, self).__init__(enabled)
+        self.fsm = TrialAndErrorBase.FSM(NiceTrialAndError.STATE, NiceTrialAndError.STATE.CONTENT, NiceTrialAndError.VALID_TRANSITIONS)
+        self.current_runtime = None
+        self.count = 0
+        self.n_giveup = n_giveup
+        self.time_giveup = time_giveup
+        self.init_giveup = 0
+        self.n_watch = n_watch
+        self.discontent_timestamps = collections.deque([0]*self.n_giveup, maxlen=self.n_giveup)
+
+    def CONTENT(self, v, burn_runtime):
+        best = max(v, key= lambda x: v.get(x))
+        self.count = 0
+        _log.info("Trial and error: state: content, current_runtime=%s, best=%s" % (self.current_runtime, best))
+        if best != self.current_runtime:
+            self.fsm.transition_to(NiceTrialAndError.STATE.WATCHFUL)
+
+    def DISCONTENT(self, v, burn_runtime):
+        _log.info("Trial and error: state: discontent, current_runtime=%s, new=%s" % (self.current_runtime, burn_runtime))
+        self.current_runtime = burn_runtime
+        self.discontent_timestamps.append(time.time())
+        if (self.discontent_timestamps[0] != 0 and (self.discontent_timestamps[-1] - self.discontent_timestamps[0]) < self.time_giveup):
+            self.init_giveup = time.time()
+            self.fsm.transition_to(NiceTrialAndError.STATE.GIVEUP)
+        else:
+            self.fsm.transition_to(NiceTrialAndError.STATE.CONTENT)
+
+    def WATCHFUL(self, v, burn_runtime):
+        self.count += 1
+        best = max(v, key= lambda x: v.get(x))
+        _log.info("Trial and error: state: watchful, current_runtime=%s, best=%s" % (self.current_runtime, best))
+        if best == self.current_runtime:
+            self.fsm.transition_to(NiceTrialAndError.STATE.CONTENT)
+        elif self.count >= self.n_watch:
+            self.fsm.transition_to(NiceTrialAndError.STATE.DISCONTENT)
+
+    def GIVEUP(self, v, burn_runtime):
+        elapsed = time.time() - self.init_giveup 
+        _log.info("Trial and error: state: giveup, current_runtime=%s, elapsed=%f" % (self.current_runtime, elapsed))
+        if elapsed >= self.time_giveup:
+            self.fsm.transition_to(NiceTrialAndError.STATE.CONTENT)
+
+    def should_migrate(self):
+        return self.fsm.state() == NiceTrialAndError.STATE.DISCONTENT
+
+    def set_discontent(self):
+        if not self.enabled:
+            return
+        self.fsm.transition_to(NiceTrialAndError.STATE.DISCONTENT)
+
+    def has_given_up(self):
+        return self.fsm.state() == NiceTrialAndError.STATE.GIVEUP
 
 class EwLearning(object):
     """ Exponential Weights Learning """
@@ -118,7 +205,8 @@ class EwLearning(object):
         self.runtime_cpu_total = {}
         self.algo = _conf.get("global", "reconfig_algorithm")
         self.reconfig = ReconfigAlgos()
-        self.trial = TrialAndError(self.reconfig.is_trial_and_error())
+        self.trial = getattr(sys.modules[__name__],self.reconfig.get_trial_and_error_version())(self.reconfig.is_trial_and_error())
+        self.dump_runtime = None
 
     def __str__(self):
         return "x=%s y=%s k=%s burn_id=%s k_t=%s t=%d count=%s K=%d eps=%f f_max=%f lambda=%f" % (str(self.x), str(self.y), str(self.k), self.burn_id, self.burn_runtime, self.t, self.count, self.K, self.eps, self.f_max, self.lamb)
@@ -142,6 +230,7 @@ class EwLearning(object):
         state['burn_runtime'] = self.burn_runtime
         state['runtime_cpu_avail'] = self.runtime_cpu_avail
         state['runtime_cpu_total'] = self.runtime_cpu_total
+        state['dump_runtime'] = self.dump_runtime
         state['app_id'] = self.app_id
         return state
 
@@ -160,14 +249,16 @@ class EwLearning(object):
         self.burn_id = state.get('burn_id', None)
         self.burn_mips = state.get('burn_mips', 0)
         self.burn_runtime = state.get('burn_runtime', None)
+        self.dump_runtime = state.get('dump_runtime', None)
         self.app_id = state.get('app_id', None)
         self.runtime_cpu_avail = state.get('runtime_cpu_avail', {})
         self.runtime_cpu_total = state.get('runtime_cpu_total', {})
 
-    def set_burn(self, burn_id, burn_mips, possible_runtimes, runtime_cpu_total):
-        _log.info("EW learn: app_id=%s burn_id=%s burn_mips=%f, possible runtimes init=%s" % (self.app_id, burn_id, burn_mips, str(possible_runtimes)))
+    def set_burn(self, burn_id, burn_mips, possible_runtimes, runtime_cpu_total, dump_runtime):
+        _log.info("EW learn: app_id=%s burn_id=%s burn_mips=%f, possible runtimes init=%s, dump_runtime=%s" % (self.app_id, burn_id, burn_mips, str(possible_runtimes), dump_runtime))
         self.burn_id = burn_id
         self.burn_mips = burn_mips
+        self.dump_runtime = dump_runtime
         self.K = min(len(possible_runtimes), self.K)
         self.k = random.sample(possible_runtimes, k=self.K)
         for r in self.k:
@@ -177,6 +268,7 @@ class EwLearning(object):
         self.y = { i : 0 for i in self.k }
         self.x = { i : 0 for i in self.k }
         self.count = { i : 0 for i in self.k }
+        self.count[dump_runtime] = 0
 
     def calculate_v(self, elapsed_time, burn_runtime, bandit=True):
         f_max = self.f_max
@@ -258,8 +350,11 @@ class EwLearning(object):
         prob = [ self.x[i] for i in self.k ]
         burn_runtime = self.burn_runtime
         if need_migration or burn_runtime == None or self.trial.should_migrate():
-            burn_runtime = numpy.random.choice(self.k, p=prob)
-            self.trial.set_discontent()
+            if self.trial.has_given_up():
+                burn_runtime = self.dump_runtime
+            else:
+                burn_runtime = numpy.random.choice(self.k, p=prob)
+                self.trial.set_discontent()
         _log.info("EW learning: Choosing k: app_id=%s t=%d x=%s burn_id=%s burn_runtime=%s" % (self.app_id, self.t, str(self.x), self.burn_id, burn_runtime))
         self.count[burn_runtime] += 1
         if burn_runtime != self.burn_runtime:
