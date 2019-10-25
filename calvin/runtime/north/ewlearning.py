@@ -58,9 +58,11 @@ class TrialAndError(object):
         self.fsm = TrialAndError.FSM(TrialAndError.STATE, TrialAndError.STATE.CONTENT, TrialAndError.VALID_TRANSITIONS)
         self.current_runtime = None
         self.enabled = enabled
+        self.count = 0
 
     def CONTENT(self, v, burn_runtime):
         best = max(v, key= lambda x: v.get(x))
+        self.count = 0
         _log.info("Trial and error: state: content, current_runtime=%s, best=%s" % (self.current_runtime, best))
         if best != self.current_runtime:
             self.fsm.transition_to(TrialAndError.STATE.WATCHFUL)
@@ -71,11 +73,12 @@ class TrialAndError(object):
         self.fsm.transition_to(TrialAndError.STATE.CONTENT)
 
     def WATCHFUL(self, v, burn_runtime):
+        self.count += 1
         best = max(v, key= lambda x: v.get(x))
         _log.info("Trial and error: state: watchful, current_runtime=%s, best=%s" % (self.current_runtime, best))
         if best == self.current_runtime:
             self.fsm.transition_to(TrialAndError.STATE.CONTENT)
-        else:
+        elif self.count >= 10:
             self.fsm.transition_to(TrialAndError.STATE.DISCONTENT)
 
     def update_v(self, v, burn_runtime):
@@ -202,19 +205,25 @@ class EwLearning(object):
             elapsed = a*used_est + b
             return self.calculate_v(elapsed, x, False)
 
+    def estimator_v2_single_token(self, avail_cpu):
+        burn_mips = self.burn_mips
+        if burn_mips >= 100:
+            burn_mips = self.burn_mips/5 # hitting the rock bottom... :/
+        return (0.25 + burn_mips/avail_cpu)
+
     def estimator_v2(self, x, elapsed_time):
         used_est = (self.runtime_cpu_total[x] - self.runtime_cpu_avail[x]) + self.burn_mips # current use + this app
         if x == self.burn_runtime:
             used_est = (self.runtime_cpu_total[x] - self.runtime_cpu_avail[x]) # considers that CPU usage is updated if app is running on the runtime
         if used_est < self.runtime_cpu_total[x]:
-            return self.calculate_v(0.25 + self.burn_mips/self.runtime_cpu_avail[x], x, False)
+            return self.calculate_v(self.estimator_v2_single_token(self.runtime_cpu_avail[x]), x, False)
         elif used_est > self.runtime_cpu_total[x]*TOLERANCE:
             return self.calculate_v(self.f_max, x, False)
         else:
             # a = x2 - x1/y2 - y1
-            a = (self.f_max - GOOD_ELAPSED)/(TOLERANCE*self.runtime_cpu_total[x] - self.runtime_cpu_total[x])
+            a = (self.f_max - self.estimator_v2_single_token(self.burn_mips))/(TOLERANCE*self.runtime_cpu_total[x] - self.runtime_cpu_total[x])
             # b = y - ax
-            b = GOOD_ELAPSED - a*self.runtime_cpu_total[x]
+            b = self.estimator_v2_single_token(self.burn_mips) - a*self.runtime_cpu_total[x]
             # y = ax + b
             elapsed = a*used_est + b
             return self.calculate_v(elapsed, x, False)
