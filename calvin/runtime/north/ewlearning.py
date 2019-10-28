@@ -173,6 +173,8 @@ class NiceTrialAndError(TrialAndErrorBase):
         _log.info("Trial and error: state: giveup, app_id=%s, current_runtime=%s, elapsed=%f" % (self.app_id, self.current_runtime, elapsed))
         if elapsed >= self.time_giveup:
             self.fsm.transition_to(NiceTrialAndError.STATE.CONTENT)
+        if elapsed > 60 and max(v.values()) > 0.9:
+            self.fsm.transition_to(NiceTrialAndError.STATE.CONTENT)
 
     def should_migrate(self):
         return self.fsm.state() == NiceTrialAndError.STATE.DISCONTENT
