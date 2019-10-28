@@ -79,29 +79,30 @@ class TrialAndError(TrialAndErrorBase):
         STATE.WATCHFUL   : [STATE.CONTENT, STATE.WATCHFUL, STATE.DISCONTENT],
     }
 
-    def __init__(self, enabled=True, n_watch = 10):
+    def __init__(self, app_id, enabled=True, n_watch = 10):
         super(TrialAndError, self).__init__(enabled)
         self.fsm = TrialAndErrorBase.FSM(TrialAndError.STATE, TrialAndError.STATE.CONTENT, TrialAndError.VALID_TRANSITIONS)
         self.current_runtime = None
         self.count = 0
         self.n_watch = n_watch
+        self.app_id = app_id
 
     def CONTENT(self, v, burn_runtime):
         best = max(v, key= lambda x: v.get(x))
         self.count = 0
-        _log.info("Trial and error: state: content, current_runtime=%s, best=%s" % (self.current_runtime, best))
+        _log.info("Trial and error: state: content, app_id=%s, current_runtime=%s, best=%s" % (self.app_id, self.current_runtime, best))
         if best != self.current_runtime:
             self.fsm.transition_to(TrialAndError.STATE.WATCHFUL)
 
     def DISCONTENT(self, v, burn_runtime):
-        _log.info("Trial and error: state: discontent, current_runtime=%s, new=%s" % (self.current_runtime, burn_runtime))
+        _log.info("Trial and error: state: discontent, app_id=%s, current_runtime=%s, new=%s" % (self.app_id, self.current_runtime, burn_runtime))
         self.current_runtime = burn_runtime
         self.fsm.transition_to(TrialAndError.STATE.CONTENT)
 
     def WATCHFUL(self, v, burn_runtime):
         self.count += 1
         best = max(v, key= lambda x: v.get(x))
-        _log.info("Trial and error: state: watchful, current_runtime=%s, best=%s" % (self.current_runtime, best))
+        _log.info("Trial and error: state: watchful, app_id=%s, current_runtime=%s, best=%s" % (self.app_id, self.current_runtime, best))
         if best == self.current_runtime:
             self.fsm.transition_to(TrialAndError.STATE.CONTENT)
         elif self.count >= self.n_watch:
@@ -129,7 +130,7 @@ class NiceTrialAndError(TrialAndErrorBase):
         STATE.GIVEUP     : [STATE.CONTENT, STATE.GIVEUP],
     }
 
-    def __init__(self, enabled=True, n_watch = 5, n_giveup=3, time_giveup=300):
+    def __init__(self, app_id, enabled=True, n_watch = 10, n_giveup=5, time_giveup=300):
         super(NiceTrialAndError, self).__init__(enabled)
         self.fsm = TrialAndErrorBase.FSM(NiceTrialAndError.STATE, NiceTrialAndError.STATE.CONTENT, NiceTrialAndError.VALID_TRANSITIONS)
         self.current_runtime = None
@@ -138,17 +139,18 @@ class NiceTrialAndError(TrialAndErrorBase):
         self.time_giveup = time_giveup
         self.init_giveup = 0
         self.n_watch = n_watch
+        self.app_id = app_id
         self.discontent_timestamps = collections.deque([0]*self.n_giveup, maxlen=self.n_giveup)
 
     def CONTENT(self, v, burn_runtime):
         best = max(v, key= lambda x: v.get(x))
         self.count = 0
-        _log.info("Trial and error: state: content, current_runtime=%s, best=%s" % (self.current_runtime, best))
+        _log.info("Trial and error: state: content, app_id=%s, current_runtime=%s, best=%s" % (self.app_id, self.current_runtime, best))
         if best != self.current_runtime:
             self.fsm.transition_to(NiceTrialAndError.STATE.WATCHFUL)
 
     def DISCONTENT(self, v, burn_runtime):
-        _log.info("Trial and error: state: discontent, current_runtime=%s, new=%s" % (self.current_runtime, burn_runtime))
+        _log.info("Trial and error: state: discontent, app_id=%s, current_runtime=%s, new=%s" % (self.app_id, self.current_runtime, burn_runtime))
         self.current_runtime = burn_runtime
         self.discontent_timestamps.append(time.time())
         if (self.discontent_timestamps[0] != 0 and (self.discontent_timestamps[-1] - self.discontent_timestamps[0]) < self.time_giveup):
@@ -160,7 +162,7 @@ class NiceTrialAndError(TrialAndErrorBase):
     def WATCHFUL(self, v, burn_runtime):
         self.count += 1
         best = max(v, key= lambda x: v.get(x))
-        _log.info("Trial and error: state: watchful, current_runtime=%s, best=%s" % (self.current_runtime, best))
+        _log.info("Trial and error: state: watchful, app_id=%s, current_runtime=%s, best=%s" % (self.app_id, self.current_runtime, best))
         if best == self.current_runtime:
             self.fsm.transition_to(NiceTrialAndError.STATE.CONTENT)
         elif self.count >= self.n_watch:
@@ -168,7 +170,7 @@ class NiceTrialAndError(TrialAndErrorBase):
 
     def GIVEUP(self, v, burn_runtime):
         elapsed = time.time() - self.init_giveup 
-        _log.info("Trial and error: state: giveup, current_runtime=%s, elapsed=%f" % (self.current_runtime, elapsed))
+        _log.info("Trial and error: state: giveup, app_id=%s, current_runtime=%s, elapsed=%f" % (self.app_id, self.current_runtime, elapsed))
         if elapsed >= self.time_giveup:
             self.fsm.transition_to(NiceTrialAndError.STATE.CONTENT)
 
@@ -205,7 +207,7 @@ class EwLearning(object):
         self.runtime_cpu_total = {}
         self.algo = _conf.get("global", "reconfig_algorithm")
         self.reconfig = ReconfigAlgos()
-        self.trial = getattr(sys.modules[__name__],self.reconfig.get_trial_and_error_version())(self.reconfig.is_trial_and_error())
+        self.trial = getattr(sys.modules[__name__],self.reconfig.get_trial_and_error_version())(self.app_id, self.reconfig.is_trial_and_error())
         self.dump_runtime = None
 
     def __str__(self):
