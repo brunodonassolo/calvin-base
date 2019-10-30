@@ -2130,7 +2130,8 @@ class AppDeployer(object):
         # FIXME: maybe filter memory too
         dump_runtime = None
         if (self.reconfig.get_trial_and_error_version() == "NiceTrialAndError"):
-            dump_runtime = max(app.runtime_cpu_total.iteritems(), key=operator.itemgetter(1))[0]
+            dump_runtime = self._node.id
+
         self._node.am.actors[sink_id]._learn.set_burn(burn_id, app.cost_runtime_cpu.get(burn_id, 0), [r for r in app.actor_placement[burn_id] if (app.runtime_cpu_total[r] >= app.cost_runtime_cpu.get(burn_id, 0) and (app.runtime_cpu_total[r] > 50) and (r != dump_runtime))], app.runtime_cpu_total, dump_runtime)
 
 class FarseeingApp():
