@@ -102,7 +102,7 @@ class TrialAndError(TrialAndErrorBase):
     def WATCHFUL(self, v, burn_runtime):
         self.count += 1
         best = max(v, key= lambda x: v.get(x))
-        _log.info("Trial and error: state: watchful, app_id=%s, current_runtime=%s, best=%s" % (self.app_id, self.current_runtime, best))
+        _log.info("Trial and error: state: watchful, app_id=%s, current_runtime=%s, best=%s, count=%d" % (self.app_id, self.current_runtime, best, self.count))
         if best == self.current_runtime:
             self.fsm.transition_to(TrialAndError.STATE.CONTENT)
         elif self.count >= self.n_watch:
@@ -162,7 +162,7 @@ class NiceTrialAndError(TrialAndErrorBase):
     def WATCHFUL(self, v, burn_runtime):
         self.count += 1
         best = max(v, key= lambda x: v.get(x))
-        _log.info("Trial and error: state: watchful, app_id=%s, current_runtime=%s, best=%s" % (self.app_id, self.current_runtime, best))
+        _log.info("Trial and error: state: watchful, app_id=%s, current_runtime=%s, best=%s, count=%d" % (self.app_id, self.current_runtime, best, self.count))
         if best == self.current_runtime:
             self.fsm.transition_to(NiceTrialAndError.STATE.CONTENT)
         elif self.count >= self.n_watch:
@@ -209,7 +209,7 @@ class EwLearning(object):
         self.runtime_cpu_total = {}
         self.algo = _conf.get("global", "reconfig_algorithm")
         self.reconfig = ReconfigAlgos()
-        self.trial = getattr(sys.modules[__name__],self.reconfig.get_trial_and_error_version())(self.app_id, self.reconfig.is_trial_and_error())
+        self.trial = getattr(sys.modules[__name__],self.reconfig.get_trial_and_error_version())(app_id=self.app_id, enabled=self.reconfig.is_trial_and_error(),n_watch=self.reconfig.get_trial_and_error_n_watch())
         self.dump_runtime = None
 
     def __str__(self):
@@ -257,6 +257,7 @@ class EwLearning(object):
         self.app_id = state.get('app_id', None)
         self.runtime_cpu_avail = state.get('runtime_cpu_avail', {})
         self.runtime_cpu_total = state.get('runtime_cpu_total', {})
+        self.trial = getattr(sys.modules[__name__],self.reconfig.get_trial_and_error_version())(app_id=self.app_id, enabled=self.reconfig.is_trial_and_error(),n_watch=self.reconfig.get_trial_and_error_n_watch())
 
     def set_burn(self, burn_id, burn_mips, possible_runtimes, runtime_cpu_total, dump_runtime):
         _log.info("EW learn: app_id=%s burn_id=%s burn_mips=%f, possible runtimes init=%s, dump_runtime=%s" % (self.app_id, burn_id, burn_mips, str(possible_runtimes), dump_runtime))
@@ -359,7 +360,7 @@ class EwLearning(object):
             else:
                 burn_runtime = numpy.random.choice(self.k, p=prob)
                 self.trial.set_discontent()
-        _log.info("EW learning: Choosing k: app_id=%s t=%d x=%s burn_id=%s burn_runtime=%s" % (self.app_id, self.t, str(self.x), self.burn_id, burn_runtime))
+        _log.info("EW learning: Choosing k: app_id=%s t=%d x=%s burn_id=%s burn_runtime=%s, need_migration=%s" % (self.app_id, self.t, str(self.x), self.burn_id, burn_runtime, str(need_migration)))
         self.count[burn_runtime] += 1
         if burn_runtime != self.burn_runtime:
             self.burn_runtime = burn_runtime

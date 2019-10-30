@@ -297,6 +297,7 @@ class ReconfigAlgos():
                     "sel_migrate": True,
                     "trialAndError": True,
                     "trialAndErrorVersion": "TrialAndError",
+                    "trialAndErrorNWatch": 10,
                     "estimator": "estimator"
                     }, # learn with trial and error
                 "app_learn_v4": {
@@ -309,6 +310,7 @@ class ReconfigAlgos():
                     "sel_migrate": True,
                     "trialAndError": True,
                     "trialAndErrorVersion": "TrialAndError",
+                    "trialAndErrorNWatch": 10,
                     "estimator": "estimator_v2"
                     }, # learn with trial and error and estimator_v2
                 "app_learn_v5": {
@@ -321,6 +323,7 @@ class ReconfigAlgos():
                     "sel_migrate": True,
                     "trialAndError": True,
                     "trialAndErrorVersion": "NiceTrialAndError",
+                    "trialAndErrorNWatch": 20,
                     "estimator": "estimator_v2"
                     } # learn with nice trial and error and estimator_v2
                 }
@@ -388,6 +391,14 @@ class ReconfigAlgos():
         except KeyError:
             pass
         return ver
+
+    def get_trial_and_error_n_watch(self):
+        n = 10
+        try:
+            n = self.algos[self.algo]["trialAndErrorNWatch"]
+        except KeyError:
+            pass
+        return n
 
     def get_random(self):
         number = 1
