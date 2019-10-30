@@ -152,7 +152,6 @@ class NiceTrialAndError(TrialAndErrorBase):
     def DISCONTENT(self, v, burn_runtime):
         _log.info("Trial and error: state: discontent, app_id=%s, current_runtime=%s, new=%s" % (self.app_id, self.current_runtime, burn_runtime))
         self.current_runtime = burn_runtime
-        self.discontent_timestamps.append(time.time())
         if (self.discontent_timestamps[0] != 0 and (self.discontent_timestamps[-1] - self.discontent_timestamps[0]) < self.time_giveup):
             self.init_giveup = time.time()
             self.fsm.transition_to(NiceTrialAndError.STATE.GIVEUP)
@@ -166,6 +165,7 @@ class NiceTrialAndError(TrialAndErrorBase):
         if best == self.current_runtime:
             self.fsm.transition_to(NiceTrialAndError.STATE.CONTENT)
         elif self.count >= self.n_watch:
+            self.discontent_timestamps.append(time.time())
             self.fsm.transition_to(NiceTrialAndError.STATE.DISCONTENT)
 
     def GIVEUP(self, v, burn_runtime):
@@ -182,6 +182,7 @@ class NiceTrialAndError(TrialAndErrorBase):
     def set_discontent(self):
         if not self.enabled:
             return
+        self.discontent_timestamps.append(time.time())
         self.fsm.transition_to(NiceTrialAndError.STATE.DISCONTENT)
 
     def has_given_up(self):
