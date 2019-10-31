@@ -130,13 +130,13 @@ class NiceTrialAndError(TrialAndErrorBase):
         STATE.GIVEUP     : [STATE.CONTENT, STATE.GIVEUP],
     }
 
-    def __init__(self, app_id, enabled=True, n_watch = 10, n_giveup=10, time_giveup=300):
+    def __init__(self, app_id, enabled=True, n_watch = 10, n_giveup=5):
         super(NiceTrialAndError, self).__init__(enabled)
         self.fsm = TrialAndErrorBase.FSM(NiceTrialAndError.STATE, NiceTrialAndError.STATE.CONTENT, NiceTrialAndError.VALID_TRANSITIONS)
         self.current_runtime = None
         self.count = 0
         self.n_giveup = n_giveup
-        self.time_giveup = time_giveup
+        self.time_giveup = ReconfigAlgos().get_trial_and_error_wait_time()
         self.init_giveup = 0
         self.n_watch = n_watch
         self.app_id = app_id
@@ -171,9 +171,7 @@ class NiceTrialAndError(TrialAndErrorBase):
     def GIVEUP(self, v, burn_runtime):
         elapsed = time.time() - self.init_giveup 
         _log.info("Trial and error: state: giveup, app_id=%s, current_runtime=%s, elapsed=%f" % (self.app_id, self.current_runtime, elapsed))
-        if elapsed >= self.time_giveup:
-            self.fsm.transition_to(NiceTrialAndError.STATE.CONTENT)
-        if elapsed > 60 and max(v.values()) > 0.9:
+        if elapsed >= self.time_giveup and max(v.values()) > 0.9:
             self.fsm.transition_to(NiceTrialAndError.STATE.CONTENT)
 
     def should_migrate(self):

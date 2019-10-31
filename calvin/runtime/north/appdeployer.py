@@ -324,8 +324,23 @@ class ReconfigAlgos():
                     "trialAndError": True,
                     "trialAndErrorVersion": "NiceTrialAndError",
                     "trialAndErrorNWatch": 20,
+                    "trialAndErrorWaitTime": 60,
                     "estimator": "estimator_v2"
-                    } # learn with nice trial and error and estimator_v2
+                    }, # learn with nice trial and error and estimator_v2
+                "app_learn_v6": {
+                    "greedy": False,
+                    "lazyUpdate": False,
+                    "random": -1,
+                    "fake_centralized": False,
+                    "centralized": False,
+                    "learn": True,
+                    "sel_migrate": True,
+                    "trialAndError": True,
+                    "trialAndErrorVersion": "NiceTrialAndError",
+                    "trialAndErrorNWatch": 20,
+                    "trialAndErrorWaitTime": 300,
+                    "estimator": "estimator"
+                    } # learn with nice trial and error and estimator
                 }
 
     def is_fake_centralized(self):
@@ -396,6 +411,14 @@ class ReconfigAlgos():
         n = 10
         try:
             n = self.algos[self.algo]["trialAndErrorNWatch"]
+        except KeyError:
+            pass
+        return n
+
+    def get_trial_and_error_wait_time(self):
+        n = 300
+        try:
+            n = self.algos[self.algo]["trialAndErrorWaitTime"]
         except KeyError:
             pass
         return n
