@@ -340,6 +340,20 @@ class ReconfigAlgos():
                     "trialAndErrorNWatch": 20,
                     "trialAndErrorWaitTime": 300,
                     "estimator": "estimator"
+                    }, # learn with nice trial and error and estimator
+                "app_learn_v7": {
+                    "greedy": False,
+                    "lazyUpdate": False,
+                    "random": -1,
+                    "fake_centralized": False,
+                    "centralized": False,
+                    "learn": True,
+                    "sel_migrate": True,
+                    "trialAndError": True,
+                    "trialAndErrorVersion": "NiceTrialAndError",
+                    "trialAndErrorNWatch": 20,
+                    "trialAndErrorWaitTime": 60,
+                    "estimator": "estimator"
                     } # learn with nice trial and error and estimator
                 }
 
