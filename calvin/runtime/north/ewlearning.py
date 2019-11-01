@@ -130,7 +130,7 @@ class NiceTrialAndError(TrialAndErrorBase):
         STATE.GIVEUP     : [STATE.CONTENT, STATE.GIVEUP],
     }
 
-    def __init__(self, app_id, enabled=True, n_watch = 10, n_giveup=5):
+    def __init__(self, app_id, enabled=True, n_watch = 10, n_giveup=2):
         super(NiceTrialAndError, self).__init__(enabled)
         self.fsm = TrialAndErrorBase.FSM(NiceTrialAndError.STATE, NiceTrialAndError.STATE.CONTENT, NiceTrialAndError.VALID_TRANSITIONS)
         self.current_runtime = None
