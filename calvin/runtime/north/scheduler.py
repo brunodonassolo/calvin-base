@@ -55,6 +55,7 @@ class BaseScheduler(object):
         self._pressure_event_actor_ids = set([])
         self._migratable_apps = {}
         self._cooldown = {}
+        self.batch = False
 
     # System entry point
     def run(self):
@@ -162,18 +163,14 @@ class BaseScheduler(object):
         for r in actor._learn.k:
             self.node.storage.get("nodeCpu-", r, cb=CalvinCB(func=actor._learn.collect_runtime_cpu))
 
-    #
-    # Maintenance loop
-    #
-    def _maintenance_loop(self):
-        # Migrate denied actors
+    def _collect_batch(self, key, value):
+        if value is not None and value == "true":
+            self.batch = True
+        else:
+            self.batch = False
+
+    def _maintenance_loop_migration(self):
         algo = _conf.get("global", "reconfig_algorithm")
-        _log.info("Maintenance loop, reconfiguration algorithm: %s" % algo)
-
-        for runtime, timestamp in self._cooldown.items():
-            if time.time() - timestamp >= self._migration_cooldown:
-                del self._cooldown[runtime]
-
         if self.reconfig.is_learn():
             # update CPU resources more frequently
             for actor_id in self.actor_mgr.list_actors():
@@ -226,6 +223,23 @@ class BaseScheduler(object):
                     self._cooldown[self._migratable_apps[app]] = time.time()
             self._migratable_apps.clear()
 
+    #
+    # Maintenance loop
+    #
+    def _maintenance_loop(self):
+        # Migrate denied actors
+        algo = _conf.get("global", "reconfig_algorithm")
+        _log.info("Maintenance loop, reconfiguration algorithm: %s, batch %s" % (algo, self.batch))
+
+        for runtime, timestamp in self._cooldown.items():
+            if time.time() - timestamp >= self._migration_cooldown:
+                del self._cooldown[runtime]
+
+        self.node.storage.get("", "batch", cb=CalvinCB(func=self._collect_batch))
+        if self.batch:
+            _log.info("Skipping maintenance loop, in batch mode")
+        else:
+            self._maintenance_loop_migration()
 
         # Enable denied actors again if access is permitted. Will try to migrate if access still denied.
         for actor in self.actor_mgr.denied_actors():

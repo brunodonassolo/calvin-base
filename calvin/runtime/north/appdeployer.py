@@ -5,6 +5,7 @@ import copy
 import random
 import heapq
 import operator
+import itertools
 from heapq import heappush, heapify, heappop
 from calvin.runtime.south.async import async
 from calvin.utilities.calvin_callback import CalvinCB
@@ -463,6 +464,8 @@ class AppDeployer(object):
         self.phys_link_placement_runtimes = {}  # This information is quite stable, save it here to avoid collecting it each app deployment. Clean placement slate, saves the runtimes that the physical link connects
         self.farseeing_active_apps = set() # set active apps
         self.farseeing_placement = {} # actor: runtime
+        self.node_control_uri = {}
+        self.node_control_uri_it = None
 
 
     def farseeing_set_app_state(self, app_id, active):
@@ -665,6 +668,12 @@ class AppDeployer(object):
             app.monetary_cost_cpu[key] = 0
 
         app.control_uri[key] = value['control_uris'][0]
+        # WARNING: get cheaper machines (g5k only)
+        if app.monetary_cost_cpu[key] < 0.5 and key not in self.node_control_uri:
+            self.node_control_uri[key] = value['control_uris'][0]
+            sorted_node = sorted(self.node_control_uri, key=self.node_control_uri.get)
+            self.node_control_uri_it = itertools.cycle(sorted_node)
+
 
         app.dynamic_capabilities.subtract({key : 1})
 
@@ -1759,6 +1768,63 @@ class AppDeployer(object):
         place_set = [({}, 0.0)]
         self.green_actor_placement(app, actor_ids, n_samples, orphan_actors, place_set, cb_finish_placement=CalvinCB(self.green_placement_finish, app, actor_ids, n_samples))
 
+    def fixed_actor_placement(self, app, actor_ids):
+        orphan_actors = []
+        for actor_id in actor_ids:
+            _log.debug("Actor id: %s, name: %s" % (actor_id, app.actors[actor_id]))
+            if len(app.actor_storage[actor_id]['inports']) == 0:
+                heappush(orphan_actors, (-100000, actor_id))
+
+        _log.debug("Starting placing the actors...")
+        actor_placement = {}
+        node_for_app = self.node_control_uri_it.next()
+        while len(orphan_actors) > 0:
+            neigh_actors = {}
+            for prio, actor_id in orphan_actors:
+                _log.debug("Actor id: %s, name: %s, prio(orphan): %d" % (actor_id, app.actors[actor_id], prio))
+                if len(app.actor_placement[actor_id]) == 1:
+                    actor_placement[actor_id] = next(iter(app.actor_placement[actor_id]))
+                else:
+                    actor_placement[actor_id] = node_for_app
+                for i in app.actor_storage[actor_id]['outports']:
+                    for p in app.port_storage[i['id']]['peers']:
+                        try:
+                            neigh_id = app.port_storage[p[1]]['actor_id']
+                        except:
+                            _log.debug("Didn't find neighbor actor")
+                            continue
+                        if not neigh_id in neigh_actors:
+                            neigh_actors[neigh_id] = -1
+                        else:
+                            neigh_actors[neigh_id] -= 1
+            orphan_actors = [(val, actor) for actor, val in neigh_actors.iteritems()]
+            heapify(orphan_actors)
+
+        _log.debug("Ending placing actors:...")
+        return actor_placement
+
+    def fixed_placement(self, app, actor_ids):
+        place_set = []
+        place_set.append((self.fixed_actor_placement(app, actor_ids), 0.0))
+
+        _log.debug("Ending placing actors:...")
+        _log.debug(str(place_set))
+        print "Fixed placement cost: %f" % (place_set[0][1])
+        print place_set[0][0]
+        placement_best = { actor: plac for actor,plac in place_set[0][0].iteritems() }
+        app.actor_placement.update(placement_best)
+        print "FINAL"
+        print app.actor_placement
+        status = response.CalvinResponse(True)
+
+        if app.batch == True:
+            self.batch_update_available_resources(app)
+
+        app._org_cb(status=status, placement=app.actor_placement)
+        del app._org_cb
+        _log.analyze(self._node.id, "+ DONE", {'app_id': app.id}, tb=True)
+        _log.info("Deployment: app: %s: finished placement: total elapsed time %d" % (app.id, time.time() - app.start_time))
+
 
     def decide_placement_filter_raw_param_farseeing(self, app):
         farseeing_cpu_used = {}
@@ -1850,6 +1916,7 @@ class AppDeployer(object):
             self.decide_placement_filter_raw_param_farseeing(app)
             okay = True
             for actor_id in actor_ids:
+                # WARNING
                 if app.actor_storage[actor_id]['type'] == "std.DynamicTrigger":
                     continue
                 if (app.actor_storage[actor_id]['node_id'] not in app.actor_placement[actor_id]):
@@ -1861,6 +1928,7 @@ class AppDeployer(object):
                 return
         else:
             self.decide_placement_filter_raw_param(app)
+
 
         # Weight the actors possible placement with their connectivity matrix
         if _conf.get('global', 'deployment_algorithm') == 'random':
@@ -1877,6 +1945,8 @@ class AppDeployer(object):
             placement_best = self.money_placement(app, actor_ids)
         elif _conf.get('global', 'deployment_algorithm') == 'grasp':
             placement_best = self.grasp_placement(app, actor_ids, alpha=0.1)
+        elif not app.migration and _conf.get('global', 'deployment_algorithm') == 'fixed': # WARNING money as default for migration
+            placement_best = self.fixed_placement(app, actor_ids)
         else:
             placement_best = self.money_placement(app, actor_ids)
 
@@ -2157,6 +2227,7 @@ class AppDeployer(object):
 
         burn_id = None
         sink_id = None
+        # WARNING
         for actor_id, actor in app.actor_storage.iteritems():
             if actor['type'] == "std.SmartBurn":
                 burn_id = actor_id
