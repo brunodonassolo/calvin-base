@@ -1820,6 +1820,10 @@ class AppDeployer(object):
         if app.batch == True:
             self.batch_update_available_resources(app)
 
+        # farseeing placement update
+        for actor_id, node_id in app.actor_placement.iteritems():
+            self.farseeing_placement[actor_id] = node_id
+
         app._org_cb(status=status, placement=app.actor_placement)
         del app._org_cb
         _log.analyze(self._node.id, "+ DONE", {'app_id': app.id}, tb=True)
