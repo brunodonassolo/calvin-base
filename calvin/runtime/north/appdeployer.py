@@ -2267,6 +2267,7 @@ class Farseeing():
         self.next_schedule = None
         self.next_schedule_date = None
         self.oracle = oracle_time
+        self.batch = None
 
     def __str__(self):
         s = 'Apps: \n'
@@ -2297,6 +2298,12 @@ class Farseeing():
             self.next_schedule = async.DelayedCall(max(0, first - time.time()), self.app_change_state)
             self.next_schedule_date = first
 
+    def collect_batch(self, key, value):
+        if value is not None and value == "true":
+            self.batch = True
+        else:
+            self.batch = False
+
     def app_change_state(self):
         current = time.time()
         ev = heapq.heappop(self.events)
@@ -2307,11 +2314,13 @@ class Farseeing():
 
         if app.state_info[state][0] > 0:
             self.node.app_manager.app_deployer.farseeing_set_app_state(app.app_id, True)
-            self.node.app_manager.migrate_with_requirements(app.app_id, None, move=True, extend=True, cb=None)
+            if not self.batch:
+                self.node.app_manager.migrate_with_requirements(app.app_id, None, move=True, extend=True, cb=None)
         else:
             self.node.app_manager.app_deployer.farseeing_set_app_state(app.app_id, False)
         _log.info("Farseeing, queue size: %d" % len(self.events))
 
+        self.node.storage.get("", "batch", cb=CalvinCB(func=self.collect_batch))
         try:
             next_event_date = self.events[0][0]
             next_sched = next_event_date - time.time()
