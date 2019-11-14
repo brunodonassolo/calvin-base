@@ -288,6 +288,17 @@ class ReconfigAlgos():
                     "trialAndError": False,
                     "estimator": "estimator"
                     }, # learn semi-bandit with selective migration
+                "app_learn_v2b": {
+                    "greedy": False,
+                    "lazyUpdate": True,
+                    "random": 1,
+                    "fake_centralized": False,
+                    "centralized": False,
+                    "learn": True,
+                    "sel_migrate": True,
+                    "trialAndError": False,
+                    "estimator": "estimator"
+                    }, # learn semi-bandit with selective migration
                 "app_learn_v3": {
                     "greedy": False,
                     "lazyUpdate": False,
