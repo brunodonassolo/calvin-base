@@ -14,9 +14,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from calvin.actor.actor import Actor, manage, condition
+from calvin.actor.actor import Actor, manage, condition, stateguard, calvinsys
 import numpy
 import random
+import re
 from calvin.utilities.calvinlogger import get_logger
 
 _log = get_logger(__name__)
@@ -29,18 +30,33 @@ class SmartBurn(Actor):
     Outputs:
       token : the same token
     """
-    @manage(['dump', 'last', 'size', 'seed'])
-    def init(self, size, dump=False, seed=None):
+    @manage(['dump', 'last', 'size', 'seed', 'optimized', 'registry'])
+    def init(self, size, dump=False, seed=None, optimized=False):
         self.dump = dump
         self.last = None
         self.size = size
         self.seed = seed
+        self.registry = calvinsys.open(self, "sys.attribute.indexed")
+        self.optimized = optimized
+        calvinsys.write(self.registry, "node_name.name")
         self.setup()
 
     def setup(self):
         random.seed(self.seed)
-        self.A = [[random.random() for i in range(0,self.size)] for j in range(0,self.size)]
-        self.B = [[random.random() for i in range(0,self.size)] for j in range(0,self.size)]
+        attr = calvinsys.read(self.registry)
+        actor_name = re.sub(r".+burn", "", self._name)
+        size = self.size
+        if self.optimized and attr.isdigit() and actor_name.isdigit():
+            actor_number = int(actor_name)
+            runtime_number = int(attr)
+            if (actor_number % 5 == runtime_number % 5):
+                size = self.size/20
+                _log.info("%s<%s>: Runtime optimized for actor, new size: %d, old size: %d" % (self.__class__.__name__, self.id, size, self.size))
+
+            _log.info("%s<%s>: Actor number: %d, Runtime number: %d, size: %d" % (self.__class__.__name__, self.id, actor_number, runtime_number, size))
+
+        self.A = [[random.random() for i in range(0,size)] for j in range(0,size)]
+        self.B = [[random.random() for i in range(0,size)] for j in range(0,size)]
 
     def will_migrate(self):
         _log.info("%s<%s>: Actor migration triggered" % (self.__class__.__name__, self.id))
