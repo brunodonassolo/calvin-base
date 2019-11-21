@@ -197,7 +197,7 @@ class EwLearning(object):
         self.x = {} # prob
         self.y = {} # feedback
         self.k = [] # runtimes
-        self.t = 0  # time step
+        self.t = 1  # time step
         self.learn_rate = _conf.get("learn", "learn_rate")
         self.count = {} # count number of times each runtime was selected
         self.burn_id = None
@@ -342,6 +342,7 @@ class EwLearning(object):
         for k_t, y_t in self.y.iteritems():
             total = sum([math.exp(j - y_t) for i,j in self.y.iteritems()])
             self.x[k_t] = (1 - self.eps)*(1/(total)) + self.eps*1/self.K
+        self.t += 1
 
         _log.info("EW learning: Setting feedback: app_id=%s t=%d f=%f v=%s new y=%s learn_rate=%f step=%f" % (self.app_id, self.t, elapsed_time, str(v), str(self.y), self.learn_rate, step))
         v[self.burn_runtime] = self.calculate_v(elapsed_time, self.burn_runtime, bandit=False)
@@ -354,7 +355,6 @@ class EwLearning(object):
         for k_t, y_t in self.y.iteritems():
             total = sum([math.exp(j - y_t) for i,j in self.y.iteritems()])
             self.x[k_t] = (1 - self.eps)*(1/(total)) + self.eps*1/self.K
-        self.t += 1
         prob = [ self.x[i] for i in self.k ]
         burn_runtime = self.burn_runtime
         if need_migration or burn_runtime == None or self.trial.should_migrate():
