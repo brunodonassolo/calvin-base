@@ -337,7 +337,7 @@ class EwLearning(object):
             return
 
         v = self._get_vector_v(elapsed_time)
-        step = self.learn_rate/math.sqrt(self.t)
+        step = self.learn_rate/(self.t**(1.0/3.0))
         self.y = { i : j + step*v[i] for i,j in self.y.iteritems() }
         for k_t, y_t in self.y.iteritems():
             total = sum([math.exp(j - y_t) for i,j in self.y.iteritems()])
