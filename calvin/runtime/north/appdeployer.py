@@ -684,6 +684,7 @@ class AppDeployer(object):
             self.node_control_uri[key] = value['control_uris'][0]
             sorted_node = sorted(self.node_control_uri, key=self.node_control_uri.get)
             self.node_control_uri_it = itertools.cycle(sorted_node)
+            self.node_control_uri_it.next() # broke sequentially for fixed placement
 
 
         app.dynamic_capabilities.subtract({key : 1})
