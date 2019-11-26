@@ -179,6 +179,7 @@ class BaseScheduler(object):
 
             for actor in self.actor_mgr.migratable_actors():
                 self.app_add_migratable_app(actor._app_id, self.node.id)
+                actor._learn.set_feedback(actor._elapsed_time)
 
             _log.info("Maintenance loop: Migratable apps: %s" % str(self._migratable_apps.keys()))
 
@@ -191,7 +192,6 @@ class BaseScheduler(object):
             for actor in self.actor_mgr.migratable_actors():
                 if actor._app_id not in apps:
                     continue
-                actor._learn.set_feedback(actor._elapsed_time)
                 need_migrate = True
                 if self.reconfig.is_selective_migration():
                     need_migrate = (actor.better_migrate == Actor.RECONF_STATUS.REQUESTED)
