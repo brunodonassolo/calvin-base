@@ -17,6 +17,7 @@
 import wrapt
 import functools
 import time
+import sys
 import copy
 from calvin.utilities import calvinuuid
 from calvin.actor import actorport
@@ -34,6 +35,7 @@ from calvin.runtime.north.calvinsys import get_calvinsys
 from calvin.runtime.north.calvinlib import get_calvinlib
 from calvin.utilities import calvinconfig
 from calvin.runtime.north.ewlearning import EwLearning
+from calvin.runtime.north.ucb import UCB
 from calvin.runtime.north.appdeployer import ReconfigAlgos
 
 _log = get_logger(__name__)
@@ -351,8 +353,11 @@ class Actor(object):
         self._has_started = False
         self._app_id = app_id
         self._elapsed_time = 0
-        self._learn = EwLearning(app_id)
         self.reconfig = ReconfigAlgos()
+        self._learn = None
+        if self.reconfig.get_learn_class() != None:
+            self._learn = getattr(sys.modules[__name__],self.reconfig.get_learn_class())(app_id)
+
         # self.control = calvincontrol.get_calvincontrol()
         self._migration_info = None
         self._migrating_to = None  # During migration while on the previous node set to the next node id

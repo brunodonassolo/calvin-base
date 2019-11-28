@@ -262,6 +262,7 @@ class ReconfigAlgos():
                     "fake_centralized": False,
                     "centralized": False,
                     "learn": True,
+                    "learn_class" : "EwLearning",
                     "sel_migrate": False,
                     "trialAndError": False,
                     "estimator": "estimator"
@@ -273,6 +274,7 @@ class ReconfigAlgos():
                     "fake_centralized": False,
                     "centralized": False,
                     "learn": True,
+                    "learn_class" : "EwLearning",
                     "sel_migrate": False,
                     "trialAndError": False,
                     "estimator": "estimator"
@@ -284,6 +286,7 @@ class ReconfigAlgos():
                     "fake_centralized": False,
                     "centralized": False,
                     "learn": True,
+                    "learn_class" : "EwLearning",
                     "sel_migrate": True,
                     "trialAndError": False,
                     "estimator": "estimator"
@@ -295,6 +298,7 @@ class ReconfigAlgos():
                     "fake_centralized": False,
                     "centralized": False,
                     "learn": True,
+                    "learn_class" : "EwLearning",
                     "sel_migrate": True,
                     "trialAndError": False,
                     "estimator": "estimator"
@@ -306,6 +310,7 @@ class ReconfigAlgos():
                     "fake_centralized": False,
                     "centralized": False,
                     "learn": True,
+                    "learn_class" : "EwLearning",
                     "sel_migrate": True,
                     "trialAndError": True,
                     "trialAndErrorVersion": "TrialAndError",
@@ -319,6 +324,7 @@ class ReconfigAlgos():
                     "fake_centralized": False,
                     "centralized": False,
                     "learn": True,
+                    "learn_class" : "EwLearning",
                     "sel_migrate": True,
                     "trialAndError": True,
                     "trialAndErrorVersion": "TrialAndError",
@@ -332,6 +338,7 @@ class ReconfigAlgos():
                     "fake_centralized": False,
                     "centralized": False,
                     "learn": True,
+                    "learn_class" : "EwLearning",
                     "sel_migrate": True,
                     "trialAndError": True,
                     "trialAndErrorVersion": "NiceTrialAndError",
@@ -346,6 +353,7 @@ class ReconfigAlgos():
                     "fake_centralized": False,
                     "centralized": False,
                     "learn": True,
+                    "learn_class" : "EwLearning",
                     "sel_migrate": True,
                     "trialAndError": True,
                     "trialAndErrorVersion": "NiceTrialAndError",
@@ -360,13 +368,25 @@ class ReconfigAlgos():
                     "fake_centralized": False,
                     "centralized": False,
                     "learn": True,
+                    "learn_class" : "EwLearning",
                     "sel_migrate": True,
                     "trialAndError": True,
                     "trialAndErrorVersion": "NiceTrialAndError",
                     "trialAndErrorNWatch": 20,
                     "trialAndErrorWaitTime": 60,
                     "estimator": "estimator"
-                    } # learn with nice trial and error and estimator
+                    }, # learn with nice trial and error and estimator
+                "app_learn_ucb": {
+                    "greedy": False,
+                    "lazyUpdate": False,
+                    "random": -1,
+                    "fake_centralized": False,
+                    "centralized": False,
+                    "learn": True,
+                    "learn_class" : "UCB",
+                    "sel_migrate": False,
+                    "trialAndError": False,
+                    } # UCB
                 }
 
     def is_fake_centralized(self):
@@ -405,6 +425,14 @@ class ReconfigAlgos():
         learn = False
         try:
             learn = self.algos[self.algo]["learn"]
+        except KeyError:
+            pass
+        return learn
+
+    def get_learn_class(self):
+        learn = None
+        try:
+            learn = self.algos[self.algo]["learn_class"]
         except KeyError:
             pass
         return learn

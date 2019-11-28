@@ -197,8 +197,8 @@ class BaseScheduler(object):
                     need_migrate = (actor.better_migrate == Actor.RECONF_STATUS.REQUESTED)
                 burn_id, burn_runtime = actor._learn.choose_k(need_migrate)
 
-                _log.info("EW learn: app_id=%s burn_id=%s runtime=%s" % (actor._app_id, burn_id, burn_runtime))
-                _log.info("EW learn\n%s" % actor._learn)
+                _log.info("Learn: app_id=%s burn_id=%s runtime=%s" % (actor._app_id, burn_id, burn_runtime))
+                _log.info("Learn\n%s" % actor._learn)
                 #print("EW learn\n--------------\n%s\n----------------" % actor._learn)
                 #print("EW learn: app_id=%s burn_id=%s runtime=%s" % (actor._app_id, burn_id, burn_runtime))
                 if burn_id != None and burn_runtime != None:
