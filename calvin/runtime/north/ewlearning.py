@@ -272,7 +272,8 @@ class EwLearning(object):
         self.y = { i : 0 for i in self.k }
         self.x = { i : 0 for i in self.k }
         self.count = { i : 0 for i in self.k }
-        self.count[dump_runtime] = 0
+        if dump_runtime:
+            self.count[dump_runtime] = 0
 
     def calculate_v(self, elapsed_time, burn_runtime, bandit=True):
         f_max = self.f_max
@@ -363,8 +364,8 @@ class EwLearning(object):
             else:
                 burn_runtime = numpy.random.choice(self.k, p=prob)
                 self.trial.set_discontent()
-        _log.info("EW learning: Choosing k: app_id=%s t=%d x=%s burn_id=%s burn_runtime=%s, need_migration=%s" % (self.app_id, self.t, str(self.x), self.burn_id, burn_runtime, str(need_migration)))
         self.count[burn_runtime] += 1
+        _log.info("EW learning: Choosing k: app_id=%s t=%d x=%s burn_id=%s burn_runtime=%s, need_migration=%s n=%s" % (self.app_id, self.t, str(self.x), self.burn_id, burn_runtime, str(need_migration), str(self.count)))
         if burn_runtime != self.burn_runtime:
             self.burn_runtime = burn_runtime
             return self.burn_id, self.burn_runtime
