@@ -51,7 +51,7 @@ class BaseScheduler(object):
         # FIXME: later
         self._replication_interval = 2
         self._maintenance_delay = _conf.get(None, "maintenance_delay") or 300
-        self._migration_cooldown = _conf.get(None, "migration_cooldown") or 300
+        self._migration_cooldown = _conf.get(None, "migration_cooldown") or 0
         self._pressure_event_actor_ids = set([])
         self._migratable_apps = {}
         self._cooldown = {}

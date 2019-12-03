@@ -386,7 +386,18 @@ class ReconfigAlgos():
                     "learn_class" : "UCB",
                     "sel_migrate": False,
                     "trialAndError": False,
-                    } # UCB
+                    }, # UCB
+                "app_learn_ucb2": {
+                    "greedy": False,
+                    "lazyUpdate": False,
+                    "random": -1,
+                    "fake_centralized": False,
+                    "centralized": False,
+                    "learn": True,
+                    "learn_class" : "UCB2",
+                    "sel_migrate": False,
+                    "trialAndError": False,
+                    } # UCB2
                 }
 
     def is_fake_centralized(self):

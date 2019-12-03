@@ -123,3 +123,62 @@ class UCB(object):
         if not value or value == response.NOT_FOUND:
             value = 0
         return
+
+class UCB2(UCB):
+    """ Upper Confidence Bound 2:
+        Source: https://github.com/johnmyleswhite/BanditsBook/blob/master/python/algorithms/ucb/ucb2.py """
+
+    def __init__(self, app_id):
+        super(UCB2, self).__init__(app_id)
+        self.next_t = 1
+        self.r = {} # number of times (in blocks) each runtime was selected
+
+
+    def state(self):
+        state = super(UCB2, self).state()
+        state['r'] = self.r
+        state['next_t'] = self.next_t
+        return state
+
+    def set_state(self, state):
+        super(UCB2, self).set_state(state)
+        self.r = state.get('r', {})
+        self.next_t = state.get('next_t', 1)
+
+    def set_burn(self, burn_id, burn_mips, possible_runtimes, runtime_cpu_total, dump_runtime):
+        super(UCB2, self).set_burn(burn_id, burn_mips, possible_runtimes, runtime_cpu_total, dump_runtime)
+        self.r = { i : 0 for i in self.k }
+
+    def choose_k(self, need_migrate):
+        for k_t, u_t in self.u.iteritems():
+            if (self.n[k_t] == 0):
+                self.__set_arm(k_t)
+                _log.info("UCB: Initializing app_id=%s burn_runtime=%s" % (self.app_id, self.burn_runtime))
+                return self.burn_id, self.burn_runtime
+
+        if self.next_t > self.t:
+            _log.info("UCB: In batch, app_id=%s next_t=%d t=%d" % (self.app_id, self.next_t, self.t))
+            return None, None
+
+        burn_runtime = None
+        upper_bound = 0.0
+        bounds = {}
+        for k_t, u_t in self.u.iteritems():
+            k_upper_bound = u_t + math.sqrt((1. + self.alpha) * math.log(math.e * float(sum(self.n.values())) / self.__tau(self.r[k_t])) / (2 * self.__tau(self.r[k_t])))
+            bounds[k_t] = k_upper_bound
+            if k_upper_bound > upper_bound:
+                upper_bound = k_upper_bound
+                burn_runtime = k_t
+
+        self.__set_arm(burn_runtime)
+        _log.info("UCB: Choosing k: app_id=%s t=%d x=%s burn_id=%s burn_runtime=%s, u=%s upper_bound=%f n=%s next_t=%d" % (self.app_id, self.t, str(bounds), self.burn_id, burn_runtime, str(self.u), upper_bound, str(self.n), self.next_t))
+        return self.burn_id, self.burn_runtime
+
+    def __set_arm(self, runtime):
+        self.burn_runtime = runtime
+        self.next_t = self.t + max(1, self.__tau(self.r[runtime] + 1) - self.__tau(self.r[runtime]))
+        self.r[runtime] += 1
+
+    def __tau(self, r):
+        return int(math.ceil((1 + self.alpha) ** r))
+
