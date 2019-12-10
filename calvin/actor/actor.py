@@ -36,6 +36,7 @@ from calvin.runtime.north.calvinlib import get_calvinlib
 from calvin.utilities import calvinconfig
 from calvin.runtime.north.ewlearning import EwLearning
 from calvin.runtime.north.ucb import UCB, UCB2
+from calvin.runtime.north.sao import SAO
 from calvin.runtime.north.appdeployer import ReconfigAlgos
 
 _log = get_logger(__name__)

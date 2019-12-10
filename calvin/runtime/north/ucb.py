@@ -59,7 +59,7 @@ class UCB(object):
         self.K = state.get('K', _conf.get("learn", "K"))
         self.f_max = state.get('f_max', _conf.get("learn", "f_max"))
         self.algo = state.get('algo', _conf.get("global", "reconfig_algorithm"))
-        self.alpha = state.get('alpha', _conf.get("learn", "learn_rate"))
+        self.alpha = state.get('alpha', _conf.get("learn", "alpha"))
         self.t = state.get('t', 0)
         self.burn_id = state.get('burn_id', None)
         self.burn_mips = state.get('burn_mips', 0)
