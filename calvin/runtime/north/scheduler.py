@@ -178,8 +178,9 @@ class BaseScheduler(object):
                     self._update_runtimes_info(self.actor_mgr.actors[actor_id])
 
             for actor in self.actor_mgr.migratable_actors():
-                self.app_add_migratable_app(actor._app_id, self.node.id)
-                actor._learn.set_feedback(actor._elapsed_time)
+                self.app_add_migratable_app(actor._app_id, actor._app_id)
+                if actor.better_migrate == Actor.RECONF_STATUS.REQUESTED:
+                    self._migratable_apps[actor._app_id] = actor._app_id
 
             _log.info("Maintenance loop: Migratable apps: %s" % str(self._migratable_apps.keys()))
 
@@ -192,6 +193,8 @@ class BaseScheduler(object):
             for actor in self.actor_mgr.migratable_actors():
                 if actor._app_id not in apps:
                     continue
+
+                actor._learn.set_feedback(actor._elapsed_time)
                 need_migrate = True
                 if self.reconfig.is_selective_migration():
                     need_migrate = (actor.better_migrate == Actor.RECONF_STATUS.REQUESTED)
@@ -201,8 +204,10 @@ class BaseScheduler(object):
                 _log.info("Learn\n%s" % actor._learn)
                 #print("EW learn\n--------------\n%s\n----------------" % actor._learn)
                 #print("EW learn: app_id=%s burn_id=%s runtime=%s" % (actor._app_id, burn_id, burn_runtime))
+                self._cooldown[actor._app_id] = time.time() # set cooldown anyway
                 if burn_id != None and burn_runtime != None:
-                    self._cooldown[self.node.id] = time.time() + self._migration_cooldown*3 # adding 3x _migration_cooldown to avoid cooldown, it will be configured to the right value at learn_migrated callback
+                    self._cooldown[actor._app_id] = time.time() + self._migration_cooldown*3 # adding 3x _migration_cooldown to avoid cooldown, it will be configured to the right value at learn_migrated callback
+                    actor.better_migrate = Actor.RECONF_STATUS.PENDING
                     self.actor_mgr.robust_migrate(burn_id, [burn_runtime], callback=CalvinCB(self.learn_migrated, actor = actor))
         elif algo == "actor_v0":
             actor = random.choice(self.actor_mgr.migratable_actors())
@@ -269,7 +274,7 @@ class BaseScheduler(object):
         self.insert_task(self._maintenance_loop, 0)
 
     def learn_migrated(self, actor, status, **kwargs):
-        self._cooldown[self.node.id] = time.time()
+        self._cooldown[actor._app_id] = time.time()
         actor._elapsed_time = 0
         actor.better_migrate = Actor.RECONF_STATUS.DONE
 

@@ -78,7 +78,7 @@ class Sink(Actor):
             self._elapsed_time = float(sum(self.token_process_time))/(self.n_tokens_mean - self.token_process_time.count(0))
             if elapsed > self.threshold:
                 _log.info("%s<%s>: Elapsed time in sink higher than threshold, elapsed: %f threshold: %f mean: %f" % (self.__class__.__name__, self.id, elapsed, self.threshold, mean))
-            if mean > self.threshold:
+            if mean > self.threshold and self.better_migrate != Actor.RECONF_STATUS.PENDING:
                 _log.warning("%s<%s>: Actor must be migrated, mean: %f, threshold: %f" % (self.__class__.__name__, self.id, mean, self.threshold))
                 self.better_migrate = Actor.RECONF_STATUS.REQUESTED
             elif self.better_migrate == Actor.RECONF_STATUS.REQUESTED:

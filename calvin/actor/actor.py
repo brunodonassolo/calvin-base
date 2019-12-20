@@ -306,7 +306,7 @@ class Actor(object):
             return self.printable(self._state)
 
     STATUS = enum('LOADED', 'READY', 'PENDING', 'ENABLED', 'DENIED', 'MIGRATABLE')
-    RECONF_STATUS = enum('NONE', 'REQUESTED', 'DONE')
+    RECONF_STATUS = enum('NONE', 'REQUESTED', 'PENDING', 'DONE')
 
     VALID_TRANSITIONS = {
         STATUS.LOADED    : [STATUS.READY],
@@ -594,10 +594,8 @@ class Actor(object):
 
     def migratable(self):
         if self.reconfig.is_learn():
-            if self._elapsed_time > 0:
+            if self.better_migrate != Actor.RECONF_STATUS.PENDING and self._elapsed_time > 0:
                 return True
-            else:
-                return False
         if self.better_migrate == Actor.RECONF_STATUS.REQUESTED:
             return True
         else:
