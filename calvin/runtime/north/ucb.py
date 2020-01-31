@@ -24,7 +24,7 @@ class UCB(object):
         self.k = [] # runtimes
         self.t = 1  # time step
         self.f_max = _conf.get("learn", "f_max")
-        self.alpha = _conf.get("learn", "learn_rate")
+        self.alpha = _conf.get("learn", "alpha")
         self.burn_id = None
         self.burn_runtime = None
         self.burn_mips = 0
