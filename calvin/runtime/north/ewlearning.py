@@ -206,7 +206,6 @@ class EwLearning(object):
         self.app_id = app_id
         self.runtime_cpu_avail = {}
         self.runtime_cpu_total = {}
-        self.last_elapsed_time = 0
         self.algo = _conf.get("global", "reconfig_algorithm")
         self.reconfig = ReconfigAlgos()
         self.trial = getattr(sys.modules[__name__],self.reconfig.get_trial_and_error_version())(app_id=self.app_id, enabled=self.reconfig.is_trial_and_error(),n_watch=self.reconfig.get_trial_and_error_n_watch())
@@ -337,16 +336,8 @@ class EwLearning(object):
     def set_feedback(self, elapsed_time):
         if self.burn_runtime == None or elapsed_time == 0:
             return
-        if self.last_elapsed_time == 0:
-            self.last_elapsed_time = elapsed_time
 
-        self.last_elapsed_time = (self.last_elapsed_time + elapsed_time)/2
-
-    def _set_feedback(self):
-        if self.burn_runtime == None or self.last_elapsed_time == 0:
-            return
-
-        v = self._get_vector_v(self.last_elapsed_time)
+        v = self._get_vector_v(elapsed_time)
         step = self.learn_rate/math.sqrt(self.t)
         self.y = { i : j + step*v[i] for i,j in self.y.iteritems() }
         for k_t, y_t in self.y.iteritems():
@@ -354,16 +345,14 @@ class EwLearning(object):
             self.x[k_t] = (1 - self.eps)*(1/(total)) + self.eps*1/self.K
         self.t += 1
 
-        _log.info("EW learning: Setting feedback: app_id=%s t=%d f=%f v=%s new y=%s learn_rate=%f step=%f" % (self.app_id, self.t, self.last_elapsed_time, str(v), str(self.y), self.learn_rate, step))
-        v[self.burn_runtime] = self.calculate_v(self.last_elapsed_time, self.burn_runtime, bandit=False)
+        _log.info("EW learning: Setting feedback: app_id=%s t=%d f=%f v=%s new y=%s learn_rate=%f step=%f" % (self.app_id, self.t, elapsed_time, str(v), str(self.y), self.learn_rate, step))
+        v[self.burn_runtime] = self.calculate_v(elapsed_time, self.burn_runtime, bandit=False)
         self.trial.update_v(v, self.burn_runtime)
-        self.last_elapsed_time = 0
+        #print "fffffffffffffff"
+        #print("EW learning: Setting feedback: app_id=%s t=%d f=%f v=%s new y=%s" % (self.app_id, self.t, elapsed_time, str(v), str(self.y)))
 
 
     def choose_k(self, need_migration):
-        if need_migration:
-            self._set_feedback()
-
         for k_t, y_t in self.y.iteritems():
             total = sum([math.exp(j - y_t) for i,j in self.y.iteritems()])
             self.x[k_t] = (1 - self.eps)*(1/(total)) + self.eps*1/self.K
