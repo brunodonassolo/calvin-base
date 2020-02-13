@@ -317,6 +317,20 @@ class ReconfigAlgos():
                     "trialAndErrorNWatch": 10,
                     "estimator": "estimator"
                     }, # learn with trial and error
+                "app_learn_v3_20": {
+                    "greedy": False,
+                    "lazyUpdate": False,
+                    "random": -1,
+                    "fake_centralized": False,
+                    "centralized": False,
+                    "learn": True,
+                    "learn_class" : "EwLearning",
+                    "sel_migrate": True,
+                    "trialAndError": True,
+                    "trialAndErrorVersion": "TrialAndError",
+                    "trialAndErrorNWatch": 20,
+                    "estimator": "estimator"
+                    }, # learn with trial and error
                 "app_learn_v4": {
                     "greedy": False,
                     "lazyUpdate": False,
