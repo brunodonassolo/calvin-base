@@ -206,6 +206,7 @@ class EwLearning(object):
         self.app_id = app_id
         self.runtime_cpu_avail = {}
         self.runtime_cpu_total = {}
+        self.last_elapsed_time = 0
         self.algo = _conf.get("global", "reconfig_algorithm")
         self.reconfig = ReconfigAlgos()
         self.trial = getattr(sys.modules[__name__],self.reconfig.get_trial_and_error_version())(app_id=self.app_id, enabled=self.reconfig.is_trial_and_error(),n_watch=self.reconfig.get_trial_and_error_n_watch())
@@ -333,7 +334,21 @@ class EwLearning(object):
         _log.info("EW learning: Calculating v: app_id=%s t=%d lambda=%f v_obs=%s v_est=%s burn_mips=%f cpu_available=%s algo=%s" % (self.app_id, self.t, self.lamb, str(v_obs), str(v_est), self.burn_mips, str(self.runtime_cpu_avail), self.algo))
         return v
 
-    def set_feedback(self, elapsed_time):
+    def get_elapsed_exp3_mc(self, elapsed_time, need_migration):
+        if self.algo != "app_learn_exp3-mc":
+            return elapsed_time
+
+        if self.last_elapsed_time == 0:
+            self.last_elapsed_time = elapsed_time
+        else:
+            self.last_elapsed_time = (self.last_elapsed_time + elapsed_time)/2
+
+        if not need_migration:
+            return 0
+        return self.last_elapsed_time
+
+    def set_feedback(self, elapsed_time, need_migration):
+        elapsed_time = self.get_elapsed_exp3_mc(elapsed_time, need_migration)
         if self.burn_runtime == None or elapsed_time == 0:
             return
 
@@ -348,6 +363,7 @@ class EwLearning(object):
         _log.info("EW learning: Setting feedback: app_id=%s t=%d f=%f v=%s new y=%s learn_rate=%f step=%f" % (self.app_id, self.t, elapsed_time, str(v), str(self.y), self.learn_rate, step))
         v[self.burn_runtime] = self.calculate_v(elapsed_time, self.burn_runtime, bandit=False)
         self.trial.update_v(v, self.burn_runtime)
+        self.last_elapsed_time = 0
         #print "fffffffffffffff"
         #print("EW learning: Setting feedback: app_id=%s t=%d f=%f v=%s new y=%s" % (self.app_id, self.t, elapsed_time, str(v), str(self.y)))
 

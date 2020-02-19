@@ -279,6 +279,18 @@ class ReconfigAlgos():
                     "trialAndError": False,
                     "estimator": "estimator"
                     }, # learn semi-bandit
+                "app_learn_exp3-mc": {
+                    "greedy": False,
+                    "lazyUpdate": False,
+                    "random": -1,
+                    "fake_centralized": False,
+                    "centralized": False,
+                    "learn": True,
+                    "learn_class" : "EwLearning",
+                    "sel_migrate": True,
+                    "trialAndError": False,
+                    "estimator": "estimator"
+                    }, # exp3-mc
                 "app_learn_v2": {
                     "greedy": False,
                     "lazyUpdate": False,

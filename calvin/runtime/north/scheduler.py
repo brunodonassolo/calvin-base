@@ -194,10 +194,10 @@ class BaseScheduler(object):
                 if actor._app_id not in apps:
                     continue
 
-                actor._learn.set_feedback(actor._elapsed_time)
                 need_migrate = True
                 if self.reconfig.is_selective_migration():
                     need_migrate = (actor.better_migrate == Actor.RECONF_STATUS.REQUESTED)
+                actor._learn.set_feedback(actor._elapsed_time, need_migrate)
                 burn_id, burn_runtime = actor._learn.choose_k(need_migrate)
 
                 _log.info("Learn: app_id=%s burn_id=%s runtime=%s" % (actor._app_id, burn_id, burn_runtime))

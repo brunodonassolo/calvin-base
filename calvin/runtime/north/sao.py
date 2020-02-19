@@ -193,9 +193,9 @@ class SAO(object):
 
 
 
-    def set_feedback(self, elapsed_time):
+    def set_feedback(self, elapsed_time, need_migration):
         if self.exp3_active:
-            self.exp3.set_feedback(elapsed_time)
+            self.exp3.set_feedback(elapsed_time, need_migration)
             return
 
         if self.burn_runtime == None or elapsed_time == 0:

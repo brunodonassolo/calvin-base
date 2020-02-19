@@ -83,7 +83,7 @@ class UCB(object):
             f_max = elapsed_time
         return (f_max - elapsed_time)/(f_max)
 
-    def set_feedback(self, elapsed_time):
+    def set_feedback(self, elapsed_time, need_migration):
         if self.burn_runtime == None or elapsed_time == 0:
             return
 
